@@ -67,12 +67,12 @@ Profiles: base
 Verified by: AC-078, AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-121, AC-122, AC-231
 
 **REQ-03-010**
-Structured coordination artifacts such as `comm_log`, `handoff`, `status_review`, and `lesson` MUST be available as workbook-native surfaces in the base profile. The implementation MAY satisfy this either through contract-backed system views or through implementation-owned `scope='system'` saved views bound to the standardized `view_schema_id` for that surface. These surfaces MUST NOT require additional built-in tabs in the base profile.
+Structured coordination artifacts such as `comm_log`, `handoff`, `status_review`, and `lesson` MUST be available as workbook-native base-profile surfaces identified canonically by `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`. These surfaces MUST NOT require additional built-in tabs in the base profile.
 Profiles: base
 Verified by: AC-078, AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-121, AC-122, AC-231, AC-281, AC-282, AC-283, AC-284
 
 **REQ-03-011**
-Such surfaces MUST remain workbook surfaces rather than separate application modules, regardless of whether the implementation chooses a contract-backed system view or a `scope='system'` saved view over the same `view_schema_id`.
+Such surfaces MUST remain workbook surfaces rather than separate application modules. Their canonical public identity MUST be the `view_schema` form of `sheet_ref` using that surface's standardized `view_schema_id`. In the current profile, only standardized base-profile `view_schema_id` values and the explicitly standardized optional artifact-backed `view_schema_id` values are valid `sheet_ref.kind='view_schema'` workbook-surface identities. Pack-dependent framework overlays such as ATT&CK, D3FEND, and VERIS MUST NOT be exposed or referenced as workbook-native `sheet_ref.kind='view_schema'` targets in the current profile. A saved view over the same `view_schema_id` MAY exist as an additional workbook surface, but it is a distinct saved-view object and MUST NOT replace the canonical identity of the required base surface.
 Profiles: base
 Verified by: AC-078, AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-121, AC-122, AC-231, AC-281, AC-282, AC-283, AC-284
 
@@ -188,7 +188,7 @@ Profiles: base
 Verified by: AC-150, AC-153, AC-231
 
 **REQ-03-029**
-Both pointers MUST use the stable `sheet_ref` shape defined by Core 01 §3.3.10.1.
+Both pointers MUST use the stable `sheet_ref` shape defined by Core 01 §3.3.10.1. When the pointed surface is the required base `comm_log`, `handoff`, `status_review`, or `lesson` surface itself, the stored `sheet_ref` MUST use `{ "kind": "view_schema", "id": <view_schema_id> }` rather than a `saved_view` reference.
 Profiles: base
 Verified by: AC-150, AC-153, AC-231
 
@@ -203,9 +203,11 @@ Profiles: base
 Verified by: AC-150, AC-153, AC-231
 
 **REQ-03-031**
-If a referenced saved view or view schema is missing, no longer visible to the caller, or invalid because a required optional pack is unavailable, the implementation MUST clear the invalid pointer and continue to the next step in the ordered fallback chain rather than failing workbook open.
+If a referenced saved view or view schema is missing, no longer visible to the caller, invalid because a required optional pack is unavailable, or invalid because the referenced `view_schema_id` is not standardized for the current profile, the implementation MUST clear the invalid pointer and continue to the next step in the ordered fallback chain rather than failing workbook open. This fallback logic MUST NOT depend on the existence of a saved-view object for the required base `comm_log`, `handoff`, `status_review`, or `lesson` surfaces, because those surfaces remain directly addressable by standardized `view_schema_id`.
 Profiles: base
 Verified by: AC-150, AC-153, AC-231
+
+For successful enterprise-auth flows that open a workbook without an explicit valid launch `sheet_ref`, Core 01 §20 reuses this same ordered fallback chain rather than defining a separate workbook-startup order.
 
 **REQ-03-032**
 Any incident member MUST be able to set or clear their own `home_sheet_ref`. Only incident admins MUST be able to set or clear `incident_workbook_preferences.default_sheet_ref`.
@@ -629,6 +631,8 @@ The client MUST include its initial workbook presence in `hello` or `resume` and
 - the focused `record_id` changes,
 - same-cell editing starts or stops for a writable `field_key`,
 - the client becomes `idle` or returns from `idle`.
+
+When the active workbook surface is the required base `comm_log`, `handoff`, `status_review`, or `lesson` surface itself, the transmitted `sheet_ref` MUST use `kind = view_schema` with the standardized `view_schema_id`; opening a distinct saved view over one of those schemas MUST instead transmit `kind = saved_view` with that saved view's `saved_view_id`.
 Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
 
@@ -638,7 +642,7 @@ Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
 
 **REQ-03-094**
-Workbook-header presence avatars MUST be derived from `presence_snapshot` and `presence_delta` records whose `sheet_ref` exactly matches the active workbook surface. Row-gutter indicators MUST be derived from matching `record_id`. Same-cell indicators MUST be derived from matching `record_id` plus `field_key` with `mode = editing`. The client MUST key these indicators from `sheet_ref`, `record_id`, and `field_key`; it MUST NOT infer collaboration state from visible tab labels, row numbers, or column headers.
+Workbook-header presence avatars MUST be derived from `presence_snapshot` and `presence_delta` records whose `sheet_ref` exactly matches the active workbook surface. Row-gutter indicators MUST be derived from matching `record_id`. Same-cell indicators MUST be derived from matching `record_id` plus `field_key` with `mode = editing`. The client MUST key these indicators from `sheet_ref`, `record_id`, and `field_key`; it MUST NOT infer collaboration state from visible tab labels, row numbers, or column headers. The client MUST also preserve the distinction between a direct base coordination surface addressed as `sheet_ref.kind="view_schema"` and a distinct saved view over the same schema addressed as `sheet_ref.kind="saved_view"`.
 Profiles: base, snapshot_reporting
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231, AC-233
 
@@ -662,7 +666,7 @@ Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
 
 **REQ-03-098**
-A client that originated the mutation MUST reconcile against the same echoed `record_changed` message family as every other subscriber. Incoming collaboration messages MUST NOT surface unresolved same-field local drafts as saved state or overwrite the client-local conflict queue defined in §3.3.4 and §3.3.5.
+A client that originated the mutation MUST reconcile against the same echoed `record_changed` message family as every other subscriber. Incoming collaboration messages MUST NOT surface unresolved same-field local drafts as saved state or overwrite the client-local conflict queue defined in §3.3.4 and §3.3.5. When a terminal polled job resource or a terminal `job_progress` message includes `result_summary.resource_refs[]`, the client MUST treat those refs as a compact navigation summary rather than a deep result payload. The client MUST surface known current-profile `kind` values as non-modal result chips or links on the current surface, MUST degrade unknown `kind` values to `result_summary.message`-only rendering without failing job rendering, MUST treat `route` as an opaque same-origin path rather than a UI-local route or preview/download handle, and MUST NOT auto-follow `route` or automatically change the active workbook surface, selection, or scroll position when the terminal result arrives. If the client already has a stronger local navigation affordance for a known `kind`, it MAY use that affordance, but it MUST NOT require UI-route strings inside the job resource.
 Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
 
@@ -674,22 +678,16 @@ Profiles: base
 Verified by: AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231
 
 **REQ-03-100**
-An authentication failure on a queued write, or a `session_revoked` event on the collaboration stream, MUST NOT discard unresolved same-field local drafts or queued unsent patches. The client MUST preserve that client-local unsaved work, prompt for re-authentication when required, and replay queued writes only after a new authenticated session is established. Replayed writes MUST still satisfy ordinary `base_row_version`, authorization, and same-field conflict checks before they become authoritative incident state.
+An authentication failure on a queued write, or a `session_revoked` event on the collaboration stream, MUST NOT discard unresolved same-field local drafts or queued unsent patches. This requirement applies when `session_revoked` is caused by self-service password change, self-service TOTP replacement, administrator password reset, administrator TOTP reset, or explicit session revoke-all. The client MUST preserve that client-local unsaved work, prompt for re-authentication when required, and replay queued writes only after a new authenticated session is established. Replayed writes MUST still satisfy ordinary `base_row_version`, authorization, and same-field conflict checks before they become authoritative incident state. No additional workbook tab, saved view, or inspector workflow is required for this credential-lifecycle behavior.
 Profiles: base
 Verified by: AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231
 
 ## 5. Locking policy
 
 **REQ-03-101**
-Routine inline edits MUST NOT use hard record locks.
+Routine inline edits MUST NOT use hard record locks. In the current base profile, short-lived server-side destructive-operation locks are reserved to the destructive-operation family defined by Core 01 §3.3.5.0: restore, rollback, and merge only. Ordinary `PATCH` and ordinary `DELETE` remain on the optimistic-concurrency path.
 Profiles: base
-Verified by: AC-182, AC-187, AC-218, AC-231
-
-Short-lived server-side record locks MAY be used only for rare destructive operations such as:
-
-- merging host or identity records,
-- rolling back an existing change,
-- restoring a soft-deleted record.
+Verified by: AC-182, AC-187, AC-218, AC-231, AC-353
 
 ## 6. Record lifecycle
 
@@ -742,18 +740,21 @@ Verified by: AC-107, AC-108, AC-109, AC-110, AC-111, AC-137, AC-138, AC-139, AC-
 The explicit supersede action MUST:
 
 - be exposed only as a non-grid action from the inspector, history surface, or another reviewer-only surface that preserves the same non-grid invocation semantics,
+- MAY accept an optional replacement-row selection from that same inspector, history surface, or equivalent reviewer-only surface,
 - require current incident role `reviewer` or `admin`,
 - require a non-empty reason captured in the resulting attributed change,
 - be available only when the current `capture_state` is `rough`, `enriched`, or `reviewed`,
+- when a replacement row is selected and the action succeeds, surface that replacement nearby in the resulting inspector or equivalent reviewer surface,
 - set `capture_state='superseded'` in the same committed `change_set`,
-- create an attributed change that is visible through ordinary row history.
+- when a replacement row is selected, persist the authoritative replacement relation in that same committed `change_set`,
+- create an attributed change that is visible through ordinary row history, including both the `capture_state` transition and the replacement-link unit when present.
 Profiles: base
-Verified by: AC-107, AC-108, AC-109, AC-110, AC-111, AC-137, AC-138, AC-139, AC-140, AC-141, AC-142, AC-143, AC-144, AC-145, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-199, AC-231
+Verified by: AC-107, AC-108, AC-109, AC-110, AC-111, AC-137, AC-138, AC-139, AC-140, AC-141, AC-142, AC-143, AC-144, AC-145, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-199, AC-231, AC-329, AC-331
 
 **REQ-03-107**
-`superseded` is terminal for ordinary Timeline workflow. Ordinary Timeline patch, enrichment, and review actions MUST NOT mutate a row whose current `capture_state` is `superseded`. Leaving `superseded` MUST require reviewer rollback of the superseding change through row history. The base profile defines no ordinary direct transition out of `superseded`.
+`superseded` is terminal for ordinary Timeline workflow. Ordinary Timeline patch, enrichment, and review actions MUST NOT mutate a row whose current `capture_state` is `superseded`. Leaving `superseded` MUST require reviewer rollback of the superseding change through row history. If the wrong replacement row was chosen, correction MUST require rollback of that superseding change and a new supersede action. The base profile defines no ordinary direct transition out of `superseded` and no ordinary direct edit path for a hidden Timeline replacement reference on a superseded row.
 Profiles: base
-Verified by: AC-107, AC-108, AC-109, AC-110, AC-111, AC-137, AC-138, AC-139, AC-140, AC-141, AC-142, AC-143, AC-144, AC-145, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-199, AC-231
+Verified by: AC-107, AC-108, AC-109, AC-110, AC-111, AC-137, AC-138, AC-139, AC-140, AC-141, AC-142, AC-143, AC-144, AC-145, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-199, AC-231, AC-331
 
 **REQ-03-108**
 `linked` is a derived milestone meaning the record has acquired one or more typed links, resolved mentions, evidence associations, or other typed relational structure. It MUST NOT be stored as a separate `capture_state` value in the current profile.
@@ -1102,7 +1103,7 @@ Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-067, AC-232
 
 **REQ-03-157**
-Each candidate unit MUST support operator preview and header mapping before any apply step.
+Each candidate unit MUST support operator preview, mapping, select, and skip before any apply step.
 Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-067, AC-232
 
@@ -1150,11 +1151,19 @@ An `import_session` MUST persist, at minimum:
 - `selected_unit_ids[]`,
 - `blocking_diagnostics[]`,
 - `nonblocking_warning_codes[]`.
+
+`selected_unit_ids[]` MUST be a persisted deduplicated session-local list. When serialized it MUST default to `[]` when empty and MUST be ordered in the deterministic apply order defined by REQ-03-186.
 Profiles: import
 Verified by: AC-027, AC-063, AC-064, AC-232
 
 **REQ-03-164**
-`session_status` MUST use the closed vocabulary `created`, `discovered`, `mapped`, `ready_to_apply`, `applying`, `partially_applied`, `applied`, `failed`, and `canceled`.
+`session_status` MUST use the closed vocabulary `created`, `discovered`, `mapped`, `ready_to_apply`, `applying`, `partially_applied`, `applied`, `failed`, and `canceled`, with these meanings:
+
+- `created`: the upload was accepted and discovery is not yet complete;
+- `discovered`: discovery completed and no apply is active;
+- `mapped`: at least one unit has an approved mapping, but the session is not yet `ready_to_apply`;
+- `ready_to_apply`: the persisted selected set is non-empty and every selected unit is `ready`;
+- `applying`, `partially_applied`, `applied`, `failed`, and `canceled`: durable apply-lifecycle states.
 Profiles: import
 Verified by: AC-027, AC-063, AC-064, AC-232
 
@@ -1174,7 +1183,7 @@ Profiles: import
 Verified by: AC-027, AC-063, AC-064, AC-232
 
 **REQ-03-168**
-Discovery and preview MUST be read-only against incident state. Apply MUST execute as a background job and MUST NOT block ordinary workbook editing.
+Discovery and preview MUST be read-only against incident state. Preview MUST expose inert display data only and MUST NOT advance lifecycle state by itself. Apply MUST execute as a background job and MUST NOT block ordinary workbook editing.
 Profiles: import
 Verified by: AC-027, AC-063, AC-064, AC-232
 
@@ -1194,10 +1203,12 @@ An `import_unit` MUST persist, at minimum:
 - `locator`,
 - `source_rect_a1`,
 - `header_row_ref`,
+- `data_start_row_ref`,
 - `inferred_row_count`,
 - `inferred_column_count`,
 - `warning_codes[]`,
-- `mapping_fingerprint`,
+- optional `mapping_fingerprint`,
+- an approved mapping plan, or an equivalent structured realization sufficient to reconstruct the exact Core 01 §17.2 `approved_mapping` object,
 - `unit_status`.
 Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-064, AC-065, AC-066, AC-232
@@ -1208,7 +1219,16 @@ Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-064, AC-065, AC-066, AC-232
 
 **REQ-03-172**
-`unit_status` MUST use the closed vocabulary `discovered`, `selected`, `mapped`, `ready`, `applying`, `applied`, `skipped`, `rejected`, and `failed`.
+`unit_status` MUST use the closed vocabulary `discovered`, `selected`, `mapped`, `ready`, `applying`, `applied`, `skipped`, `rejected`, and `failed`, with these meanings:
+
+- `discovered`: no approved mapping exists and the unit is not selected;
+- `selected`: the unit is in `selected_unit_ids[]` and no approved mapping exists;
+- `mapped`: an approved mapping exists but readiness checks still fail;
+- `ready`: an approved mapping exists and all readiness checks pass;
+- `skipped`: the unit is explicitly excluded from persisted selection and retains any prior approved mapping;
+- `applying`, `applied`, `rejected`, and `failed`: durable processing states.
+
+Re-selecting a skipped unit MUST recompute `unit_status` from current durable mapping state back to `selected`, `mapped`, or `ready` rather than creating a new mapping plan.
 Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-064, AC-065, AC-066, AC-232
 
@@ -1244,7 +1264,7 @@ Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-064, AC-065, AC-066, AC-232
 
 **REQ-03-178**
-`mapping_fingerprint` MAY be absent while `unit_status` is `discovered` or `selected`. Once a mapping is approved, it MUST be persisted and used for duplicate-apply detection.
+`mapping_fingerprint` MAY be absent while `unit_status` is `discovered` or `selected`. The approved mapping plan or equivalent structured realization MAY be absent until mapping approval. Once a mapping is approved, both the approved mapping plan and `mapping_fingerprint` MUST be persisted and used for duplicate-apply detection.
 Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-064, AC-065, AC-066, AC-232
 
@@ -1255,10 +1275,12 @@ Whole-workbook import MUST mean an orchestrated batch of explicit `import_unit` 
 
 1. upload one XLSX file and create one `import_session`,
 2. discover candidate `import_unit` objects,
-3. allow operator preview, mapping, selection, or skip per unit,
+3. allow operator preview, approve mapping, and select or skip per unit,
 4. validate duplicate-apply and overlap constraints,
-5. apply selected units in deterministic order,
+5. apply the persisted selected set in deterministic order,
 6. record one session outcome and one apply outcome per unit.
+
+Preview rows MUST be returned in source order and capped to 50 data rows. Select and skip actions MUST recompute `session_status` immediately from the persisted selected set and current unit states.
 Profiles: import
 Verified by: AC-027, AC-064, AC-065, AC-066, AC-232
 
@@ -1293,23 +1315,29 @@ Profiles: import
 Verified by: AC-027, AC-064, AC-065, AC-066, AC-232
 
 **REQ-03-185**
-Selected units in one batch MUST have disjoint source-cell coverage. Overlapping selected units MAY be previewed, but they MUST NOT be jointly applied until the operator reduces the selection to a disjoint set.
+The persisted selected set for one batch MUST have disjoint source-cell coverage. Overlapping units MAY be previewed, but they MUST NOT be jointly applied until the operator reduces the persisted selection to a disjoint set.
 Profiles: import
 Verified by: AC-027, AC-064, AC-065, AC-066, AC-232
 
 **REQ-03-186**
-The default apply order for selected units MUST be deterministic: workbook sheet order, then top-left rectangle position, with operator-added regions ordered by explicit session sequence when their rectangles would otherwise compare equal.
+The default apply order for the persisted selected set MUST be deterministic: workbook sheet order, then top-left rectangle position, with operator-added regions ordered by explicit session sequence when their rectangles would otherwise compare equal.
 Profiles: import
 Verified by: AC-027, AC-064, AC-065, AC-066, AC-232
 
 #### 11.2.5 `mapping_fingerprint` and duplicate-apply detection
 
 **REQ-03-187**
-`mapping_fingerprint` MUST be the deterministic identity of the operator-approved header-to-field plan for one `import_unit`.
+`mapping_fingerprint` MUST be the deterministic identity of the operator-approved header-to-field plan for one `import_unit`. It MUST be derived from the same fully closed approved mapping plan that backs the exact Core 01 §17.2 read-side `approved_mapping` object rather than from a lossy summary.
 Profiles: import
 Verified by: AC-065, AC-232
 
 **REQ-03-188**
+The current profile closes the mapping-plan registries and entry semantics as follows:
+
+- `unknown_column_policy` MUST use exactly `preserve_raw_capture`, `preserve_custom_attrs`, or `reject_if_unmapped`;
+- `transform_id` MUST use exactly `null`, `trim_v1`, `collapse_whitespace_v1`, `lowercase_v1`, or `split_delimited_v1`;
+- `empty_value_policy` MUST use exactly `omit_field` or `write_null`.
+
 The fingerprint input MUST include, at minimum:
 
 - `mapping_contract_version`,
@@ -1317,7 +1345,24 @@ The fingerprint input MUST include, at minimum:
 - `header_row_ref`,
 - `data_start_row_ref`,
 - `unknown_column_policy`,
-- one ordered entry per source column containing `source_column_ordinal`, `source_header_text`, `field_key`, `entity_binding_mode`, and any declared `transform_id`, `transform_options`, or `empty_value_policy`.
+- one exhaustive ordered entry per discovered source column containing `source_column_ordinal`, `source_header_text`, `field_key`, `entity_binding_mode`, and any declared `transform_id`, `transform_options`, or `empty_value_policy`.
+
+For the current profile:
+
+- `source_columns[]` MUST be exhaustive over discovered source columns;
+- `source_header_text` MUST be the raw imported header text or `null`;
+- `field_key = null` means intentionally unmapped;
+- `entity_binding_mode = null` is required for unmapped columns and non-entity targets;
+- duplicate non-null target `field_key` values are invalid;
+- transform execution order is parser extraction, then optional mapping transform, then target-field normalization;
+- `split_delimited_v1` is the only transform that MAY use non-empty options, and those options are limited to `delimiter`, `trim_items`, and `drop_empty_items`;
+- `delimiter` for `split_delimited_v1` MUST be one of `,`, `;`, `|`, `\n`, or `\t`;
+- all current-profile transforms other than `split_delimited_v1` MUST use `transform_options = {}`;
+- `preserve_raw_capture` is legal only when the target view's authoritative record model exposes `raw_capture`;
+- `preserve_custom_attrs` is legal only when the target view allows `custom_attrs`;
+- `reject_if_unmapped` blocks `ready` while any source column is intentionally unmapped;
+- `write_null` blocks `ready` when the target field is not clearable;
+- `formula_cached_value_missing` remains a `ready` blocker under the closed warning vocabulary in §11.2.6.
 Profiles: import
 Verified by: AC-065, AC-232
 
@@ -1327,7 +1372,7 @@ Profiles: import
 Verified by: AC-065, AC-232
 
 **REQ-03-190**
-The implementation MUST serialize that mapping input canonically with lexicographically sorted object keys and source columns ordered by `source_column_ordinal`, then hash the result as lower-hex SHA-256.
+The implementation MUST serialize that fully closed mapping plan canonically, with lexicographically sorted object keys, normalized option objects, and source columns ordered by `source_column_ordinal`, then hash the result as lower-hex SHA-256. The persisted approved mapping plan or equivalent structured realization MUST be sufficient to reconstruct the exact Core 01 §17.2 `approved_mapping` object and recompute the same `mapping_fingerprint` deterministically, without lossy normalization, inference from display labels, or dependence on non-authoritative UI state.
 Profiles: import
 Verified by: AC-065, AC-232
 
@@ -1337,7 +1382,7 @@ Profiles: import
 Verified by: AC-065, AC-232
 
 **REQ-03-192**
-The assistant MUST warn on re-applying the same `(import_unit_id, mapping_fingerprint, incident_id)` tuple and MUST default to blocking the apply until the operator explicitly chooses re-import.
+The assistant MUST compare the fully closed mapping plan when evaluating the `(import_unit_id, mapping_fingerprint, incident_id)` tuple for duplicate-apply detection. It MUST warn on re-applying that same tuple and MUST default to blocking the apply until the operator explicitly chooses re-import.
 Profiles: import
 Verified by: AC-065, AC-232
 
@@ -1586,18 +1631,18 @@ Verified by: AC-003, AC-040, AC-231
 ### 14.1 Sort and filter behavior
 
 **REQ-03-223**
-Column-header sort and inline filter chips MUST apply without leaving the sheet.
+Column-header sort and inline filter chips MUST apply without leaving the sheet. A visible column header MAY initiate sorting only when the active `view_schema` declares that field sortable. Header sort MUST use `header_sort_field_key` when the field registry declares it and otherwise the visible field's own `field_key`. Visible collection or relationship columns not present in the active schema's `sort_fields` MUST NOT initiate a sort.
 Profiles: base
-Verified by: AC-013, AC-014, AC-044, AC-047, AC-124, AC-184, AC-185, AC-231
+Verified by: AC-013, AC-014, AC-044, AC-047, AC-124, AC-184, AC-185, AC-231, AC-363
 
 **REQ-03-224**
-Sorting and filtering MUST apply to underlying rows before grouping is computed.
+Sorting and filtering MUST apply to underlying rows before grouping is computed. Clearing a user sort override MUST return the surface to schema default sort only, represented by omitted `sort` on `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query` and by canonical persisted `query_json.sort=[]` when the state is saved in a saved view.
 Profiles: base
-Verified by: AC-013, AC-014, AC-044, AC-047, AC-124, AC-184, AC-185, AC-231
+Verified by: AC-013, AC-014, AC-044, AC-047, AC-124, AC-184, AC-185, AC-231, AC-360
 
-### 14.2 Timeline grouping boundary
+### 14.2 Grouping boundary
 
-Timeline grouping is a presentation-only transform over the current filtered result set.
+Grouping is a presentation-only transform over the current filtered result set for any workbook surface whose active `view_schema` declares `grouping_fields`.
 
 **REQ-03-225**
 Grouping MUST NOT create, delete, or mutate:
@@ -1607,19 +1652,19 @@ Grouping MUST NOT create, delete, or mutate:
 - links,
 - tags.
 Profiles: base
-Verified by: AC-024, AC-025, AC-026, AC-231
+Verified by: AC-024, AC-025, AC-026, AC-231, AC-364
 
 ### 14.3 Allowed grouping keys
 
 **REQ-03-226**
-Timeline sheets MUST support `Group: None` plus exactly one active grouping key in the base profile.
+A workbook surface whose active `view_schema` declares `grouping_fields` MUST support `Group: None` plus exactly one active grouping key in the base profile.
 Profiles: base
-Verified by: AC-024, AC-025, AC-026, AC-231
+Verified by: AC-024, AC-025, AC-026, AC-231, AC-364
 
 **REQ-03-227**
-The active grouping key MUST be stored as a stable contract value in `saved_views.query_json.group_by`, not as a visible label.
+For Timeline sheets, the active grouping key MUST be stored as a stable contract value in `query_json.group_by`, not as a visible label. `Group: None` is represented by omitted `group_by` on the public query route and omitted `query_json.group_by` in saved views. The UI MUST NOT send explicit `null` for that state.
 Profiles: base
-Verified by: AC-024, AC-025, AC-026, AC-231
+Verified by: AC-024, AC-025, AC-026, AC-231, AC-360
 
 The allowed grouping keys are exactly:
 
@@ -1641,26 +1686,25 @@ Grouping by Summary, Hosts, Identities, Tags, arbitrary custom columns, formulas
 ### 14.4 Grouping value rules
 
 **REQ-03-229**
-Grouping keys MUST be scalar contract-backed values.
+Grouping keys MUST be scalar contract-backed values. Unless the active `view_schema` explicitly overrides group-order behavior, grouped workbook surfaces sort groups by the grouping key's normal sort comparator in ascending order with null buckets last. The current row sort applies unchanged within each group.
 Profiles: base
-Verified by: AC-024, AC-025, AC-026, AC-231
+Verified by: AC-024, AC-025, AC-026, AC-231, AC-364
 
 **REQ-03-230**
-Group order MUST be deterministic:
+Timeline group order overrides the generic rule in REQ-03-229 and MUST be deterministic:
 
 - `timeline.occurred_day` and `timeline.recorded_day` sort by bucket value descending, with null buckets last,
 - `timeline.capture_state` sorts `rough`, `enriched`, `reviewed`, `superseded`,
-- `timeline.has_evidence` and `timeline.has_unresolved_mentions` sort `true` then `false`,
-- the current row sort applies unchanged within each group.
+- `timeline.has_evidence` and `timeline.has_unresolved_mentions` sort `true` then `false`.
 Profiles: base
 Verified by: AC-024, AC-025, AC-026, AC-231
 
 ### 14.5 Group-header behavior
 
 **REQ-03-231**
-Grouped timeline sheets MUST expose exactly one derived group-header level.
+A grouped workbook surface whose active `view_schema` declares `grouping_fields` MUST expose exactly one derived group-header level.
 Profiles: base
-Verified by: AC-025, AC-026, AC-231
+Verified by: AC-025, AC-026, AC-231, AC-364
 
 **REQ-03-232**
 Group headers are derived UI rows only. They:
@@ -1672,7 +1716,7 @@ Group headers are derived UI rows only. They:
 - MUST NOT appear in revision history,
 - MUST NOT become mutation targets.
 Profiles: base
-Verified by: AC-025, AC-026, AC-231
+Verified by: AC-025, AC-026, AC-231, AC-364
 
 The allowed group operations are:
 
@@ -1689,19 +1733,19 @@ A row MAY move between visible groups only when an edit changes the grouped fiel
 **REQ-03-233**
 Dragging a row between groups MUST NOT be a write path.
 Profiles: base
-Verified by: AC-026, AC-047, AC-231
+Verified by: AC-026, AC-047, AC-231, AC-364
 
 ### 14.7 Collaborative state boundary
 
 **REQ-03-234**
 Transient expand and collapse state SHOULD remain client-local and MUST NOT be broadcast as collaborative state.
 Profiles: base
-Verified by: AC-047, AC-231
+Verified by: AC-047, AC-231, AC-364
 
 **REQ-03-235**
-Saved views MAY persist the default grouping key in `query_json.group_by`. They MUST NOT persist another user’s live open or closed state.
+Saved views MAY persist the default grouping key in `query_json.group_by` when the active `view_schema` declares `grouping_fields`. They MUST NOT persist another user’s live open or closed state.
 Profiles: base
-Verified by: AC-047, AC-231
+Verified by: AC-047, AC-231, AC-364
 
 ### 14.8 Grouping non-goals
 
@@ -1819,6 +1863,11 @@ For authorized users, the inspector MUST support explicit host and identity merg
 Profiles: base
 Verified by: AC-006, AC-020, AC-023, AC-072, AC-073, AC-074, AC-075, AC-186, AC-187, AC-209, AC-210, AC-231
 
+**REQ-03-272**
+When the inspector clears a writable direct-reference scalar, it MUST use the ordinary record patch route `PATCH /api/v1/records/{record_id}` with a direct-write change entry keyed by the affected `field_key` and `value=null`. It MUST NOT use a bespoke action route for that clear, and it MUST NOT implicitly rewrite sibling source-preserving text fields.
+Profiles: base
+Verified by: AC-315, AC-318
+
 ### 16.3 Compromise-assessment surfaces
 
 **REQ-03-250**
@@ -1857,6 +1906,11 @@ Verified by: AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-137, AC-138, AC-
 From a selected Timeline, Host, Identity, Evidence, Notes, Task Requests, or Decisions row, the analyst MUST be able to create or link a `task_request`, `decision`, structured coordination artifact, or incident-scoped party reference without leaving the workbook flow when the active surface exposes requester, collector, source, audience, or attendee semantics. When that flow pre-seeds linked-record, decision, support, or party-reference context from the selected record, those preseeded references MUST remain editable context and MUST NOT by themselves satisfy the target surface's minimum create signal.
 Profiles: base
 Verified by: AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-137, AC-138, AC-139, AC-140, AC-141, AC-142, AC-143, AC-144, AC-145, AC-231, AC-278, AC-279
+
+**REQ-03-273**
+If the active task surface exposes decision-link clearing, that flow MUST use the ordinary record patch route `PATCH /api/v1/records/{record_id}` with one direct-write change for `task.decision_record_id` set by `value=null`. It MUST remain same-surface and MUST NOT require a bespoke decision-link action route.
+Profiles: base
+Verified by: AC-315, AC-319
 
 **REQ-03-257**
 Routine timeline row creation and editing MUST NOT require task, decision, owner, approver, challenge, or checklist fields on the timeline sheet itself.
@@ -1964,6 +2018,11 @@ Verified by: AC-231, AC-278, AC-279
 `Clear party text` MUST preserve any linked `party_id`. `Clear party link` MUST preserve any source-preserving party text. `Clear both` MUST clear both.
 Profiles: base
 Verified by: AC-231, AC-278
+
+**REQ-03-274**
+`Clear party link` MUST send `PATCH /api/v1/records/{record_id}` with only the corresponding hidden `*_party_id` field changed through direct-write `value=null`. `Clear party text` MUST clear only the text field. `Clear both` MUST send one patch containing both field changes so the resulting round-trip state is explicit and atomic.
+Profiles: base
+Verified by: AC-315, AC-318
 
 **REQ-03-270**
 Task Requests and Evidence MUST remain text-first on the grid. Party linking is same-surface enrichment from the inspector or Parties view and MUST NOT block row creation, row commit, or later text editing.

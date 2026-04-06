@@ -142,6 +142,7 @@ The examples below are illustrative only. Core 04 §12 remains the normative own
 ```toml
 config_schema_id = "cartulary.deployment_config.v1"
 deployment_profile = "disconnected"
+bootstrap.first_admin_manifest_path = "/run/secrets/cartulary-bootstrap-admin.json"
 
 [roots.database_storage]
 binding_kind = "filesystem_root"
@@ -169,6 +170,7 @@ path = "/var/lib/cartulary/exports"
 ```toml
 config_schema_id = "cartulary.deployment_config.v1"
 deployment_profile = "cloud"
+bootstrap.first_admin_manifest_path = "/run/secrets/cartulary-bootstrap-admin.json"
 
 [roots.database_storage]
 binding_kind = "managed_service"
@@ -198,6 +200,7 @@ services:
   app:
     volumes:
       - /etc/cartulary/config.toml:/etc/cartulary/config.toml:ro
+      - /var/lib/cartulary/bootstrap/cartulary-bootstrap-admin.json:/run/secrets/cartulary-bootstrap-admin.json:ro
       - /var/lib/cartulary/reference-packs:/var/lib/cartulary/reference-packs
       - /var/lib/cartulary/tmp:/var/lib/cartulary/tmp
       - /var/lib/cartulary/exports:/var/lib/cartulary/exports
@@ -213,11 +216,142 @@ services:
 
 Missing required runtime-root keys remain invalid at runtime even when the official disconnected examples use canonical paths.
 
+The read-only bootstrap manifest mount above remains conformant because one-time bootstrap semantics derive from persisted deployment-local completion state, not from deleting or mutating the manifest file after consumption.
+
+#### Example 3a: illustrative bootstrap-admin manifest
+
+```json
+{
+  "bootstrap_schema_id": "cartulary.bootstrap_admin.v1",
+  "bootstrap_artifact_id": "00000000-0000-0000-0000-000000000001",
+  "email": "admin@example.com",
+  "display_name": "Deployment Admin",
+  "initial_password": "correct horse battery staple 123",
+  "mfa_required": true
+}
+```
+
+#### Illustrative operator note: bootstrap failure modes
+
+- `bootstrap_manifest_path_missing`: the configured path does not exist when bootstrap is required.
+- `bootstrap_manifest_schema_invalid`: the file parses but does not satisfy `cartulary.bootstrap_admin.v1`.
+- `bootstrap_email_conflict`: the manifest email already exists on a local user row.
+- `bootstrap_recovery_not_supported`: the deployment has no active deployment admin but already has a persisted bootstrap-completion marker.
+
+#### Example 4: illustrative resource-limit registry excerpt
+
+```toml
+[limits.object_blobs]
+max_declared_byte_size = 536870912
+
+[limits.imports]
+max_csv_source_bytes = 33554432
+max_xlsx_source_bytes = 67108864
+max_rows = 100000
+max_columns = 256
+max_cells = 5000000
+
+[limits.archives]
+default_max_extracted_bytes = 2147483648
+max_compression_ratio = 100
+max_members = 10000
+
+[limits.reference_packs]
+max_extracted_bytes = 536870912
+
+[limits.incident_bundles]
+max_extracted_bytes = 68719476736
+
+[limits.previews]
+max_previewable_payload_bytes = 33554432
+max_text_inline_bytes = 1048576
+```
+
+
+### Illustrative benchmark topology and benchmark-manifest example
+
+The examples below are illustrative only. Core 04 §9 remains the normative owner of the claim-bearing benchmark profile, benchmark-manifest contract, and measurement-predicate registry. These examples do not create alternate thresholds or alternate profile identifiers.
+
+#### Example 5: claim-bearing benchmark topology
+
+```mermaid
+flowchart LR
+    Harness[Playwright harness\ncartulary.bench.harness.playwright.v1]
+    Client[Benchmark client\naws.ec2.c7i.2xlarge\nChromium headed]
+    Trace[Seeded live-update trace\ncartulary.perf.live_updates_25sessions.v1]
+
+    subgraph Bench[Claim-bearing benchmark rig]
+        App[Application server\naws.ec2.c7i.2xlarge]
+        PG[Postgres\naws.ec2.i4i.2xlarge\ninstance-store NVMe]
+        OBJ[Object store\naws.ec2.c7i.xlarge\ngp3 SSD]
+    end
+
+    Harness --> Client
+    Trace --> App
+    Client <-- 1 Gbps / RTT <= 2 ms --> App
+    App <-- RTT <= 1 ms --> PG
+    App <-- RTT <= 1 ms --> OBJ
+```
+
+#### Example 6: illustrative `benchmark_manifest.json`
+
+```json
+{
+  "benchmark_manifest_schema_id": "cartulary.benchmark_manifest.v1",
+  "benchmark_profile_id": "cartulary.perf.desktop_ref.v1",
+  "criterion_ids": ["AC-043", "AC-044"],
+  "measurement_predicate_ids": [
+    "perf.selection_change.v1",
+    "perf.focus_change.v1",
+    "perf.typing_ack.v1",
+    "perf.timeline_blank_row_create.v1",
+    "perf.view_change.first_useful_viewport.v1",
+    "perf.view_change.stable_viewport.v1"
+  ],
+  "fixture_ids": ["fixture_a"],
+  "traffic_trace_id": "cartulary.perf.live_updates_25sessions.v1",
+  "seed": 20260405,
+  "warmup_passes": 1,
+  "browser_engine": "chromium",
+  "browser_build": "134.0.6998.35",
+  "client_runner_id": "aws.ec2.c7i.2xlarge",
+  "client_os_image_id": "cartulary.bench.ubuntu_24_04_client.2026q1",
+  "app_runner_id": "aws.ec2.c7i.2xlarge",
+  "app_os_image_id": "cartulary.bench.ubuntu_24_04_app.2026q1",
+  "postgres_runner_id": "aws.ec2.i4i.2xlarge",
+  "postgres_os_image_id": "cartulary.bench.ubuntu_24_04_postgres.2026q1",
+  "postgres_storage_class": "instance_store_nvme",
+  "object_store_runner_id": "aws.ec2.c7i.xlarge",
+  "object_store_os_image_id": "cartulary.bench.ubuntu_24_04_object.2026q1",
+  "object_store_storage_class": "gp3_ssd",
+  "benchmark_harness_id": "cartulary.bench.harness.playwright.v1",
+  "benchmark_harness_version": "2026.04.0",
+  "run_started_at": "2026-04-05T12:00:00Z",
+  "run_completed_at": "2026-04-05T12:08:00Z",
+  "sample_count": 100,
+  "artifact_bundle_sha256": "3c4e14d2c8f4d19c2f8c9a04d5f0b90d5d8e4fca6b6ef1bc6a4e2a7c3a35d8f1",
+  "security_controls_state": "enabled"
+}
+```
+
+#### Example 7: illustrative network-shaping recipe
+
+```bash
+# Cap client-to-app throughput at 1 Gbps and apply symmetric delay so effective RTT
+# stays at or below 2 ms with jitter at or below 1 ms and no packet loss.
+tc qdisc replace dev eth0 root handle 1: tbf rate 1000mbit burst 256kb limit 1mbit
+tc qdisc add dev eth0 parent 1:1 handle 10: netem delay 1ms 0.5ms loss 0%
+
+# Apply the same recipe in the reverse direction on the paired link.
+```
+
 ### Reference packs, type registries, and view contracts
 
 - Incident records, evidence envelopes, revisions, saved views, and report snapshots are **incident data**.
 - Framework mappings, type/icon registries, evidence vocabularies, and optional enrichment datasets are **reference packs** that version independently of incidents.
 - Each built-in sheet or system view is declared by a **`view_schema`** contract that names the source record types, computed columns, required reference packs, default sort key, filter semantics, and write-back rules.
+- For required base coordination surfaces `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`, the `view_schema_id` is the canonical public workbook-surface identity. Helper or preset saved views over the same schema are separate, non-canonical objects.
+- The current profile does not standardize pack-dependent ATT&CK, D3FEND, or VERIS workbook `view_schema` surfaces. Any future framework workbook surface should be standardized per framework or tightly bounded family, including canonical `view_schema_id`, required pack keys, field registry, discoverability, writeability, degradation, and export behavior.
 - The core workbook must remain usable when optional reference packs are absent. Missing packs may disable overlays or show degraded labels, but they must not block capture or editing.
 - Pack activation and updates must verify checksum and, when available, signature or trusted-source metadata before use.
 

@@ -188,9 +188,13 @@ The base route family MUST include:
 
 - `POST /api/v1/auth/login`,
 - `POST /api/v1/auth/logout`,
-- `GET /api/v1/auth/session`.
+- `GET /api/v1/auth/session`,
+- `GET /api/v1/auth/credential-state`,
+- `POST /api/v1/auth/password/change`,
+- `POST /api/v1/auth/mfa/totp/begin`,
+- `POST /api/v1/auth/mfa/totp/complete`.
 Profiles: base
-Verified by: AC-123, AC-130, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-231
+Verified by: AC-123, AC-130, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-231, AC-334, AC-335, AC-336, AC-337, AC-338, AC-339
 
 **REQ-01-025**
 `POST /api/v1/auth/login` MUST be the base-profile local-account login route. The request body MUST be a JSON object and MUST accept:
@@ -199,17 +203,17 @@ Verified by: AC-123, AC-130, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-
 - required `password`,
 - optional `second_factor`.
 
-`username` remains the v1 wire member name for this route. In the base profile, for the local-account login route, it is the user's email address. `username` MUST be non-null and MUST satisfy `string_contract_id=email_address_v1`. A supplied `username` value that normalizes to authoritative `null` under `email_address_v1`, or otherwise fails that contract, MUST fail with `400` and `error.code = invalid_auth_request` rather than `401` and `error.code = invalid_credentials`. Local-account lookup MUST use the same deterministic normalization and comparison substrate as the user-account contract and membership-by-email resolution. The base profile MUST NOT create, require, or infer a second persisted local-login identifier distinct from the authoritative user `email`. `password` MUST be a non-null non-empty string and MUST be compared exactly as supplied after JSON decoding. The server MUST NOT trim, case-fold, or Unicode-normalize `password`.
+`username` remains the v1 wire member name for this route. In the base profile, for the local-account login route, it is the user's email address. `username` MUST be non-null and MUST satisfy `string_contract_id=email_address_v1`. A supplied `username` value that normalizes to authoritative `null` under `email_address_v1`, or otherwise fails that contract, MUST fail with `400` and `error.code = invalid_auth_request` rather than `401` and `error.code = invalid_credentials`. Local-account lookup MUST use the same deterministic normalization and comparison substrate as the user-account contract and membership-by-email resolution. The base profile MUST NOT create, require, or infer a second persisted local-login identifier distinct from the authoritative user `email`. `password` MUST be a non-null non-empty string and MUST be compared exactly as supplied after JSON decoding. The server MUST NOT trim, case-fold, or Unicode-normalize `password`. For local-password verification, the server MUST encode the exact JSON-decoded `password` as UTF-8 without BOM before Argon2id verification.
 
 When `second_factor` is omitted, the request is a primary-credentials-only login attempt. When present, `second_factor` MUST be an object and MUST be non-null. `second_factor.kind` MUST be present and, in the base profile, MUST use the closed vocabulary `totp`. `second_factor.assertion` MUST be present, MUST be an object, and MUST be non-null. For `kind='totp'`, `second_factor.assertion` MUST use exactly this shape: `{ "code": "123456" }`. `code` MUST be a string of exactly six ASCII decimal digits with no spaces or separators.
 
 Unknown top-level request members, unknown `second_factor` members, unknown `assertion` members for the selected `kind`, a missing required member, a type mismatch, a supplied `null` where this requirement forbids `null`, a `second_factor.kind` outside the base-profile vocabulary, or any `client_txn_id`, `id_token`, `authorization_code`, `saml_response`, `provider_assertion`, or WebAuthn ceremony field sent on this route MUST fail with `400` and `error.code = invalid_auth_request`. When the failure is attributable to one request member, `error.details.field` MUST identify that member.
 
-If the local account does not require MFA, omission of `second_factor` MUST be accepted and a structurally valid `second_factor` MUST NOT by itself prevent login. If the local account requires MFA and `second_factor` is omitted, the server MUST fail with `401` and `error.code = mfa_required`; `error.details.required_second_factor_kinds` MUST equal `["totp"]` in the base profile. If the server is not willing to acknowledge that primary credentials were valid, including for unknown `username`, wrong `password`, inactive local account, or equivalent pre-MFA failure, it MUST fail with `401` and `error.code = invalid_credentials`. If primary credentials are valid and a structurally valid TOTP assertion is present but wrong or expired, the server MUST fail with `401` and `error.code = invalid_second_factor`.
+If the local account does not require MFA, omission of `second_factor` MUST be accepted and a structurally valid `second_factor` MUST NOT by itself prevent login. If the local account requires MFA, has one active TOTP credential, and `second_factor` is omitted, the server MUST fail with `401` and `error.code = mfa_required`; `error.details.required_second_factor_kinds` MUST equal `["totp"]` in the base profile. If the local account requires MFA, primary credentials are valid, and no active TOTP credential is currently enrolled, the server MUST fail with `401` and `error.code = mfa_setup_required`; it MUST set no session cookie; `error.details.required_setup_kinds` MUST equal `["totp"]`; and the error payload MUST also include one opaque short-lived `bootstrap_token` plus `bootstrap_expires_at`. If the server is not willing to acknowledge that primary credentials were valid, including for unknown `username`, wrong `password`, inactive local account, or equivalent pre-MFA failure, it MUST fail with `401` and `error.code = invalid_credentials`. If primary credentials are valid and a structurally valid TOTP assertion is present but wrong or expired, the server MUST fail with `401` and `error.code = invalid_second_factor`.
 
 This route MUST NOT require or interpret `client_txn_id`. On success it MUST establish the server-managed session and return the same session resource exposed by `GET /api/v1/auth/session`. On any non-success outcome, the server MUST create no session, set no session cookie, and expose no partial or pre-authenticated session state. Transport retries after an uncertain network boundary are not idempotent and MAY create a fresh session if the client repeats the request.
 Profiles: base
-Verified by: AC-123, AC-130, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-231, AC-244, AC-245, AC-246, AC-247, AC-248, AC-249, AC-250, AC-311
+Verified by: AC-123, AC-130, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-231, AC-244, AC-245, AC-246, AC-247, AC-248, AC-249, AC-250, AC-311, AC-334, AC-335, AC-336, AC-337, AC-338, AC-339
 
 Example request body:
 
@@ -299,13 +303,41 @@ If the Enterprise Authentication Extension Profile is implemented, provider-back
 Profiles: base, enterprise_authentication
 Verified by: AC-123, AC-130, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-231, AC-235, AC-250, AC-290, AC-291
 
+##### 3.3.2.2 Credential lifecycle and TOTP bootstrap routes
+
+**REQ-01-522**
+The base profile MUST expose a bounded public credential-lifecycle contract for local accounts through the routes listed in REQ-01-024. `bootstrap_token` is a credential-setup token, not a session. It MUST be opaque, single-subject, short-lived, and accepted only by `POST /api/v1/auth/mfa/totp/begin` and `POST /api/v1/auth/mfa/totp/complete`. It MUST NOT be accepted by `GET /api/v1/auth/session`, `GET /api/v1/auth/credential-state`, ordinary incident or record routes, or `/ws/v1/*`. Unless a later profile says otherwise, `bootstrap_token` expires 10 minutes after issuance, is single-use, is consumed by successful `totp/complete`, and becomes invalid on later bootstrap issuance for the same user, administrator password reset, administrator TOTP reset, or expiry. A bootstrap token that is expired, consumed, superseded, bound to a different subject, or used on a route outside its allowed family MUST fail with `409` and `error.code = credential_bootstrap_rejected`; `error.details.reason_code` MUST use the registry in §3.3.6.2.
+Profiles: base
+Verified by: AC-334, AC-335, AC-336, AC-337, AC-338, AC-339
+
+**REQ-01-523**
+`GET /api/v1/auth/credential-state` MUST be session-authenticated and current-user scoped. It MUST return only safe credential state: `user_id`, `auth_kind`, `mfa_required`, `recovery_model`, nullable `password.changed_at`, and `totp` with `state`, nullable `enrolled_at`, and nullable `pending_expires_at`. For local accounts, `auth_kind` MUST be `local`, `recovery_model` MUST be `admin_assisted`, and `totp.state` MUST use the closed vocabulary `not_enrolled`, `pending`, and `active`. The response MUST NOT expose `secret_base32`, `otpauth_uri`, raw bootstrap tokens, TOTP secret material, password hashes, or provider assertions. A bootstrap token presented on this route MUST fail with `409`, `error.code = credential_bootstrap_rejected`, and `error.details.reason_code = not_allowed_for_route`.
+Profiles: base
+Verified by: AC-335, AC-339
+
+**REQ-01-524**
+`POST /api/v1/auth/password/change` MUST be session-authenticated and current-user scoped. The request body MUST be a JSON object and MUST accept required `client_txn_id`, required `current_password`, required `new_password`, and optional `second_factor`. `new_password` is bound to `string_contract_id=local_password_provision_v1`. `current_password` MUST be a non-null JSON string and MUST be verified using the same exact post-JSON-decoding code-point equality and UTF-8-without-BOM substrate used for local login-password verification. If the current account has one active TOTP credential, the request MUST also include `second_factor` using the same `kind='totp'` assertion shape as `POST /api/v1/auth/login`; omission or a structurally valid but wrong or expired TOTP code MUST fail with `401` and `error.code = invalid_second_factor`. A structurally valid `current_password` that does not match the current stored local password MUST fail with `409` and `error.code = invalid_current_password`. On success the server MUST update `password_hash`, stamp `password.changed_at`, revoke all active sessions for that user including the current session, and return the common success envelope with at least `user_id`, `password.changed_at`, and `sessions_revoked=true`. The route MUST use `client_txn_id` as a route-scoped idempotency key within `(actor_user_id, client_txn_id)`, and any deployment-local idempotency substrate for this route MUST NOT retain cleartext `current_password` or `new_password`.
+Profiles: base
+Verified by: AC-338, AC-339
+
+**REQ-01-525**
+`POST /api/v1/auth/mfa/totp/begin` MUST accept exactly one auth mode: either an authenticated current session or one valid `bootstrap_token`. The request body MUST be a JSON object and MUST accept required `client_txn_id`. When called with current-session auth and one existing active TOTP credential, it MUST also require `current_password` plus `second_factor` using the same TOTP assertion shape as the local-login route before issuing a replacement seed. On success it MUST return `enrollment_id`, `expires_at`, and a `totp_setup` object containing `secret_base32`, `otpauth_uri`, `algorithm='SHA1'`, `digits=6`, and `period_seconds=30`. `secret_base32` and `otpauth_uri` MUST appear only on this begin response and MUST NOT appear on later read routes, history payloads, WebSocket payloads, or safe user resources. For idempotency within the same auth scope and `client_txn_id`, replay of the same normalized request before enrollment expiry MUST return the original pending enrollment and the same seed material.
+Profiles: base
+Verified by: AC-336, AC-339
+
+**REQ-01-526**
+`POST /api/v1/auth/mfa/totp/complete` MUST accept exactly one auth mode: either an authenticated current session or one valid `bootstrap_token`, and that auth mode MUST match the auth mode used for the referenced pending enrollment. The request body MUST be a JSON object and MUST accept required `client_txn_id`, required `enrollment_id`, and required `code`, where `code` is a string of exactly six ASCII decimal digits. If no pending enrollment exists for `enrollment_id`, or the referenced pending enrollment is expired or already consumed, the server MUST fail with `409`, `error.code = totp_setup_not_pending`, and `error.details.reason_code` from §3.3.6.2. On success the server MUST atomically activate the pending TOTP secret, clear pending setup state, consume any bootstrap token used for the flow, and revoke all active sessions only when the call replaces an existing active factor. First-time bootstrap completion MUST NOT auto-issue a session; the user MUST complete ordinary login after setup. The base profile does not include email links, SMS, backup codes, provider-mediated recovery, self-service factor disablement, or forced-password-change-on-next-login state on these routes.
+Profiles: base
+Verified by: AC-337, AC-339
+
 #### 3.3.3 Route families
 
 **REQ-01-032**
 The base-profile route set MUST include stable route families for:
 
+- authentication and bounded credential-lifecycle routes: `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/session`, `GET /api/v1/auth/credential-state`, `POST /api/v1/auth/password/change`, `POST /api/v1/auth/mfa/totp/begin`, `POST /api/v1/auth/mfa/totp/complete`,
 - incident discovery, creation, retrieval, and incident metadata mutation: `POST /api/v1/incidents`, `GET /api/v1/incidents`, `GET /api/v1/incidents/{incident_id}`, `PATCH /api/v1/incidents/{incident_id}`,
-- deployment-local user account inspection and administration: `GET /api/v1/users`, `POST /api/v1/users`, `GET /api/v1/users/{user_id}`, `PATCH /api/v1/users/{user_id}`,
+- deployment-local user account inspection and administration: `GET /api/v1/users`, `POST /api/v1/users`, `GET /api/v1/users/{user_id}`, `PATCH /api/v1/users/{user_id}`, `POST /api/v1/users/{user_id}/password/reset`, `POST /api/v1/users/{user_id}/mfa/totp/reset`, `POST /api/v1/users/{user_id}/sessions/revoke-all`,
 - incident membership inspection and administration: `GET /api/v1/incidents/{incident_id}/memberships`, `POST /api/v1/incidents/{incident_id}/memberships`, `PATCH /api/v1/incidents/{incident_id}/memberships/{user_id}`, `DELETE /api/v1/incidents/{incident_id}/memberships/{user_id}`,
 - view-schema discovery: `GET /api/v1/view-schemas`, `GET /api/v1/view-schemas/{view_schema_id}`,
 - saved-view discovery and persistence: `GET /api/v1/incidents/{incident_id}/saved-views`, `POST /api/v1/incidents/{incident_id}/saved-views`, `PATCH /api/v1/incidents/{incident_id}/saved-views/{saved_view_id}`, `DELETE /api/v1/incidents/{incident_id}/saved-views/{saved_view_id}`,
@@ -316,11 +348,12 @@ The base-profile route set MUST include stable route families for:
 - entity-mention explicit action route and equivalent surface-specific single-mention actions: `POST /api/v1/entity-mentions/{entity_mention_id}/resolve`,
 - blob-slot creation and evidence access: `POST /api/v1/object-blobs`, `POST /api/v1/evidence-records/{record_id}/attach-blob`, `POST /api/v1/evidence-records/{record_id}/preview-handle`, `POST /api/v1/evidence-records/{record_id}/download-handle`, `GET /api/v1/evidence-handles/{handle_token}`,
 - background-job status and cancellation: `GET /api/v1/jobs/{job_id}`, `POST /api/v1/jobs/{job_id}/cancel`.
+The base profile defines no public WebAuthn or passkey routes under `/api/v1/auth/*` or `/api/v1/users/{user_id}/mfa/*`. Registration, assertion, credential enumeration, credential deletion, and reset semantics for WebAuthn or passkeys are reserved for future specification work and MUST NOT be claimed by base-profile implementations.
 Profiles: base
-Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-186, AC-187, AC-231, AC-251, AC-252, AC-253, AC-254, AC-255
+Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-186, AC-187, AC-231, AC-251, AC-252, AC-253, AC-254, AC-255, AC-340, AC-341, AC-342, AC-334, AC-335, AC-336, AC-337, AC-338, AC-339
 
 **REQ-01-033**
-Implementations that claim an extension profile MUST add that profile's route family under the same versioned root rather than overloading base workbook routes. This includes, at minimum, `/api/v1/import-sessions/*`, `/api/v1/reference-packs/*`, `/api/v1/snapshots/*` and `/api/v1/releases/*`, `/api/v1/incident-bundles/*`, `/api/v1/auth/providers/*`, `/api/v1/auth/oidc/*`, and `/api/v1/auth/saml/*` for the corresponding claimed extension profiles.
+Implementations that claim an extension profile MUST add that profile's route family under the same versioned root rather than overloading base workbook routes. This includes, at minimum, `/api/v1/import-sessions/*`, `/api/v1/reference-packs/*`, `/api/v1/snapshots/*` and `/api/v1/releases/*`, `/api/v1/incident-bundles/*`, `/api/v1/auth/providers/*`, `/api/v1/auth/oidc/*`, `/api/v1/auth/saml/*`, and `/api/v1/users/{user_id}/auth-bindings*` for the corresponding claimed extension profiles.
 Profiles: base, import, snapshot_reporting, incident_portability, reference_pack, enterprise_authentication
 Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-186, AC-187, AC-231, AC-232, AC-233, AC-234, AC-235, AC-236
 
@@ -336,17 +369,39 @@ Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
 **REQ-01-035**
 A view-query request MUST be view-shaped rather than table-shaped. It MUST accept:
 
-- ordered `sort[]` entries keyed by `field_key`,
-- `filters[]` entries keyed by `field_key`,
-- zero or one `group_by` value chosen from the view's declared grouping keys,
+- optional ordered `sort[]` entries,
+- optional `filters[]` entries keyed by `field_key`,
+- optional `group_by`,
 - pagination members defined by §3.3.7.
+
+Each `sort[]` entry MUST use exactly this shape:
+
+```json
+{
+  "field_key": "timeline.sort_ts",
+  "direction": "asc"
+}
+```
+
+For `sort[]`:
+
+- `field_key` MUST be a stable sortable field key declared in the active `view_schema_id`'s `sort_fields`,
+- `field_key` MUST NOT be a visible column label, projection-table column name, or storage-table column name,
+- `direction` MUST use the exact closed vocabulary `asc` and `desc`,
+- unknown top-level members in a `sort[]` entry MUST be rejected,
+- duplicate normalized `field_key` entries in one request MUST be rejected,
+- omitted `sort` and `sort: []` mean no user sort override.
+
+`group_by` is optional. Omitted `group_by` means `Group: None`. When present, `group_by` MUST be a non-null string equal to one declared grouping key for the active `view_schema_id`. `group_by: null` is invalid. The current profile allows at most one active grouping key.
+
+The effective applied sort tuple for this route MUST be computed by taking the normalized user `sort[]` entries in request order, then appending each schema `default_sort` entry whose `field_key` does not already appear in the user list, then appending `record_id asc` if it is still absent. A user sort therefore overrides matching default-sort entries and extends rather than replaces the schema default tuple.
 
 For `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`, `limit` and `cursor_token` MUST appear only as JSON-body members, not as query parameters. `limit` counts serialized `rows[]` entries only. A malformed pagination member, unsupported pagination alias, or cursor replay against a different bound view-query contract MUST fail with `400`, `error.code=invalid_view_query`, and `error.details.reason_code` equal to `invalid_limit` or `cursor_query_mismatch` from §3.3.6.2, as applicable.
 Profiles: base
-Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-238, AC-239, AC-240, AC-243
+Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-238, AC-239, AC-240, AC-243, AC-359, AC-360, AC-361
 
 **REQ-01-036**
-A view-query response MUST return:
+A successful view-query response MUST return the common success envelope with:
 
 - `incident_id`,
 - `view_schema_id`,
@@ -354,9 +409,12 @@ A view-query response MUST return:
 - `record_id` and `row_version` on every mutable row,
 - field-key-addressable cell values,
 - scalar `group_values` needed for client-local grouping when grouping is active,
+- `meta.query` containing the normalized applied view-query contract for this response,
 - pagination metadata defined in §3.3.7.
+
+For this route, `meta.query` MUST always be present. `meta.query.filters[]` MUST use the canonical normalized wire shape defined in §3.3.4.1. `meta.query.sort[]` MUST serialize the effective applied sort tuple after the default-tail expansion defined by REQ-01-035. `meta.query.group_by` MUST be omitted when grouping is inactive.
 Profiles: base
-Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-238, AC-241, AC-243
+Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-238, AC-241, AC-243, AC-361
 
 **REQ-01-037**
 The server MUST NOT serialize group headers or other presentation-only grouping artifacts as writable rows.
@@ -478,9 +536,15 @@ The canonical `invalid_view_query` `error.details.reason_code` registry is defin
 Request order of `filters[]` is not semantically significant.
 
 **REQ-01-046**
-For saved-view persistence, cursor binding, and `meta.query`, the server MUST normalize `filters[]` into canonical order by `field_key asc`, then emit or persist the exact same wire shape defined in this subsection.
+For saved-view persistence, cursor binding, and `meta.query`, the server MUST normalize the view-query contract as follows:
+
+- `filters[]` MUST use the exact wire shape defined in this subsection and MUST be ordered canonically by `field_key asc`,
+- `sort[]` MUST preserve request order after per-entry normalization and duplicate rejection,
+- `group_by` MUST be omitted when grouping is inactive.
+
+For saved-view persistence, normalized `query_json.sort` stores only the normalized user sort override list and MUST use `[]` as the canonical persisted representation when no user sort override exists. Persisted `query_json.group_by` MUST be omitted when grouping is inactive. For `meta.query`, `sort[]` stores the effective applied sort tuple after the default-tail expansion defined by REQ-01-035.
 Profiles: base
-Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
+Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-360, AC-361
 
 **REQ-01-047**
 A declared full-text predicate that spans multiple read fields MUST have its own stable synthetic `field_key`. Clients MUST address that predicate by its declared synthetic key rather than by sending raw field lists or storage-specific search syntax.
@@ -693,7 +757,7 @@ Profiles: base
 Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
 
 **REQ-01-074**
-`DELETE /api/v1/records/{record_id}` MUST require current incident role `editor`, `reviewer`, or `admin`. `POST /api/v1/records/{record_id}/restore` MUST require current incident role `reviewer` or `admin`. A caller who lacks visibility to the target record MUST receive `404`. A caller who can see the record but lacks sufficient role MUST receive `403`. Soft-delete SHOULD use ordinary optimistic concurrency rather than a hard lock.
+`DELETE /api/v1/records/{record_id}` MUST require current incident role `editor`, `reviewer`, or `admin`. `POST /api/v1/records/{record_id}/restore` MUST require current incident role `reviewer` or `admin`. A caller who lacks visibility to the target record MUST receive `404`. A caller who can see the record but lacks sufficient role MUST receive `403`. Soft-delete SHOULD use ordinary optimistic concurrency rather than a hard lock. Ordinary soft-delete is outside the base-profile destructive-operation lock family and remains on the optimistic-concurrency path.
 Profiles: base
 Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
 
@@ -708,7 +772,7 @@ Profiles: base
 Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
 
 **REQ-01-077**
-The server MAY acquire a short-lived server-side record lock while applying `POST /api/v1/records/{record_id}/restore`. If such a lock is used, it MUST be internal to the restore operation and MUST NOT require a separate client-visible generic lock-acquire route in the base profile. If another destructive operation currently holds that record lock, restore MUST fail with `409`, `error.code = record_locked`, and `error.retryable = true`.
+`POST /api/v1/records/{record_id}/restore` MUST participate in the base-profile destructive-operation concurrency contract defined by REQ-01-104. For restore, the protected set is exactly the target `record_id`.
 Profiles: base
 Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
 
@@ -762,26 +826,27 @@ Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-
 **REQ-01-086**
 `POST /api/v1/records/{record_id}/supersede` MUST:
 
-- require JSON `base_row_version`, `client_txn_id`, and non-empty `reason` bound to `string_contract_id=reason_note_v1`; it MAY include optional `replacement_record_id`,
+- require JSON `base_row_version`, `client_txn_id`, and non-empty `reason` bound to `string_contract_id=reason_note_v1`; it MAY include optional `replacement_record_id`, and when `replacement_record_id` is present it MUST be a non-null stable `record_id`,
 - apply only to a visible non-deleted `timeline_event` record,
 - require current incident role `reviewer` or `admin`,
 - succeed only when the current persisted `capture_state` is `rough`, `enriched`, or `reviewed`,
-- when `replacement_record_id` is present, require a different visible record in the same incident and, if the implementation persists that reference, store it through an authoritative typed `record_link` or an equivalent structured relation,
-- in one transaction, increment `row_version`, create one attributed `change_set`, persist `capture_state='superseded'`, update derived projections, and return `200 OK` with at least `record_id`, `incident_id`, `row_version`, `capture_state`, `change_set_id`, and `reason`.
+- when `replacement_record_id` is present, require a different visible non-deleted `timeline_event` record in the same incident whose current `capture_state` is not `superseded`, and require that the target row addressed by `{record_id}` does not already have another active incoming Timeline supersession relation,
+- when `replacement_record_id` is present, persist exactly one authoritative non-deleted `record_links` row with `link_type='supersedes'`, `src_record_id=<replacement_record_id>`, and `dst_record_id=<record_id>` in the same committed action,
+- in one transaction, increment `row_version`, create one attributed `change_set`, persist `capture_state='superseded'`, update derived projections, and return `200 OK` with at least `record_id`, `incident_id`, `row_version`, `capture_state`, `change_set_id`, `reason`, and `replacement_record_id`, where `replacement_record_id` is `null` when no replacement relation was requested and committed.
 Profiles: base
-Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
+Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-196, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231, AC-329, AC-331
 
 **REQ-01-087**
-If the same authenticated actor replays the same normalized request with the same `(record_id, client_txn_id)`, the server MUST return `200 OK` with the originally committed result and MUST create no second lifecycle transition. A caller who lacks visibility to the target record MUST receive `404`. A caller who can see the record but lacks sufficient role MUST receive `403`. A stale `base_row_version` MUST fail with `409` and `error.code = row_version_conflict`. A request against a non-Timeline record, a Timeline record whose current `capture_state` is already `superseded`, or a `replacement_record_id` that is invalid for the target record MUST fail with `409` and `error.code = illegal_transition`. A request against a currently soft-deleted record MUST fail with `409` and `error.code = record_deleted_use_restore`.
+If the same authenticated actor replays the same normalized request with the same `(record_id, client_txn_id)`, the server MUST return `200 OK` with the originally committed result and MUST create no second lifecycle transition. For this route, normalized request comparison MUST include exact `base_row_version`, `reason` after normalization under `reason_note_v1`, and exact `replacement_record_id` when present. Reuse of the same `(record_id, client_txn_id)` with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict` before stale `base_row_version` evaluation. A caller who lacks visibility to the target record MUST receive `404`. A caller who can see the record but lacks sufficient role MUST receive `403`. A stale `base_row_version` MUST fail with `409` and `error.code = row_version_conflict`. A request against a non-Timeline record, a Timeline record whose current `capture_state` is already `superseded`, or a `replacement_record_id` that fails the target constraints in REQ-01-086 MUST fail with `409` and `error.code = illegal_transition`. When failure is attributable to replacement-target validation, `error.details.violated_guards[]` MUST use only `replacement_must_be_different_timeline_record`, `replacement_must_be_visible_active_same_incident_timeline_record`, `replacement_must_not_be_superseded`, and `target_must_not_have_active_replacement` as applicable. A request against a currently soft-deleted record MUST fail with `409` and `error.code = record_deleted_use_restore`.
 Profiles: base
-Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
+Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-199, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231, AC-329, AC-330
 
 **REQ-01-088**
 A successful call to either route MUST emit the ordinary replayable `record_changed` event for the affected record.
 Profiles: base
 Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
 
-#### 3.3.5.0 Rollback contract
+#### 3.3.5.0 Destructive-operation concurrency and rollback contract
 
 **REQ-01-089**
 `POST /api/v1/records/{record_id}/rollback` MUST execute a reviewer-visible history reversal anchored to the row-centric history of `record_id`.
@@ -877,9 +942,9 @@ Profiles: base
 Verified by: AC-215, AC-216, AC-217, AC-218, AC-231
 
 **REQ-01-104**
-The server MAY acquire short-lived internal destructive-operation locks on all affected records while applying the rollback. If such locks are used, they MUST be acquired in canonical ascending `record_id` order and MUST NOT require a separate client-visible lock route. If another destructive operation currently holds a required lock, the server MUST fail with `409`, `error.code = record_locked`, and `error.retryable = true`.
+The base-profile destructive-operation family is exactly `POST /api/v1/records/{record_id}/restore`, `POST /api/v1/records/{record_id}/rollback`, and `POST /api/v1/records/{survivor_record_id}/merge`. The server MUST use short-lived internal destructive-operation locks for every request in that family. The public contract includes no client-visible lock-acquire route, no lock-holder identity surface, no manual unlock route, and no server-side queueing of destructive requests. The server MUST attempt lock acquisition fail-fast and MUST NOT wait for a held lock to clear and then continue evaluating the same request. Lock acquisition MUST use canonical ascending `record_id` order across the full protected set. If any required lock is unavailable, the route MUST fail immediately with `409`, `error.code = record_locked`, and `error.retryable = true`. Only after the full protected set is acquired MAY the server re-read authoritative current state and evaluate `row_version_conflict`, restore eligibility such as `record_not_deleted`, `rollback_precondition_failed`, or `merge_precondition_failed`. Locks MUST be released on commit, rollback, or request termination. For restore, the protected set is exactly the target `record_id`. For rollback, the protected set is every first-class `record_id` whose authoritative state would be mutated if the selected rollback target were applied against current authoritative state. For merge, the protected set is the survivor record, the loser record, and every additional first-class `record_id` whose authoritative state the merge transaction mutates directly through repointing or deterministic recreation.
 Profiles: base
-Verified by: AC-215, AC-216, AC-217, AC-218, AC-231
+Verified by: AC-182, AC-187, AC-215, AC-216, AC-217, AC-218, AC-231, AC-353
 
 **REQ-01-105**
 If the supplied `target` does not resolve to a visible rollback target in `GET /api/v1/records/{record_id}/history`, the server MUST fail with `404` and `error.code = rollback_target_not_found`.
@@ -970,9 +1035,9 @@ Profiles: base
 Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231
 
 **REQ-01-116**
-`auth_bindings[]` MUST be read-only and MUST contain only safe binding summaries such as `provider_type`, `provider_key`, optional `username`, `created_at`, and `last_auth_at`. For `provider_type='local'`, any emitted summary `username` MUST equal the same authoritative `email` exposed on the safe user resource and MUST NOT define a separate local-login namespace. The base profile MUST NOT require clients to interpret `auth_bindings[]` in order to authorize incident data access.
+`auth_bindings[]` MUST be read-only, MUST always be present, MUST be non-empty in the current profile, MUST contain only active safe binding summaries, and MUST be serialized in canonical order by `provider_type asc`, then `provider_key asc`, then `created_at asc`. The current profile defines `auth_bindings[]` as a closed tagged union with exactly one local binding summary and, when the Enterprise Authentication Extension Profile is implemented, zero or more enterprise binding summaries. The local binding summary MUST contain exactly `provider_type`, `provider_key`, `username`, and `created_at`; it MUST use `provider_type='local'` and `provider_key='local'`; `username` MUST equal the same authoritative `email` exposed on the safe user resource; `created_at` MUST equal the same authoritative `created_at` exposed on the safe user resource; and it MUST NOT expose `auth_binding_id`, `provider_subject`, or `last_auth_at`. If the Enterprise Authentication Extension Profile is implemented, each active enterprise binding summary with `provider_type='oidc'` or `provider_type='saml'` MUST contain exactly `auth_binding_id`, `provider_key`, `provider_type`, `provider_subject`, `created_at`, and `last_auth_at`; `last_auth_at` MAY be `null`, but the member itself MUST be present; and enterprise binding summaries MUST NOT expose `username`. No additional members are allowed on either summary variant in the current profile. In the current profile, this canonical ordering places the single local binding summary before any enterprise binding summaries. Retired enterprise bindings MUST NOT appear in `auth_bindings[]`. The base profile MUST NOT require clients to interpret `auth_bindings[]` in order to authorize incident data access.
 Profiles: base
-Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231
+Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231, AC-348, AC-351
 
 **REQ-01-117**
 `GET /api/v1/users` and `GET /api/v1/users/{user_id}` MUST fail closed unless the caller has the deployment-scoped account-administration capability defined by Core 04 §2. `GET /api/v1/users` MUST return safe user resources ordered by `user_id asc`, MUST use the common success envelope with `data.users[]` plus `meta.paging`, and MUST accept only `limit` and `cursor_token` under §3.3.7. Pagination failures on this route MUST fail with `400`, `error.code=invalid_pagination_request`, and `error.details.reason_code` from the `invalid_pagination_request` registry in §3.3.6.2. Inert imported historical actors from incident portability are not login-capable user resources and MUST NOT be returned by this route family unless they have been explicitly mapped to a local user account.
@@ -995,22 +1060,64 @@ Verified by: AC-127, AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231
 - optional `mfa_required`,
 - optional `is_deployment_admin`.
 
-No other top-level request members are allowed. The base profile MUST NOT accept a separate local `username` create member. `display_name` is required and is bound to `string_contract_id=display_name_line_v1`. `mfa_required` and `is_deployment_admin` MUST be boolean when supplied and MUST NOT be `null`. If `mfa_required` is omitted, the server MUST default it to `true`. If `is_deployment_admin` is omitted, the server MUST default it to `false`. For `auth_kind='local'`, the created `email` becomes the only base-profile local login identifier. The create contract MUST NOT accept client-supplied `is_active`, `user_id`, `created_at`, `updated_at`, `updated_by_user_id`, `last_login_at`, `user_version`, or `auth_bindings[]`; any such member or any other unknown top-level member MUST fail with `400` and `error.code = invalid_mutation_payload`.
+No other top-level request members are allowed. The base profile MUST NOT accept a separate local `username` create member. `display_name` is required and is bound to `string_contract_id=display_name_line_v1`. `initial_password` is required and is bound to `string_contract_id=local_password_provision_v1`. `mfa_required` and `is_deployment_admin` MUST be boolean when supplied and MUST NOT be `null`. If `mfa_required` is omitted, the server MUST default it to `true`. If `is_deployment_admin` is omitted, the server MUST default it to `false`. For `auth_kind='local'`, the created `email` becomes the only base-profile local login identifier. A missing `initial_password`, explicit JSON `null`, non-string `initial_password`, or any `initial_password` value that fails `local_password_provision_v1` MUST fail with `400` and `error.code = invalid_mutation_payload`. When the failure is attributable to `initial_password`, `error.details.field` MUST equal `initial_password`. The create contract MUST NOT accept client-supplied `is_active`, `user_id`, `created_at`, `updated_at`, `updated_by_user_id`, `last_login_at`, `user_version`, or `auth_bindings[]`; any such member or any other unknown top-level member MUST fail with `400` and `error.code = invalid_mutation_payload`.
 Profiles: base
 Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231, AC-312
 
 **REQ-01-120**
-In the base profile, `auth_kind` MUST be `local`. `email` is required and is bound to `string_contract_id=email_address_v1`. A supplied `email` value that normalizes to authoritative `null` under `email_address_v1`, or otherwise fails that contract, MUST fail create-time validation. Deployment uniqueness for local users MUST be enforced on the deterministic comparison form produced by `email_address_v1`. For `auth_kind='local'`, the created `email` becomes the only base-profile local login identifier. `display_name` MUST satisfy `display_name_line_v1` before create-time idempotency comparison or persistence. On successful create, the created user resource MUST initialize `is_active=true`. The public create contract MUST NOT permit the client to choose any different initial `is_active` state. The server MUST NOT expose `initial_password` or any equivalent secret in a response or event payload.
+In the base profile, `auth_kind` MUST be `local`. `email` is required and is bound to `string_contract_id=email_address_v1`. A supplied `email` value that normalizes to authoritative `null` under `email_address_v1`, or otherwise fails that contract, MUST fail create-time validation. Deployment uniqueness for local users MUST be enforced on the deterministic comparison form produced by `email_address_v1`. For `auth_kind='local'`, the created `email` becomes the only base-profile local login identifier. `display_name` MUST satisfy `display_name_line_v1` before create-time idempotency comparison or persistence. `initial_password` MUST satisfy `local_password_provision_v1` before create-time idempotency comparison or any password-hash derivation. For `auth_kind='local'`, the server MUST encode the validated `initial_password` as UTF-8 without BOM, derive `password_hash` with Argon2id from those exact bytes, persist only `password_hash`, and discard the cleartext secret after request processing. On successful create, the created user resource MUST initialize `is_active=true`. The public create contract MUST NOT permit the client to choose any different initial `is_active` state. The server MUST NOT expose `initial_password` or any equivalent secret in a response or event payload.
 Profiles: base
 Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231, AC-312
 
 **REQ-01-121**
-The first deployment admin MUST be provisioned out of band at install or bootstrap time. The public API MUST NOT allow unauthenticated bootstrap of a deployment-admin user.
+The first deployment admin MUST be created only through the deployment-local bootstrap-admin manifest contract defined by REQ-01-530..REQ-01-536. The public API MUST NOT allow unauthenticated bootstrap of a deployment-admin user.
 Profiles: base
-Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231
+Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231, AC-343, AC-344, AC-345, AC-346, AC-347
+
+**REQ-01-530**
+The current profile defines exactly one conformant first-deployment-admin bootstrap mechanism: consumption of a deployment-local UTF-8 JSON manifest during startup. That manifest MUST declare `bootstrap_schema_id = "cartulary.bootstrap_admin.v1"`. Helper tooling such as an installer, CLI, Helm chart, or package script MAY materialize that manifest, but the running application MUST NOT treat those helpers as separate bootstrap mechanisms.
+Profiles: base
+Verified by: AC-343, AC-344, AC-345, AC-346
+
+**REQ-01-531**
+The bootstrap artifact MUST be a UTF-8 JSON file whose top-level value is one object with exactly these members:
+
+- required `bootstrap_schema_id`,
+- required `bootstrap_artifact_id`,
+- required `email`,
+- required `display_name`,
+- required `initial_password`,
+- optional `mfa_required`.
+Profiles: base
+Verified by: AC-343, AC-344
+
+**REQ-01-532**
+`bootstrap_schema_id` MUST equal `cartulary.bootstrap_admin.v1`. `bootstrap_artifact_id` MUST be a UUID. `email` MUST satisfy `email_address_v1`. `display_name` MUST satisfy `display_name_line_v1`. `initial_password` MUST satisfy `local_password_provision_v1`. If `mfa_required` is omitted, the bootstrap consumer MUST behave as though `true` were supplied. If `mfa_required` is supplied, it MUST be `true`; explicit `false` is invalid. Unknown top-level members are invalid. The manifest MUST NOT accept `user_id`, `auth_kind`, `is_active`, `is_deployment_admin`, incident memberships, provider bindings, TOTP seed material, session state, or any other extension field in the current profile.
+Profiles: base
+Verified by: AC-343, AC-344
+
+**REQ-01-533**
+After deployment-configuration validation and before any HTTP listener, WebSocket listener, or background-job runner starts, the implementation MUST query both deployment-local user state and deployment-local bootstrap-completion state. If at least one active `deployment_admin` exists, bootstrap manifest consumption MUST be skipped for that startup. If zero active `deployment_admin` users exist and no bootstrap-completion marker exists, the implementation MUST attempt bootstrap from the configured manifest path defined by Core 04 §12.3.2. If zero active `deployment_admin` users exist and a bootstrap-completion marker already exists, the current profile does not define re-bootstrap and startup MUST fail closed.
+Profiles: base
+Verified by: AC-343, AC-344, AC-345, AC-346
+
+**REQ-01-534**
+A valid bootstrap manifest MUST create exactly one local user in one transaction with `email` and `display_name` from the manifest, `password_hash` derived from `initial_password`, `mfa_required=true`, `is_active=true`, and `is_deployment_admin=true`. The same transaction MUST create no incident membership, no incident-scoped authorization, and no provider binding, and MUST also persist one deployment-local bootstrap-completion marker plus one deployment-local administrative audit event.
+Profiles: base
+Verified by: AC-343, AC-344
+
+**REQ-01-535**
+If the normalized manifest `email` already exists on any local user row, bootstrap MUST fail closed. It MUST NOT silently promote, mutate, or reuse an existing user. One-time semantics MUST be driven by the persisted bootstrap-completion marker, not by deleting, renaming, or mutating the manifest file on disk. A conformant deployment MAY therefore use a read-only secret mount for the manifest file.
+Profiles: base
+Verified by: AC-344, AC-345, AC-346
+
+**REQ-01-536**
+A user created by successful bootstrap enters the ordinary local credential lifecycle defined by §3.3.2.2. Because that user begins with `mfa_required=true` and no active TOTP factor, the first valid password login MUST follow the existing `mfa_setup_required` -> `bootstrap_token` -> `POST /api/v1/auth/mfa/totp/begin` -> `POST /api/v1/auth/mfa/totp/complete` flow.
+Profiles: base
+Verified by: AC-343, AC-347
 
 **REQ-01-122**
-Idempotency for user create MUST be keyed by `(actor_user_id, client_txn_id)`. For normalized request comparison, `email` MUST compare after `email_address_v1` normalization, omitted `mfa_required` MUST compare equal to explicit `true`, omitted `is_deployment_admin` MUST compare equal to explicit `false`, and `display_name` MUST compare after `display_name_line_v1` normalization. Requests rejected under REQ-01-119 are never part of normalized comparison. If the same authenticated actor replays the same normalized request with the same `client_txn_id`, the server MUST return `200 OK` with the originally created safe user resource and MUST create no second user. If the same actor reuses `client_txn_id` with a different normalized request, the server MUST fail with `409`.
+Idempotency for user create MUST be keyed by `(actor_user_id, client_txn_id)`. For normalized request comparison, `email` MUST compare after `email_address_v1` normalization, omitted `mfa_required` MUST compare equal to explicit `true`, omitted `is_deployment_admin` MUST compare equal to explicit `false`, `display_name` MUST compare after `display_name_line_v1` normalization, and `initial_password` MUST compare only after `local_password_provision_v1` validation using exact post-JSON-decoding code-point equality with no trimming, Unicode NFC normalization, case-folding, or line-ending normalization. Requests rejected under REQ-01-119 are never part of normalized comparison. If the same authenticated actor replays the same normalized request with the same `client_txn_id`, the server MUST return `200 OK` with the originally created safe user resource and MUST create no second user. If the same actor reuses `client_txn_id` with a different normalized request, including a different validated `initial_password`, the server MUST fail with `409` and `error.code = client_txn_conflict`; `error.details` MUST include at least `client_txn_id`.
 Profiles: base
 Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231, AC-312
 
@@ -1020,7 +1127,7 @@ Profiles: base
 Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231
 
 **REQ-01-124**
-`PATCH /api/v1/users/{user_id}` MUST require the same deployment-scoped account-administration capability. The route MUST accept `base_user_version` plus changed mutable fields only. In the base profile, mutable fields are `email`, `display_name`, `is_active`, `mfa_required`, and `is_deployment_admin`. When supplied, `email` MUST satisfy `email_address_v1`, and deployment uniqueness for local users MUST continue to be enforced on the deterministic comparison form produced by that contract. When supplied, `display_name` MUST satisfy `display_name_line_v1`. The route MUST reject attempted mutation of `user_id`, `created_at`, `last_login_at`, or `auth_bindings[]`. For a local account, a successful committed change to `email` MUST change the authoritative local login identifier atomically in the same commit. After that commit, authentication MUST succeed with the new email-form `username` and MUST fail with the prior email-form `username`, unless a later profile explicitly defines login aliases. The base profile defines no such aliases and no second persisted local username namespace. If the current `user_version` differs from `base_user_version`, the server MUST fail with `409` and `error.code = user_version_conflict`.
+`PATCH /api/v1/users/{user_id}` MUST require the same deployment-scoped account-administration capability. The route MUST accept `base_user_version` plus changed mutable fields only. In the base profile, mutable fields are `email`, `display_name`, `is_active`, `mfa_required`, and `is_deployment_admin`. Password reset, TOTP reset, and session revoke-all are route-owned actions and MUST NOT be expressed through this patch route. When supplied, `email` MUST satisfy `email_address_v1`, and deployment uniqueness for local users MUST continue to be enforced on the deterministic comparison form produced by that contract. When supplied, `display_name` MUST satisfy `display_name_line_v1`. The route MUST reject attempted mutation of `user_id`, `created_at`, `last_login_at`, or `auth_bindings[]`. For a local account, a successful committed change to `email` MUST change the authoritative local login identifier atomically in the same commit. After that commit, authentication MUST succeed with the new email-form `username` and MUST fail with the prior email-form `username`, unless a later profile explicitly defines login aliases. The base profile defines no such aliases and no second persisted local username namespace. If the current `user_version` differs from `base_user_version`, the server MUST fail with `409` and `error.code = user_version_conflict`.
 Profiles: base
 Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231, AC-312
 
@@ -1033,6 +1140,21 @@ Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231
 A successful `PATCH /api/v1/users/{user_id}` call MUST return the common success envelope with `data` equal to the resulting safe user resource.
 Profiles: base
 Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-231
+
+**REQ-01-527**
+`POST /api/v1/users/{user_id}/password/reset` MUST require the same deployment-scoped account-administration capability. The request body MUST be a JSON object and MUST accept required `base_user_version`, required `client_txn_id`, required `new_password`, and optional `reason` bound to `string_contract_id=reason_note_v1`. `new_password` is bound to `string_contract_id=local_password_provision_v1`. On success the server MUST update `password_hash`, stamp `password.changed_at`, invalidate any pending TOTP enrollment or bootstrap token for that user, revoke all active sessions for that user, preserve any currently active TOTP credential state, increment `user_version`, and return the common success envelope with `data` equal to the resulting safe user resource. The route MUST use `client_txn_id` as route-scoped idempotency key within `(actor_user_id, user_id, client_txn_id)`, and any deployment-local idempotency substrate for this route MUST NOT retain cleartext `new_password`.
+Profiles: base
+Verified by: AC-340, AC-341
+
+**REQ-01-528**
+`POST /api/v1/users/{user_id}/mfa/totp/reset` MUST require the same deployment-scoped account-administration capability. The request body MUST be a JSON object and MUST accept required `base_user_version`, required `client_txn_id`, and optional `reason` bound to `string_contract_id=reason_note_v1`. On success the server MUST clear active and pending TOTP setup state for that user, revoke all active sessions for that user, preserve `mfa_required`, increment `user_version`, and return the common success envelope with `data` equal to the resulting safe user resource. After success, the next valid password login for that user MUST behave as follows: when `mfa_required=true`, `POST /api/v1/auth/login` returns `401 error.code='mfa_setup_required'`, includes `error.details.required_setup_kinds=["totp"]`, includes one short-lived `bootstrap_token` plus `bootstrap_expires_at`, and sets no session cookie; when `mfa_required=false`, login proceeds without requiring `second_factor` until a new factor is enrolled.
+Profiles: base
+Verified by: AC-341
+
+**REQ-01-529**
+`POST /api/v1/users/{user_id}/sessions/revoke-all` MUST require the same deployment-scoped account-administration capability. The request body MUST be a JSON object and MUST accept required `client_txn_id` and optional `reason` bound to `string_contract_id=reason_note_v1`. On success the server MUST revoke all active sessions for that user without changing `password_hash`, active TOTP credential state, pending TOTP enrollment state, or `mfa_required`, and MUST return the common success envelope with `data` containing at least `user_id`, `sessions_revoked=true`, and `revoked_at`. Incident membership, incident role, or incident-admin status alone MUST NOT authorize any of the three action routes in this subsection.
+Profiles: base
+Verified by: AC-342
 
 **REQ-01-127**
 The membership route family MUST persist and expose stable incident membership resources. A membership resource MUST expose, at minimum:
@@ -1143,9 +1265,9 @@ Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
 **REQ-01-142**
-`query_json` MUST be normalized against the owning `view_schema_id` and encode saved-view sort, filter, and grouping state using stable `field_key` values, ordered `sort[]`, ordered `filters[]`, optional `group_by`, and normalized scalar values. It MUST NOT use visible tab labels, visible column labels, presentation-only group-header text, or other display-only identifiers. `query_json.filters[]` MUST use the exact filter predicate wire shape defined in §3.3.4.1. Persisted normalization MUST preserve the operator-specific `arg` object, normalized scalar values, and canonical `filters[]` ordering by `field_key asc`.
+`query_json` MUST be normalized against the owning `view_schema_id` and encode saved-view sort, filter, and grouping state using stable `field_key` values, ordered `sort[]`, ordered `filters[]`, optional `group_by`, and normalized scalar values. It MUST NOT use visible tab labels, visible column labels, presentation-only group-header text, or other display-only identifiers. Persisted `query_json.sort` MUST always be present and MUST use `[]` as the only canonical stored representation of no user sort override. Persisted `query_json.group_by` MUST be omitted when grouping is inactive and MUST NOT be serialized as JSON `null`. Persisted `query_json.sort` MUST store only the normalized user sort override list rather than the effective default-extended sort tuple. `query_json.filters[]` MUST use the exact filter predicate wire shape defined in §3.3.4.1. Persisted normalization MUST preserve the operator-specific `arg` object, normalized scalar values, and canonical `filters[]` ordering by `field_key asc`.
 Profiles: base
-Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
+Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231, AC-360
 
 **REQ-01-143**
 `layout_json` MAY encode presentation concerns such as column order, hidden fields, widths, inspector openness, and equivalent client layout state. `layout_json` MUST NOT be the authority for `saved_view_id`, `incident_id`, `view_schema_id`, `scope`, ownership, authorization, or startup/default surface selection.
@@ -1153,19 +1275,19 @@ Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
 **REQ-01-144**
-`GET /api/v1/incidents/{incident_id}/saved-views` MUST return only the saved-view resources visible to the caller, MUST use the common success envelope with `data.saved_views[]` plus `meta.paging`, MUST order results by `updated_at desc, saved_view_id asc`, and MUST accept only `limit` and `cursor_token` under §3.3.7. Pagination failures on this route MUST fail with `400`, `error.code=invalid_pagination_request`, and `error.details.reason_code` from the `invalid_pagination_request` registry in §3.3.6.2.
+`GET /api/v1/incidents/{incident_id}/saved-views` MUST return only the saved-view resources visible to the caller, MUST use the common success envelope with `data.saved_views[]` plus `meta.paging`, MUST order results by `updated_at desc, saved_view_id asc`, and MUST accept only `limit` and `cursor_token` under §3.3.7. This route is authoritative only for saved-view resources. Required base-profile surfaces in the authoritative `view_schema` registry are not discovered by this route unless a distinct saved-view object also exists for them. Pagination failures on this route MUST fail with `400`, `error.code=invalid_pagination_request`, and `error.details.reason_code` from the `invalid_pagination_request` registry in §3.3.6.2.
 Profiles: base
 Verified by: AC-127, AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
 **REQ-01-145**
-`POST /api/v1/incidents/{incident_id}/saved-views` MUST accept a JSON object containing required `view_schema_id`, required `display_name`, required `query_json`, optional `layout_json`, and optional `scope`. `display_name` MUST be non-null, MUST satisfy `display_name_line_v1`, and MUST be compared after that normalization for create-time idempotency and no-op detection. `query_json` MUST be non-null. If `layout_json` is omitted, the server MUST default it to `{}`. If `layout_json` is supplied, it MUST be non-null. If `scope` is omitted, the server MUST treat it as `private`. No other top-level request members are allowed. The ordinary public create route MUST reject `scope='system'`, any supplied `null` for `display_name`, `query_json`, `layout_json`, or `scope`, and any unknown top-level member with `400` and `error.code = invalid_mutation_payload`.
+`POST /api/v1/incidents/{incident_id}/saved-views` MUST accept a JSON object containing required `view_schema_id`, required `display_name`, required `query_json`, optional `layout_json`, and optional `scope`. `display_name` MUST be non-null, MUST satisfy `display_name_line_v1`, and MUST be compared after that normalization for create-time idempotency and no-op detection. `query_json` MUST be non-null. If `layout_json` is omitted, the server MUST default it to `{}`. If `layout_json` is supplied, it MUST be non-null. If `scope` is omitted, the server MUST treat it as `private`. `query_json` MUST be validated and normalized using the same sort, filter, and grouping rules as `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`; within `query_json`, omission of `sort` MUST normalize to `sort=[]`, and explicit `group_by=null` is invalid. No other top-level request members are allowed. The ordinary public create route MUST reject `scope='system'`, any supplied `null` for `display_name`, `query_json`, `layout_json`, or `scope`, and any unknown top-level member with `400` and `error.code = invalid_mutation_payload`.
 Profiles: base
-Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
+Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231, AC-360
 
 **REQ-01-146**
-`PATCH /api/v1/incidents/{incident_id}/saved-views/{saved_view_id}` MUST accept a JSON object containing required `base_saved_view_version` plus zero or more changed mutable fields only. Mutable fields are `display_name`, `query_json`, `layout_json`, and, when permitted by scope rules, `scope`. Omission of a mutable field means unchanged. `display_name`, `query_json`, and `layout_json` MUST be non-null when supplied, and `display_name` MUST satisfy `display_name_line_v1`. No top-level request members other than `base_saved_view_version` and those mutable fields are allowed. It MUST reject attempted mutation of `incident_id`, `saved_view_id`, or `view_schema_id`. Unknown or forbidden top-level members MUST fail with `400` and `error.code = invalid_mutation_payload`. If the current saved-view version differs from `base_saved_view_version`, the server MUST reject the patch with an explicit conflict status rather than silently overwriting saved-view state. If the request is structurally valid but makes no material change after request-time normalization, including `display_name_line_v1` normalization, the server MUST return `200 OK` with the current saved-view resource and MUST NOT change `saved_view_version` or `updated_at`. Any materially changed successful in-place mutation MUST advance `saved_view_version` and `updated_at` exactly once.
+`PATCH /api/v1/incidents/{incident_id}/saved-views/{saved_view_id}` MUST accept a JSON object containing required `base_saved_view_version` plus zero or more changed mutable fields only. Mutable fields are `display_name`, `query_json`, `layout_json`, and, when permitted by scope rules, `scope`. Omission of a mutable field means unchanged. `display_name`, `query_json`, and `layout_json` MUST be non-null when supplied, and `display_name` MUST satisfy `display_name_line_v1`. When `query_json` is supplied, the server MUST validate and normalize it using the same sort, filter, and grouping rules as `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`; within `query_json`, omission of `sort` MUST normalize to `sort=[]`, and explicit `group_by=null` is invalid. No top-level request members other than `base_saved_view_version` and those mutable fields are allowed. It MUST reject attempted mutation of `incident_id`, `saved_view_id`, or `view_schema_id`. Unknown or forbidden top-level members MUST fail with `400` and `error.code = invalid_mutation_payload`. If the current saved-view version differs from `base_saved_view_version`, the server MUST reject the patch with an explicit conflict status rather than silently overwriting saved-view state. If the request is structurally valid but makes no material change after request-time normalization, including `display_name_line_v1` normalization, the server MUST return `200 OK` with the current saved-view resource and MUST NOT change `saved_view_version` or `updated_at`. Any materially changed successful in-place mutation MUST advance `saved_view_version` and `updated_at` exactly once.
 Profiles: base
-Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
+Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231, AC-360
 
 **REQ-01-147**
 `DELETE /api/v1/incidents/{incident_id}/saved-views/{saved_view_id}` MUST delete only the saved-view configuration object and MUST return the common success envelope with `data.saved_view_id` and `data.deleted=true`.
@@ -1181,7 +1303,7 @@ Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
 **REQ-01-149**
-Both workbook-preference resources MUST use the stable `sheet_ref` union defined in §3.3.10.1.
+Both workbook-preference resources MUST use the stable `sheet_ref` union defined in §3.3.10.1. When the target is the required base `comm_log`, `handoff`, `status_review`, or `lesson` surface itself, the stored `sheet_ref` MUST use the `view_schema` form with the standardized `view_schema_id`; the `saved_view` form remains valid only for a distinct saved-view object over one of those schemas.
 Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
@@ -1455,7 +1577,7 @@ Profiles: base
 Verified by: AC-023, AC-186, AC-187, AC-209, AC-231
 
 **REQ-01-190**
-The server MAY acquire short-lived internal destructive-operation locks on both records while applying the merge. If such locks are used, they MUST be acquired in canonical `record_id` order and MUST NOT require a separate client-visible lock-acquire route. If either required lock is already held, the route MUST fail with `409`, `error.code = record_locked`, and `error.retryable = true`.
+`POST /api/v1/records/{survivor_record_id}/merge` MUST participate in the base-profile destructive-operation concurrency contract defined by REQ-01-104. The merge-specific protected set described there MUST be acquired before row-version or merge-precondition evaluation proceeds.
 Profiles: base
 Verified by: AC-023, AC-186, AC-187, AC-209, AC-231
 
@@ -1816,7 +1938,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 **REQ-01-234**
 The public API surface defined by this core MUST use the following stable `error.code` tokens for the listed conditions. A route or conformance criterion covered by this registry MUST NOT assign a second stable token to the same condition.
 Profiles: base
-Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231, AC-239, AC-240, AC-245, AC-246, AC-247, AC-249, AC-250, AC-251, AC-252, AC-253, AC-254, AC-255, AC-260, AC-261, AC-293
+Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231, AC-239, AC-240, AC-245, AC-246, AC-247, AC-249, AC-250, AC-251, AC-252, AC-253, AC-254, AC-255, AC-260, AC-261, AC-293, AC-321, AC-323, AC-324, AC-325, AC-326, AC-328, AC-340, AC-341, AC-342, AC-334, AC-335, AC-336, AC-337, AC-338, AC-339
 
 | `error.code` | Required `error.status` | Required `error.retryable` | Canonical meaning | Requirement ID | Profiles | Verified by |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1825,19 +1947,24 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `invalid_mutation_payload` | `400` | `false` | A mutation request body is malformed, omits a route-required member, includes an unknown or forbidden member, uses an unknown `kind`, `op`, or `action`, targets a field/action or mention-action combination that is not allowed, or carries an invalid, foreign, or type-incompatible mutation target reference. |  |  |  |
 | `invalid_evidence_handle_request` | `400` | `false` | A preview-handle or download-handle issuance request is malformed, uses a non-object JSON body, omits the required JSON object wrapper, or includes an unknown top-level member. |  |  |  |
 | `invalid_blob_create_request` | `400` | `false` | A blob-slot create request is malformed, omits required members, violates create-time field validation, attempts to set server-managed state, or includes an unknown top-level member. |  |  |  |
+| `blob_create_rejected` | `413` | `false` | A blob-slot create request is structurally valid but exceeds the configured declared-size ceiling for `POST /api/v1/object-blobs`. `error.details.reason_code` MUST use the `blob_create_rejected` registry in §3.3.6.2. |  |  |  |
 | `invalid_incident_create` | `400` | `false` | An incident-create request is malformed, omits required members, includes an unknown top-level member, violates create-time field validation, attempts to set server-managed state, or includes a rejected collaborator-seeding payload. |  |  |  |
 | `invalid_incident_patch` | `400` | `false` | An incident-metadata patch request is malformed, omits required `base_incident_version`, attempts to mutate an immutable or server-managed incident field, or includes unknown top-level members. |  |  |  |
 | `invalid_rollback_request` | `400` | `false` | A rollback request is malformed, uses an unknown or unsupported `target.kind`, omits the selector required for that `kind`, includes unknown request members, or supplies a selector whose JSON type does not match the declared shape. |  |  |  |
 | `invalid_auth_request` | `400` | `false` | A local-account login request is malformed, omits a required member, includes an unknown or forbidden member, supplies `null` where forbidden, uses an unsupported `second_factor.kind`, or carries an invalid TOTP assertion shape. |  |  |  |
 | `invalid_enterprise_auth_request` | `400` | `false` | An enterprise-auth discovery or initiation request is malformed, omits a required member, includes an unknown or forbidden member, supplies `null` where forbidden, or uses a `return_to` value not allowed by the current profile. |  |  |  |
-| `auth_provider_not_found` | `404` | `false` | The addressed enterprise-auth `provider_key` does not identify a visible configured provider. |  |  |  |
+| `auth_provider_not_found` | `404` | `false` | The addressed enterprise-auth `provider_key` does not identify a configured enterprise-auth provider allowed by the active route. |  |  |  |
 | `auth_provider_disabled` | `409` | `false` | The addressed enterprise-auth provider exists but is not currently enabled for interactive sign-in. |  |  |  |
 | `enterprise_auth_transaction_rejected` | `409` | `false` | The current enterprise-auth callback or ACS request cannot use the bound server-side auth transaction because the transaction is missing, expired, already consumed, bound to a different provider, or no longer matches the browser binding context. `error.details.reason_code` MUST use the `enterprise_auth_transaction_rejected` registry in §3.3.6.2. |  |  |  |
 | `provider_response_rejected` | `409` | `false` | The enterprise-auth provider response failed protocol validation or did not satisfy the bound callback contract. `error.details.reason_code` MUST use the `provider_response_rejected` registry in §3.3.6.2. |  |  |  |
 | `provider_identity_rejected` | `409` | `false` | The enterprise-auth provider response completed far enough to identify or attempt to identify one provider-backed subject, but the current profile could not bind that subject to exactly one active local user. `error.details.reason_code` MUST use the `provider_identity_rejected` registry in §3.3.6.2. |  |  |  |
 | `invalid_credentials` | `401` | `false` | The server is not willing to acknowledge that primary credentials were valid on the local-account login route, including for unknown login identifier, wrong password, inactive local account, or equivalent pre-MFA failure. |  |  |  |
 | `mfa_required` | `401` | `false` | Primary credentials are valid for a local account that requires MFA, but the login request omitted the required second-factor assertion. On the base local-account login route, `error.details.required_second_factor_kinds` lists the accepted kinds. |  |  |  |
+| `mfa_setup_required` | `401` | `false` | Primary credentials are valid for a local account with `mfa_required=true`, but no active TOTP credential is currently enrolled. The response MUST set no session cookie, MUST include `error.details.required_setup_kinds=["totp"]`, and MUST include one `bootstrap_token` plus `bootstrap_expires_at`. |  |  |  |
+| `credential_bootstrap_rejected` | `409` | `false` | The supplied credential-setup bootstrap token cannot be used because it is expired, consumed, superseded, bound to a different subject, or used on a route outside its allowed family. `error.details.reason_code` MUST use the `credential_bootstrap_rejected` registry in §3.3.6.2. |  |  |  |
+| `invalid_current_password` | `409` | `false` | A credential-lifecycle route that requires re-verification of the caller's current password received a structurally valid value that does not match the current stored local password. |  |  |  |
 | `invalid_second_factor` | `401` | `false` | Primary credentials are valid and the local-account login request supplied a structurally valid second-factor assertion, but the asserted factor is wrong or expired. |  |  |  |
+| `totp_setup_not_pending` | `409` | `false` | A TOTP-completion request referenced no pending enrollment, or the referenced pending enrollment is expired or already consumed. `error.details.reason_code` MUST use the `totp_setup_not_pending` registry in §3.3.6.2. |  |  |  |
 | `client_txn_conflict` | `409` | `false` | The caller reused a `client_txn_id` within the same route-defined idempotency scope for a different normalized request. |  |  |  |
 | `job_cancel_rejected` | `409` | `false` | A visible job exists, but the server will not accept cancellation because cancellation is already requested, the job is already terminal, or the current non-terminal phase is not cancelable; `error.details.reason_code` MUST use the `job_cancel_rejected` registry in §3.3.6.2. |  |  |  |
 | `row_version_conflict` | `409` | `false` | The supplied `base_row_version` or `base_mention_row_version` is stale relative to authoritative current state. For restore, this includes a stale tombstone `row_version`. |  |  |  |
@@ -1848,8 +1975,8 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `record_deleted_use_restore` | `409` | `false` | The caller targeted a currently soft-deleted record with an operation that requires the record to be restored first. |  |  |  |
 | `record_already_deleted` | `409` | `false` | The caller attempted to soft-delete an already soft-deleted record outside an idempotent replay of the original delete. |  |  |  |
 | `record_not_deleted` | `409` | `false` | The caller attempted to restore a record that is not currently soft-deleted. |  |  |  |
-| `record_locked` | `409` | `true` | A short-lived destructive-operation lock prevents the requested restore, rollback, or merge from proceeding at this time. |  |  |  |
-| `evidence_access_unavailable` | `409` | `false` | Preview or download cannot currently proceed because the visible evidence or linked blob is unavailable, pending, failed, missing, quarantined, inconsistent, or not previewable for the requested preview contract. |  |  |  |
+| `record_locked` | `409` | `true` | An overlapping in-flight destructive operation already holds one or more required protected-set locks for the requested restore, rollback, or merge. |  |  |  |
+| `evidence_access_unavailable` | `409` | `false` | Preview or download cannot currently proceed because the visible evidence or linked blob is unavailable, pending, failed, missing, quarantined, inconsistent, or not previewable for the requested preview contract or preview-size ceiling. |  |  |  |
 | `entity_mention_not_found` | `404` | `false` | An entity-mention action route targeted no visible current entity-mention row for the supplied `entity_mention_id`. |  |  |  |
 | `resolved_record_not_found` | `404` | `false` | A mention-resolve request supplied `resolved_record_id` that does not identify a visible active target record. |  |  |  |
 | `rollback_target_not_found` | `404` | `false` | A rollback request targeted no visible history item, `change_set_id`, or row revision that is legal for the addressed `record_id`. |  |  |  |
@@ -1860,6 +1987,8 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `handle_consumed` | `410` | `false` | A single-use handle was already consumed by a prior successful redeem and cannot be redeemed again. |  |  |  |
 | `rollback_precondition_failed` | `409` | `false` | A rollback target exists but cannot be safely reversed against current authoritative state; `error.details.reason_code` MUST use the rollback-precondition registry in §3.3.6.2. | REQ-01-236 | base | AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231 |
 | `user_version_conflict` | `409` | `false` | The supplied `base_user_version` is stale. |  |  |  |
+| `auth_binding_conflict` | `409` | `false` | A create, rotate, or retire request against an enterprise-auth binding cannot commit because current active binding state conflicts. `error.details.reason_code` MUST use the `auth_binding_conflict` registry in §3.3.6.2. |  |  |  |
+| `auth_binding_not_found` | `404` | `false` | A binding-management route targeted no current enterprise-auth binding for the supplied `{user_id, auth_binding_id}` pair. |  |  |  |
 | `last_deployment_admin` | `409` | `false` | The requested user mutation would leave the deployment with no active `is_deployment_admin=true` user. |  |  |  |
 | `user_not_found` | `404` | `false` | A membership-create request referenced a user that does not exist in deployment-local identity state. |  |  |  |
 | `user_inactive` | `409` | `false` | A membership-create request referenced a deployment-local user whose `is_active=false`. |  |  |  |
@@ -1869,11 +1998,12 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `last_incident_admin` | `409` | `false` | The requested membership create, patch, or delete would leave the incident without any current `admin` membership. |  |  |  |
 | `merge_precondition_failed` | `409` | `false` | An entity-merge precondition other than row-version freshness failed; `error.details.reason_code` MUST use the merge-precondition registry in §3.3.6.2. | REQ-01-237 | base | AC-126, AC-187, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231 |
 
-| `invalid_import_request` | `400` | `false` | An import-session create, mapping, or apply request is malformed, omits a required member, uses `null` where forbidden, supplies an out-of-range row reference, or includes an unknown top-level member. |  |  |  |
+| `invalid_import_request` | `400` | `false` | An import-session create, mapping, select, skip, or apply request is malformed, omits a required member, uses `null` where forbidden, supplies an out-of-range row reference, or includes an unknown top-level member. |  |  |  |
 | `import_session_not_found` | `404` | `false` | No visible current import session exists for the supplied `import_session_id`. |  |  |  |
 | `import_unit_not_found` | `404` | `false` | No visible current import unit exists for the supplied `import_unit_id` within the addressed import session. |  |  |  |
-| `import_state_conflict` | `409` | `false` | The addressed import session or unit exists, but its current durable state does not allow the requested mapping or apply action. |  |  |  |
+| `import_state_conflict` | `409` | `false` | The addressed import session or unit exists, but its current durable state does not allow the requested mapping, select, skip, or apply action. |  |  |  |
 | `import_source_unsupported` | `409` | `false` | The uploaded source file or selected import unit is intentionally unsupported by the current import profile or lacks required inert source material for a mapped apply path. `error.details.reason_code` MUST use the `import_source_unsupported` registry in §3.3.6.2. |  |  |  |
+| `import_source_rejected` | `413` | `false` | The uploaded source file or selected import unit is structurally valid but exceeds one or more configured source-byte, workbook-shape, extracted-bytes, compression-ratio, or member-count limits. `error.details.reason_code` MUST use the `import_source_rejected` registry in §3.3.6.2. |  |  |  |
 | `import_apply_blocked` | `409` | `false` | The import apply request is structurally valid but blocked by duplicate-apply detection, overlapping selected units, or units that are not ready. `error.details.reason_code` MUST use the `import_apply_blocked` registry in §3.3.6.2. |  |  |  |
 | `invalid_snapshot_request` | `400` | `false` | A snapshot-create request is malformed, omits a required member, uses `null` where forbidden, or includes an unknown top-level member. |  |  |  |
 | `snapshot_not_found` | `404` | `false` | No visible snapshot exists for the supplied `snapshot_id`. |  |  |  |
@@ -1897,7 +2027,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 **REQ-01-238**
 When the public API or collaboration stream uses a structured `reason_code` family listed below, it MUST use one of the exact tokens shown. A listed `reason_code` family MUST NOT define alternate tokens for the same meaning elsewhere in the core.
 Profiles: base
-Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231, AC-239, AC-240, AC-252, AC-255, AC-260, AC-293
+Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231, AC-239, AC-240, AC-252, AC-255, AC-260, AC-293, AC-321, AC-322, AC-323, AC-324, AC-325, AC-326, AC-327, AC-328, AC-341, AC-336, AC-337, AC-339
 
 `invalid_incident_create` `error.details.reason_code` values:
 
@@ -1925,6 +2055,12 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `invalid_sha256_hex` | `sha256_hex`, when present as a string, is not exactly 64 lowercase hexadecimal characters. |
 | `unknown_field` | The request includes a top-level member not declared by the blob-create contract. |
 | `server_managed_field` | The request attempted to set server-managed blob-slot state such as identifiers, lifecycle fields, accepted-contract echo fields, or upload-target fields. |
+
+`blob_create_rejected` `error.details.reason_code` values:
+
+| `reason_code` | Canonical meaning |
+| --- | --- |
+| `byte_size_exceeds_limit` | The declared `byte_size` exceeds `limits.object_blobs.max_declared_byte_size` for the current deployment. |
 
 
 `invalid_enterprise_auth_request` `error.details.reason_code` values:
@@ -1969,6 +2105,14 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `ambiguous_link` | More than one active local user mapping would satisfy the derived provider-backed identity. |
 | `inactive_user` | The derived provider-backed identity maps to a local user whose account is inactive. |
 
+`auth_binding_conflict` `error.details.reason_code` values:
+
+| `reason_code` | Canonical meaning |
+| --- | --- |
+| `provider_subject_in_use` | Another active binding already uses the requested `(provider_id, provider_subject)` tuple. |
+| `provider_already_linked_for_user` | The addressed user already has one active binding for the requested provider. |
+| `binding_not_active` | The addressed enterprise binding is retired and cannot be rotated or retired except by exact idempotent replay of the original success. |
+
 `invalid_view_query` `error.details.reason_code` values:
 
 | `reason_code` | Canonical meaning |
@@ -1977,6 +2121,11 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `operator_not_allowed` | `op` is not allowed for that field's declared filter class. |
 | `invalid_filter_operand` | `arg` is malformed, empty after normalization, contradictory, or otherwise invalid for the selected `op`. |
 | `duplicate_filter_field` | The request contains more than one normalized filter entry for the same `field_key`. |
+| `invalid_sort_entry` | A `sort[]` entry is not a JSON object with exactly `field_key` and `direction`, uses an invalid `direction`, or otherwise fails per-entry validation. |
+| `duplicate_sort_field` | The request contains more than one normalized `sort[]` entry for the same `field_key`. |
+| `sort_field_not_allowed` | `field_key` is not declared in the active `view_schema_id`'s `sort_fields`. |
+| `invalid_group_by` | `group_by` is malformed, uses `null`, or otherwise fails scalar validation. |
+| `group_by_not_allowed` | `group_by` is not one of the grouping keys declared by the active `view_schema_id`. |
 | `invalid_limit` | The request supplies `limit` with a non-integer JSON type, a value less than `1`, a value greater than `500`, or an unsupported page-size alias such as `page`, `offset`, `block_size`, or `page_size`. |
 | `cursor_query_mismatch` | The supplied `cursor_token` does not match the current normalized view-query contract, including the effective `limit`. |
 
@@ -1987,6 +2136,24 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `invalid_limit` | The request supplies `limit` with a non-integer JSON type, a value less than `1`, a value greater than `500`, or an unsupported pagination alias such as `page`, `offset`, `block_size`, or `page_size`. |
 | `cursor_query_mismatch` | The supplied `cursor_token` does not match the current normalized route contract, including any bound route-scoping identifier, normalized sort or filter or grouping contract when present, or the effective `limit`. |
 | `pagination_not_supported` | The addressed route is not declared pageable and therefore rejects `limit`, `cursor_token`, and pagination aliases. |
+
+`credential_bootstrap_rejected` `error.details.reason_code` values:
+
+| `reason_code` | Canonical meaning |
+| --- | --- |
+| `expired` | The bootstrap token exists but its expiry time has passed. |
+| `consumed` | The bootstrap token was already consumed by a prior successful TOTP-completion flow. |
+| `superseded` | A newer bootstrap token for the same user or a later administrative reset superseded the supplied token. |
+| `subject_mismatch` | The bootstrap token is bound to a different internal user than the route target or pending enrollment. |
+| `not_allowed_for_route` | The bootstrap token was presented to a route outside the allowed TOTP-setup family. |
+
+`totp_setup_not_pending` `error.details.reason_code` values:
+
+| `reason_code` | Canonical meaning |
+| --- | --- |
+| `not_found` | No current pending TOTP enrollment exists for the supplied `enrollment_id`. |
+| `expired` | The addressed pending TOTP enrollment exists but its expiry time has passed. |
+| `consumed` | The addressed pending TOTP enrollment was already completed successfully and cannot be completed again. |
 
 `merge_precondition_failed` `error.details.reason_code` values:
 
@@ -2019,6 +2186,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `evidence_quarantined` | The evidence lifecycle or linked blob state blocks ordinary preview and download. |
 | `evidence_inconsistent` | Evidence lifecycle state and linked blob state disagree in a way that intentionally fails closed until repaired. |
 | `unsupported_preview` | The evidence is otherwise visible and downloadable when available, but the base-profile safe preview contract does not allow the requested preview representation. |
+| `preview_payload_too_large` | The evidence is otherwise visible and downloadable when available, but the current payload exceeds the configured preview-size ceiling for the requested preview contract. |
 
 `/ws/v1/` `session_revoked.payload.reason_code` values:
 
@@ -2041,6 +2209,20 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `invalid_row_reference` | `header_row_ref` or `data_start_row_ref` is not a positive 1-based row coordinate within `source_rect_a1`. |
 | `invalid_selected_unit_ids` | `selected_unit_ids[]` is empty, contains duplicates, or references units outside the addressed session. |
 | `unsupported_assistant_profile` | `assistant_profile` is not `phase2_workbook_import_v1` in the current profile. |
+| `invalid_source_columns` | `source_columns[]` is missing, empty, not exhaustive over the discovered source columns, uses duplicate or non-contiguous ordinals, or otherwise violates the per-column mapping contract. |
+| `invalid_unknown_column_policy` | `unknown_column_policy` is outside the closed current-profile registry or is not legal for the addressed target view. |
+| `invalid_transform` | `transform_id` or `transform_options` is outside the closed current-profile mapping-transform contract. |
+| `invalid_empty_value_policy` | `empty_value_policy` is outside the closed current-profile registry or is not legal for the addressed target field. |
+| `duplicate_target_field` | More than one mapped source column targets the same non-null `field_key`. |
+
+`import_state_conflict` `error.details.reason_code` values:
+
+| `reason_code` | Canonical meaning |
+| --- | --- |
+| `session_applying` | The addressed import session is already applying and therefore rejects the requested control-plane action. |
+| `session_terminal` | The addressed import session is already in a terminal durable state and therefore rejects the requested control-plane action. |
+| `unit_applying` | The addressed import unit is already applying and therefore rejects the requested control-plane action. |
+| `unit_terminal` | The addressed import unit is already in a terminal durable state and therefore rejects the requested control-plane action. |
 
 `import_source_unsupported` `error.details.reason_code` values:
 
@@ -2049,6 +2231,19 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `encrypted_or_unparseable_workbook` | The uploaded workbook cannot be parsed by the current profile. |
 | `unsupported_named_range` | The addressed named range is dynamic, multi-area, or otherwise unsupported by the current profile. |
 | `formula_cached_value_missing` | A mapped formula cell lacks an inert cached value and therefore cannot enter `ready`. |
+
+`import_source_rejected` `error.details.reason_code` values:
+
+| `reason_code` | Canonical meaning |
+| --- | --- |
+| `csv_source_too_large` | The uploaded CSV source bytes exceed `limits.imports.max_csv_source_bytes`. |
+| `xlsx_source_too_large` | The uploaded XLSX source bytes exceed `limits.imports.max_xlsx_source_bytes`. |
+| `import_rows_exceeded` | The parsed selected unit exceeds `limits.imports.max_rows`. |
+| `import_columns_exceeded` | The parsed selected unit exceeds `limits.imports.max_columns`. |
+| `import_cells_exceeded` | The parsed selected unit exceeds `limits.imports.max_cells`. |
+| `archive_extracted_bytes_exceeded` | The extracted regular-file byte total exceeds the applicable extracted-bytes ceiling. |
+| `archive_compression_ratio_exceeded` | The extracted regular-file byte total exceeds `compressed_bytes * limits.archives.max_compression_ratio`. |
+| `archive_member_count_exceeded` | The extracted regular-file member count exceeds `limits.archives.max_members`. |
 
 `import_apply_blocked` `error.details.reason_code` values:
 
@@ -2123,6 +2318,9 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `path_traversal` | One or more archive members attempt to escape the staging root. |
 | `disallowed_content` | The bundle contains active or otherwise disallowed content. |
 | `payload_missing` | Required pack payload content is missing at verification time. |
+| `archive_extracted_bytes_exceeded` | The extracted regular-file byte total exceeds `limits.reference_packs.max_extracted_bytes`. |
+| `archive_compression_ratio_exceeded` | The extracted regular-file byte total exceeds `compressed_bytes * limits.archives.max_compression_ratio`. |
+| `archive_member_count_exceeded` | The extracted regular-file member count exceeds `limits.archives.max_members`. |
 
 `reference_pack_activation_rejected` `error.details.reason_code` values:
 
@@ -2169,6 +2367,9 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `duplicate_incident_id` | The target deployment already contains the exported `incident_id`. |
 | `unsupported_required_capability` | The bundle requires a capability the target deployment does not implement. |
 | `remote_fetch_required` | Import would require a remote fetch, which the current profile forbids. |
+| `archive_extracted_bytes_exceeded` | The extracted regular-file byte total exceeds `limits.incident_bundles.max_extracted_bytes`. |
+| `archive_compression_ratio_exceeded` | The extracted regular-file byte total exceeds `compressed_bytes * limits.archives.max_compression_ratio`. |
+| `archive_member_count_exceeded` | The extracted regular-file member count exceeds `limits.archives.max_members`. |
 
 #### 3.3.7 Pagination and cursor contract
 
@@ -2178,7 +2379,7 @@ Profiles: base
 Verified by: AC-116, AC-127, AC-151, AC-171, AC-175, AC-178, AC-215, AC-231, AC-238, AC-239, AC-240
 
 **REQ-01-241**
-A `cursor_token` MUST be bound to the authenticated actor, route family, every route-scoping identifier present for that route, the normalized sort or filter or grouping contract when the route defines one, and the effective `limit`. This includes binding history cursors to `record_id`, membership and saved-view cursors to `incident_id`, and workbook-query cursors to `incident_id`, `view_schema_id`, and the normalized view-query contract. The server MUST reject a cursor that is replayed against a different bound route contract, including a different effective `limit`, rather than reinterpret it.
+A `cursor_token` MUST be bound to the authenticated actor, route family, every route-scoping identifier present for that route, the normalized effective `sort[]`, the normalized `filters[]`, the optional normalized `group_by`, and the effective `limit` when the route defines a view-query contract. This includes binding history cursors to `record_id`, membership and saved-view cursors to `incident_id`, and workbook-query cursors to `incident_id`, `view_schema_id`, and the normalized applied view-query contract. The server MUST reject a cursor that is replayed against a different bound route contract, including a different effective `limit`, rather than reinterpret it.
 Profiles: base
 Verified by: AC-116, AC-127, AC-151, AC-171, AC-175, AC-178, AC-215, AC-231, AC-239
 
@@ -2190,9 +2391,9 @@ Verified by: AC-116, AC-127, AC-151, AC-171, AC-175, AC-178, AC-215, AC-231, AC-
 #### 3.3.8 Evidence and blob routes
 
 **REQ-01-243**
-`POST /api/v1/object-blobs` MUST accept only a JSON object request body and MUST provision exactly one incident-scoped pending blob slot for one intended upload. The request MUST accept required `incident_id`, required `client_txn_id`, and required `byte_size`. It MAY accept optional `filename_hint`, optional `content_type_hint`, and optional `sha256_hex`; each optional member MAY be omitted or set to JSON `null`. `byte_size` MUST be a non-negative integer. This route MUST create only the blob slot; it MUST NOT create or mutate evidence records, record links, preview state, release state, or workflow objects. The route MUST reject row identifiers, evidence identifiers, preview intents, release intents, workflow objects, unknown top-level members, and server-managed blob fields. If the body is not a JSON object, omits a required member, supplies `null` for a non-nullable member, violates a field validation rule in this subsection, or attempts to set server-managed state, the server MUST fail with `400` and `error.code = invalid_blob_create_request`. When the failure is attributable to one request member, `error.details.field` MUST identify that top-level member. `error.details.reason_code` MUST use the registry in §3.3.6.2.
+`POST /api/v1/object-blobs` MUST accept only a JSON object request body and MUST provision exactly one incident-scoped pending blob slot for one intended upload. The request MUST accept required `incident_id`, required `client_txn_id`, and required `byte_size`. It MAY accept optional `filename_hint`, optional `content_type_hint`, and optional `sha256_hex`; each optional member MAY be omitted or set to JSON `null`. `byte_size` MUST be an integer in `0..limits.object_blobs.max_declared_byte_size`, inclusive. This route MUST create only the blob slot; it MUST NOT create or mutate evidence records, record links, preview state, release state, or workflow objects. The route MUST reject row identifiers, evidence identifiers, preview intents, release intents, workflow objects, unknown top-level members, and server-managed blob fields. If the body is not a JSON object, omits a required member, supplies `null` for a non-nullable member, violates a field validation rule in this subsection, or attempts to set server-managed state, the server MUST fail with `400` and `error.code = invalid_blob_create_request`. When `byte_size` exceeds `limits.object_blobs.max_declared_byte_size`, the server MUST fail before slot creation with `413`, `error.code = blob_create_rejected`, `error.details.reason_code = byte_size_exceeds_limit`, `error.details.requested_byte_size`, and `error.details.configured_limit_bytes`. That rejection path MUST create no `object_blob_id`, no `upload_target`, and no pending blob-slot state. When the failure is attributable to one request member, `error.details.field` MUST identify that top-level member. `error.details.reason_code` MUST use the registry in §3.3.6.2.
 Profiles: base
-Verified by: AC-015, AC-016, AC-102, AC-103, AC-128, AC-154, AC-155, AC-231
+Verified by: AC-015, AC-016, AC-102, AC-103, AC-128, AC-154, AC-155, AC-231, AC-321
 
 **REQ-01-244**
 For idempotency comparison and response echo, the server MUST normalize the blob-create contract as follows:
@@ -2209,7 +2410,7 @@ Profiles: base
 Verified by: AC-015, AC-016, AC-102, AC-103, AC-128, AC-154, AC-155, AC-231
 
 **REQ-01-245**
-Blob-slot creation idempotency MUST be keyed by `(actor_user_id, incident_id, client_txn_id)`. Normalized request comparison for this route MUST include `byte_size`, normalized `filename_hint`, normalized `content_type_hint`, and normalized `sha256_hex`, with omission and explicit JSON `null` treated as equal for the optional members. A first-time successful create MUST return `201 Created`. If the same authenticated actor replays the same normalized request with the same key, the server MUST return `200 OK` with the original slot payload, including the original `object_blob_id`, `target_expires_at`, `pending_expires_at`, and `accepted_contract`, and MUST create no second pending slot. If the same actor reuses that key with a different normalized request, the server MUST fail with `409` and `error.code = client_txn_conflict`. `error.details` MUST include at least `client_txn_id`. Blob finalization MUST occur only through an explicit follow-on call. Binding an uploaded blob to incident-visible evidence MUST either:
+Blob-slot creation idempotency MUST be keyed by `(actor_user_id, incident_id, client_txn_id)`. Normalized request comparison for this route MUST include `byte_size`, normalized `filename_hint`, normalized `content_type_hint`, and normalized `sha256_hex`, with omission and explicit JSON `null` treated as equal for the optional members. A first-time successful create MUST return `201 Created`. If the same authenticated actor replays the same normalized request with the same key, the server MUST return `200 OK` with the original slot payload, including the original `object_blob_id`, `target_expires_at`, `pending_expires_at`, and `accepted_contract`, and MUST create no second pending slot. If the same actor reuses that key with a different normalized request, the server MUST fail with `409` and `error.code = client_txn_conflict`. `error.details` MUST include at least `client_txn_id`. A request rejected under REQ-01-243 because `byte_size` exceeds the configured ceiling MUST create no pending slot and MUST NOT replay as a successful slot response. Blob finalization MUST occur only through an explicit follow-on call. Binding an uploaded blob to incident-visible evidence MUST either:
 
 - attach the returned `object_blob_id` to an existing evidence record through `POST /api/v1/evidence-records/{record_id}/attach-blob`, or
 - create a new evidence record through the normal view or record-creation path using that `object_blob_id` as declared input.
@@ -2220,7 +2421,7 @@ Attach idempotency for this route MUST be keyed by `(actor_user_id, record_id, c
 
 Fresh attach requests with a new `client_txn_id` MUST still enforce the blob and evidence lifecycle bridge owned by Core 02 §13 and Core 03 §8. A pending, failed, missing, incident-mismatched, or otherwise non-attachable blob MUST fail closed rather than partially mutating evidence state. A successful attach response MUST use the common success envelope and return the authoritative evidence-refresh payload needed to repaint the visible row, including at minimum `record_id`, `incident_id`, `row_version`, `object_blob_id`, `evidence_lifecycle_state`, `upload_state`, and `change_set_id`.
 Profiles: base
-Verified by: AC-015, AC-016, AC-102, AC-103, AC-128, AC-154, AC-155, AC-231
+Verified by: AC-015, AC-016, AC-102, AC-103, AC-128, AC-154, AC-155, AC-231, AC-321
 
 **REQ-01-246**
 In the base profile, the upload target MUST expire 60 minutes after issuance and the pending blob slot MUST expire 24 hours after blob-slot creation. These timers MUST remain separate: target expiry governs upload-target use, while pending-slot expiry governs later finalization eligibility and cleanup. The base profile MUST treat a pending blob slot as a single-upload lease bound to one accepted create contract. If the upload target expires before successful upload, or if idempotent replay returns an already expired slot, obtaining a fresh target MUST use a fresh `POST /api/v1/object-blobs` call with a new `client_txn_id`. Idempotent replay of an expired slot MUST return that same expired slot rather than refreshing the original target. The base profile MUST NOT require same-slot upload-target refresh, same-slot lease renewal, or resumable upload semantics.
@@ -2259,8 +2460,13 @@ For REQ-01-248 and REQ-01-249, the canonical public job contract is:
 - `cancelable` is required. It MUST be `false` in `cancel_requested`, `succeeded`, `failed`, and `canceled`. It MAY be `false` in `queued` or `running` when the current non-terminal phase does not accept cancellation.
 - `submitted_at` and `updated_at` are required timestamps. `started_at` MUST be `null` until work begins. `finished_at` MUST be `null` until the job reaches a terminal state. `retained_until` MUST be `null` until the job reaches a terminal state.
 - `progress` MUST be an object of the form `{ completed, total }`, never a bare percentage. `completed` MUST be a non-negative integer and MUST be monotonically non-decreasing for one job resource. `total` MUST be either `null` or a positive integer. Once `total` becomes non-null, it MUST NOT decrease and MUST NOT change unit semantics. When `total` is non-null, `completed` MUST be less than or equal to `total`. On `succeeded`, if `total` is non-null, `completed` MUST equal `total`. Clients MAY derive `floor(100 * completed / total)` when `total` is non-null, but percent is not part of the wire contract and clients MUST render indeterminate progress when `total = null`.
-- `result_summary` and `error_summary` are mutually exclusive. On non-terminal states, both MUST be `null`. On `succeeded` and `canceled`, `result_summary` is required and `error_summary` MUST be `null`. On `failed`, `error_summary` is required and `result_summary` MUST be `null`.
-- `result_summary` MUST be compact and generic: `{ code, message, resource_refs? }`, where `resource_refs[]` is an optional array of `{ kind, id, route? }`. `error_summary` MUST be compact and generic: `{ code, message, retryable, details? }`, where `details` is an optional JSON object. The common job resource MUST NOT carry job-family-specific deep result payloads.
+- `result_summary` and `error_summary` are mutually exclusive. On non-terminal states, both MUST be `null`. On `succeeded` and `canceled`, `result_summary` is required and `error_summary` MUST be `null`. On `failed`, `error_summary` is required and `result_summary` MUST be `null`. When `status = canceled`, `result_summary.code` MUST be exactly `job_canceled`.
+- `result_summary` MUST be compact and generic: `{ code, message, resource_refs? }`. `result_summary.code` is registry-backed, not opaque. When `status = succeeded`, `result_summary.code` MUST use one of the stable success codes declared by the initiating route family in this document; in the current profile, those success-code registries are defined in §17. `result_summary.message` remains operator-visible text only, and clients MUST NOT branch protocol behavior on its contents.
+- `resource_refs[]` is a compact, non-exhaustive navigation summary of durable outputs or newly relevant durable resources, not a deep result payload. The current-profile closed `resource_refs[].kind` vocabulary is exactly `incident`, `import_session`, `snapshot`, `release`, `reference_pack_version`, and `incident_bundle`. Current-profile emissions MUST NOT use `job`, `blob`, `preview_handle`, `download_handle`, `saved_view`, `view_schema`, or free-form family-defined kinds.
+- `resource_refs[].route` is the canonical same-origin `GET` path for the referenced durable resource. It MUST begin with `/api/v1/`, MUST use the canonical public read route for that durable resource, and MUST NOT include a query string or fragment. It MUST NOT be a UI-local route, a presigned URL, a preview handle, a download handle, or the job-status route. Clients MAY dereference `route` or resolve the target by `kind` and `id`, but they MUST treat `route` as opaque.
+- For `incident`, `import_session`, `snapshot`, `release`, and `incident_bundle`, `resource_refs[].id` MUST equal the existing public identifier for that resource kind. For `reference_pack_version`, `route` is required and `id` MUST equal the exact canonical `route` string.
+- Although `route` remains optional in the abstract job shell for forward compatibility, every current-profile `resource_ref` emitted by the route families in §17 MUST include `route`. If more than one current-profile ref is emitted, ordering MUST be deterministic. For `reference_packs_refreshed`, emitted refs MUST sort by `route asc`. Clients MUST ignore unknown future `kind` values rather than fail job rendering, even though current-profile servers are closed to the allowlist above.
+- `error_summary` MUST be compact and generic: `{ code, message, retryable, details? }`, where `details` is an optional JSON object. The common job resource MUST NOT carry job-family-specific deep result payloads.
 - `POST /api/v1/jobs/{job_id}/cancel` MUST require a JSON object containing required `client_txn_id` and optional `reason`. For idempotency comparison, omitted `reason` and explicit JSON `null` for `reason` compare equal. A cancel request body that is not a JSON object, omits required `client_txn_id`, or includes unknown top-level members MUST fail with `400` and `error.code = invalid_mutation_payload`.
 - Cancel idempotency is keyed by `(actor_user_id, job_id, client_txn_id)`. If the same authenticated actor replays the same normalized cancel request with the same key, the server MUST return `200 OK` with the current authoritative job resource and MUST create no second cancel transition. If the same actor reuses that key with a different normalized cancel request, the server MUST fail with `409` and `error.code = client_txn_conflict`.
 - A newly accepted cancel request MUST set `cancelable = false` immediately and MUST transition the job through `cancel_requested` before any later `canceled`, `failed`, or `succeeded` terminal state is observed. A conformant server MAY return a terminal state on the successful cancel response when the cancel lost a race to an already committed safe-stop boundary, but it MUST NOT create a second public transition.
@@ -2385,7 +2591,7 @@ or
 ```
 
 **REQ-01-262**
-When `sheet_ref.kind = view_schema`, `sheet_ref.id` MUST carry the `view_schema_id`. When `sheet_ref.kind = saved_view`, `sheet_ref.id` MUST carry the `saved_view_id`. `field_key` MUST be present only when the client is focused on a concrete writable field and `mode = editing`.
+When `sheet_ref.kind = view_schema`, `sheet_ref.id` MUST carry the `view_schema_id`. When `sheet_ref.kind = saved_view`, `sheet_ref.id` MUST carry the `saved_view_id`. For the required base coordination surfaces `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`, `sheet_ref.kind = saved_view` always refers to a distinct saved-view object over that schema and MUST NOT be used as the canonical public identity of the required base surface itself. `field_key` MUST be present only when the client is focused on a concrete writable field and `mode = editing`.
 Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231
 
@@ -2572,16 +2778,17 @@ A `view_schema` contract MUST define, at minimum:
 - the stable `view_schema_id`,
 - source record types,
 - the base projection,
-- an ordered field registry containing one entry per visible or writable field, each with a stable `field_key`,
+- an ordered field registry containing one entry per visible or writable field, each with a stable `field_key` and, when needed, optional `header_sort_field_key`,
 - computed columns,
 - the required hidden technical fields `record_id` and `row_version`,
 - required reference packs, if any,
 - an ordered default sort tuple,
+- an explicit per-view `sort_fields` whitelist,
 - filter semantics and any allowed grouping keys,
 - per-field write-back semantics, including write target or write action, `conflict_resolution_class`, and `entity_binding_mode` where relevant,
 - metadata needed to render the view consistently.
 Profiles: base, reference_pack
-Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-124, AC-125, AC-231, AC-234
+Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-124, AC-125, AC-231, AC-234, AC-362
 
 **REQ-01-287**
 Default sort tuples MUST be deterministic and MUST include `record_id` as the final tiebreaker unless a later profile explicitly overrides that rule.
@@ -2653,8 +2860,6 @@ The Parties system view is an incident-scoped coordination-identity surface. It 
 Profiles: base
 Verified by: AC-078, AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-116, AC-121, AC-122, AC-231, AC-277
 
-Framework overlays such as ATT&CK, D3FEND, or VERIS MAY also be exposed as system views when the relevant reference packs are present.
-
 **REQ-01-297**
 System views MUST follow the same `view_schema_id` contract discipline as built-in sheets.
 Profiles: base
@@ -2681,7 +2886,7 @@ Profiles: base
 Verified by: AC-078, AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-121, AC-122, AC-231
 
 **REQ-01-302**
-Structured coordination artifacts such as `comm_log`, `handoff`, `status_review`, and `lesson` MUST be available as workbook-native surfaces in the base profile. An implementation MAY expose each such surface either as a contract-backed system view or as an implementation-owned `scope='system'` saved view bound to the standardized `view_schema_id` for that surface. These surfaces MUST remain artifact-backed and MUST NOT require additional built-in sheets in the base profile.
+Structured coordination artifacts `comm_log`, `handoff`, `status_review`, and `lesson` MUST be available as workbook-native base-profile surfaces. Their canonical public identity MUST be the standardized `view_schema_id` for that surface: `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`. An implementation MAY vary the internal realization of those surfaces, including use of implementation-owned helper state or a saved-view-shaped helper object, but any such helper is a distinct implementation detail or distinct saved-view resource and MUST NOT replace the canonical public identity of the required surface. These surfaces MUST remain artifact-backed and MUST NOT require additional built-in sheets in the base profile.
 Profiles: base
 Verified by: AC-078, AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-121, AC-122, AC-231, AC-281, AC-282, AC-283, AC-284
 
@@ -2697,7 +2902,7 @@ The built-in Notes sheet MUST:
 
 - be declared by a stable `view_schema_id`,
 - use `artifact_grid_projection` as its base projection filtered to `artifact_type='note'`,
-- support blank-row or equivalent grid-native note creation from the sheet itself,
+- support inline create from the sheet itself,
 - remain backed by the shared artifact model rather than a Notes-specific storage silo.
 Profiles: base
 Verified by: AC-068, AC-069, AC-070, AC-112, AC-185, AC-231
@@ -2735,7 +2940,7 @@ Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231, AC-281, AC-282, AC-283, AC-284
 
 **REQ-01-308**
-These fourteen entries are the contract-backed surfaces required by §7.1 and §7.2 plus the coordination-artifact closure in REQ-01-302. Additional `view_schema` entries MAY exist for saved views, optional reference-pack overlays, or later profiles, but they MUST NOT change the membership or semantics of the base-profile registry defined in this subsection. If the implementation exposes findings, investigative queries, or forensic keywords as workbook surfaces in the current profile, it MUST use these standardized `view_schema_id` values for those surfaces: `cartulary.view.findings.v1`, `cartulary.view.investigative_queries.v1`, and `cartulary.view.forensic_keywords.v1`.
+These fourteen entries are the contract-backed surfaces required by §7.1 and §7.2 plus the coordination-artifact closure in REQ-01-302. For `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`, the registry entry is the canonical public workbook-surface identity; a saved-view object over the same schema is additive and non-canonical. In the current profile, no reference-pack-dependent framework overlay surface is a standardized workbook surface unless this core explicitly defines its `view_schema_id` and exhaustive contract. Implementations MUST NOT expose ATT&CK, D3FEND, VERIS, or other framework-specific pack overlays as workbook-discoverable `view_schema` resources in the base profile or the current Reference Pack Extension Profile. The only additional current-profile standardized workbook `view_schema_id` values beyond the fourteen pack-independent registry entries are, when implemented, `cartulary.view.findings.v1`, `cartulary.view.investigative_queries.v1`, and `cartulary.view.forensic_keywords.v1`. Later profiles MAY define additional standardized workbook surfaces, but they MUST NOT change the membership or semantics of the base-profile registry defined in this subsection.
 Profiles: base, reference_pack
 Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231, AC-234, AC-285, AC-286, AC-287
 
@@ -2750,6 +2955,12 @@ Unless explicitly overridden below:
 - `required_reference_pack_keys` MUST be `[]`,
 - `record_id` and `row_version` MUST be present as hidden technical fields,
 - the ordered default sort tuple is normative and MUST end with `record_id asc`,
+- `sort_fields` MUST be an explicit whitelist of the stable `field_key` values that clients MAY use in `sort[]`; sortability MUST NOT be inferred from visibility, filterability, or writeability,
+- only keys listed in `sort_fields` are client-sortable; `record_id` remains the mandatory server tiebreak and MUST NOT appear in `sort_fields`,
+- hidden synthetic sort keys are allowed,
+- when a visible field entry omits `header_sort_field_key`, column-header sort uses that field's own `field_key`; when `header_sort_field_key` is present, it MUST point to a key declared in `sort_fields`,
+- current-profile sort comparison is type-driven and deterministic: timestamp and date fields sort chronologically, numeric fields sort numerically, boolean fields sort `false` then `true`, enum fields sort by their declared closed-vocabulary order, and text fields sort case-insensitively after the bound field contract's normalization,
+- user-specified sorts place `null` values last in both directions,
 - filter semantics MUST be type-driven unless a schema below explicitly overrides them: enum and boolean fields use exact-match inclusion, timestamp and date fields use exact or range predicates, scalar identifier text uses case-insensitive exact or prefix matching, multi-value collections use `contains_any` and `contains_all`, and declared full-text predicates use case-insensitive token search,
 - every writable field entry MUST declare `field_key`, read model, write target or write action, and `conflict_resolution_class`,
 - every entity-bearing writable field entry MUST declare `entity_binding_mode`,
@@ -2764,7 +2975,7 @@ Unless explicitly overridden below:
 - fields not declared writable are read-only,
 - per-user hide/show or reordering MAY change presentation but MUST NOT change field identity, filter semantics, or write-back semantics.
 Profiles: base, reference_pack
-Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231, AC-234, AC-281, AC-282, AC-283, AC-284, AC-285, AC-286, AC-287, AC-300, AC-301, AC-302, AC-303
+Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231, AC-234, AC-281, AC-282, AC-283, AC-284, AC-285, AC-286, AC-287, AC-300, AC-301, AC-302, AC-303, AC-362, AC-363, AC-365
 
 **REQ-01-311**
 Base-profile relationship mutations surfaced by these view contracts or their adjacent inspector or row-context actions MUST follow these routing rules:
@@ -2779,10 +2990,12 @@ Base-profile relationship mutations surfaced by these view contracts or their ad
   - contextual `add linked note` or equivalent artifact-association actions -> `references_artifact`, with the invoking record as `src_record_id` and the created or selected artifact record as `dst_record_id`,
   - `assessment.support_refs` -> `supported_by`, with the assessment record as `src_record_id` and the supporting record as `dst_record_id`,
   - `task.linked_record_ids` and the authoritative association represented by `task.decision_record_id` -> `references_record`, with the task-request record as `src_record_id` and the referenced record as `dst_record_id`,
+  - `comm_log.decision_ids`, `comm_log.action_task_ids`, `handoff.open_task_ids`, `handoff.open_decision_ids`, `status_review.blocked_task_ids`, `status_review.pending_evidence_ids`, `status_review.open_decision_ids`, `lesson.follow_up_task_ids`, and `lesson.evidence_refs` -> `references_record`, with the owning coordination artifact as `src_record_id` and the referenced record as `dst_record_id`,
   - `decision.support_refs` -> `supported_by`, with the decision record as `src_record_id` and the supporting record as `dst_record_id`,
+  - explicit Timeline supersede actions that commit `replacement_record_id` -> `supersedes`, with the replacement Timeline row as `src_record_id` and the superseded Timeline row as `dst_record_id`,
   - explicit decision supersession actions -> `supersedes`, with the superseding decision as `src_record_id` and the superseded decision as `dst_record_id`.
 Profiles: base
-Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231
+Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-196, AC-231, AC-281, AC-282, AC-283, AC-284, AC-331, AC-332
 
 #### 7.4.1 `cartulary.view.timeline.v1`
 
@@ -2791,24 +3004,26 @@ Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-
 - source record types: `timeline_event`
 - base projection: `timeline_grid_projection`
 - `default_visible_fields`: `timeline.occurred_at`, `timeline.summary`, `timeline.host_refs`, `timeline.identity_refs`, `timeline.evidence_count`, `timeline.tags`, `timeline.edited_at`
-- `default_hidden_fields`: `record_id`, `row_version`, `timeline.details`, `timeline.source_text`, `timeline.recorded_at`, `timeline.sort_ts`, `timeline.capture_state`, `timeline.occurred_day`, `timeline.recorded_day`, `timeline.has_evidence`, `timeline.has_unresolved_mentions`
+- `default_hidden_fields`: `record_id`, `row_version`, `timeline.details`, `timeline.source_text`, `timeline.recorded_at`, `timeline.sort_ts`, `timeline.capture_state`, `timeline.replacement_record_id`, `timeline.occurred_day`, `timeline.recorded_day`, `timeline.has_evidence`, `timeline.has_unresolved_mentions`
 - `default_sort`: `timeline.sort_ts asc`, `record_id asc`. `timeline.sort_ts` MUST equal `occurred_at` when present and `recorded_at` otherwise.
+- `sort_fields`: `timeline.sort_ts`, `timeline.summary`, `timeline.evidence_count`, `timeline.edited_at`, `timeline.capture_state`, `timeline.occurred_day`, `timeline.recorded_day`, `timeline.has_evidence`, `timeline.has_unresolved_mentions`
 - `filter_fields`: `timeline.occurred_day`, `timeline.recorded_day`, `timeline.capture_state`, `timeline.has_evidence`, `timeline.has_unresolved_mentions`, `timeline.tags`
 - `grouping_fields`: `timeline.occurred_day`, `timeline.recorded_day`, `timeline.capture_state`, `timeline.has_evidence`, `timeline.has_unresolved_mentions`
-- inline create: blank-row or equivalent grid-native creation MUST create a `timeline_event` record. This view explicitly permits zero-field row creation on `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` when the request body carries only `client_txn_id`, so screenshot-only or later rough-capture flows do not require structured fields at create time
+- inline create: inline create from the sheet itself MUST create a `timeline_event` record. This view explicitly permits zero-field row creation on `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` when the request body carries only `client_txn_id`, so screenshot-only or later rough-capture flows do not require structured fields at create time
 - writable fields:
-  - `timeline.occurred_at`: read `occurred_at`; write target `timeline_events.occurred_at`; `direct_scalar_contract_id=timestamp_instant_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
+  - `timeline.occurred_at`: read `occurred_at`; write target `timeline_events.occurred_at`; `header_sort_field_key=timeline.sort_ts`; `direct_scalar_contract_id=timestamp_instant_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
   - `timeline.summary`: read `summary`; write target `timeline_events.summary`; `conflict_resolution_class=text_compare_merge`
   - `timeline.details`: read `details`; write target `timeline_events.details`; `conflict_resolution_class=text_compare_merge`
   - `timeline.source_text`: read `source_text`; write target `timeline_events.source_text`; `conflict_resolution_class=text_compare_merge`
   - `timeline.host_refs`: read resolved host chips plus unresolved host mentions; write action insert, update, or dismiss `entity_mentions` and resolved host `record_links` under `entity_binding_mode=mention_origin`; `conflict_resolution_class=collection_review`
   - `timeline.identity_refs`: read resolved identity chips plus unresolved identity mentions; write action insert, update, or dismiss `entity_mentions` and resolved identity `record_links` under `entity_binding_mode=mention_origin`; `conflict_resolution_class=collection_review`
   - `timeline.tags`: read `tag_names`; write action upsert tags and `record_tags`; `conflict_resolution_class=collection_review`
-- read-only projection-backed or system-managed fields: `timeline.evidence_count`, `timeline.capture_state`, `timeline.edited_at`, `timeline.sort_ts`, `timeline.occurred_day`, `timeline.recorded_day`, `timeline.has_evidence`, `timeline.has_unresolved_mentions`
+- read-only projection-backed or system-managed fields: `timeline.evidence_count`, `timeline.capture_state`, `timeline.replacement_record_id`, `timeline.edited_at`, `timeline.sort_ts`, `timeline.occurred_day`, `timeline.recorded_day`, `timeline.has_evidence`, `timeline.has_unresolved_mentions`
 - `timeline.capture_state` is the system-managed persisted workflow state defined by Core 03 §6. Clients MUST NOT supply `timeline.capture_state` as an initial writable value in `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` or as a `changes[].field_key` in `PATCH /api/v1/records/{record_id}`. Any attempted direct client write to `timeline.capture_state` through create or patch MUST fail closed under §3.3.5 and §3.3.6 rather than being silently ignored. Transitions to `reviewed` and `superseded` MUST use the dedicated record-scoped action routes defined in §3.3.5, and automatic transitions to `enriched` MUST be applied server-side with the committed Timeline mutation that triggered them.
+- `timeline.replacement_record_id` MUST be `null` when no active incoming Timeline `supersedes` link exists for the row and otherwise MUST equal the unique replacement Timeline `record_id` derived from that active incoming link. It is hidden by default, read-only, and not part of the writable Timeline field set.
 - `timeline.has_unresolved_mentions` MUST be `true` if and only if at least one non-deleted `entity_mentions` row for the source record has `resolution_status='unresolved'`; resolved or dismissed mentions MUST NOT make it `true`.
 Profiles: base
-Verified by: AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-231, AC-300, AC-301, AC-303
+Verified by: AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-231, AC-300, AC-301, AC-303, AC-331, AC-332
 
 **REQ-01-313**
 Collection-review wire contract for `timeline.host_refs` and `timeline.identity_refs`:
@@ -2961,6 +3176,7 @@ Verified by: AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-
 - `default_visible_fields`: `host.display_name`, `host.hostname`, `host.aliases`, `host.host_state`, `host.linked_event_count`, `host.evidence_count`, `host.location`, `host.os_platform`, `host.business_owner`, `host.criticality`, `host.containment_status`, `host.edited_at`
 - `default_hidden_fields`: `record_id`, `row_version`
 - `default_sort`: `host.display_name asc`, `record_id asc`
+- `sort_fields`: `host.display_name`, `host.hostname`, `host.host_state`, `host.linked_event_count`, `host.evidence_count`, `host.location`, `host.os_platform`, `host.business_owner`, `host.criticality`, `host.containment_status`, `host.edited_at`
 - `filter_fields`: `host.host_state`, `host.business_owner`, `host.criticality`, `host.location`, `host.os_platform`, `host.containment_status`
 - inline create: direct row creation or paste on the Hosts sheet MUST create or upsert a `host` record using `entity_binding_mode=entity_origin`
 - create-or-upsert reuse on the Hosts sheet MUST apply the exact-match precedence in Core 02 §8.2. Suggestion-only candidates allowed by Core 02 §8.3 MUST NOT silently auto-merge or auto-resolve a host.
@@ -3021,6 +3237,7 @@ Verified by: AC-097, AC-118, AC-124, AC-125, AC-231
 - `default_visible_fields`: `identity.display_name`, `identity.upn`, `identity.email`, `identity.sam_account_name`, `identity.aliases`, `identity.identity_state`, `identity.linked_event_count`, `identity.evidence_count`, `identity.privilege_level`, `identity.mfa_state`, `identity.reset_status`, `identity.edited_at`
 - `default_hidden_fields`: `record_id`, `row_version`
 - `default_sort`: `identity.display_name asc`, `record_id asc`
+- `sort_fields`: `identity.display_name`, `identity.upn`, `identity.email`, `identity.sam_account_name`, `identity.identity_state`, `identity.linked_event_count`, `identity.evidence_count`, `identity.privilege_level`, `identity.mfa_state`, `identity.reset_status`, `identity.edited_at`
 - `filter_fields`: `identity.identity_state`, `identity.privilege_level`, `identity.mfa_state`, `identity.reset_status`
 - inline create: direct row creation or paste on the Identities sheet MUST create or upsert an `identity` record using `entity_binding_mode=entity_origin`
 - create-or-upsert reuse on the Identities sheet MUST apply the exact-match precedence in Core 02 §8.2. Suggestion-only candidates allowed by Core 02 §8.3 MUST NOT silently auto-merge or auto-resolve an identity.
@@ -3051,6 +3268,7 @@ Verified by: AC-098, AC-118, AC-124, AC-125, AC-231
 - `default_visible_fields`: `evidence.title`, `evidence.lifecycle_state`, `evidence.requested_at`, `evidence.received_at`, `evidence.storage_ref`, `evidence.blob_hash`, `evidence.collector_party_text`, `evidence.source_party_text`, `evidence.upload_state`, `evidence.linked_record_count`, `evidence.edited_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `evidence.collector_party_id`, `evidence.source_party_id`
 - `default_sort`: `evidence.requested_at desc`, `record_id asc`
+- `sort_fields`: `evidence.title`, `evidence.lifecycle_state`, `evidence.requested_at`, `evidence.received_at`, `evidence.storage_ref`, `evidence.blob_hash`, `evidence.collector_party_text`, `evidence.source_party_text`, `evidence.upload_state`, `evidence.linked_record_count`, `evidence.edited_at`
 - `filter_fields`: `evidence.lifecycle_state`, `evidence.upload_state`, `evidence.requested_at`, `evidence.received_at`, `evidence.collector_party_text`, `evidence.source_party_text`, `evidence.storage_ref`, `evidence.blob_hash`
 - inline create: a blank zero-field create attempt MUST NOT commit. A create attempt that supplies no user-supplied non-empty writable evidence field MAY commit only when the same visible create flow successfully finalizes a blob attachment before first commit
 - minimum create signal: the first committed evidence row MUST include either at least one user-supplied non-empty writable evidence field after create-time normalization or one successfully finalized blob attachment from that same visible create flow
@@ -3065,13 +3283,13 @@ Verified by: AC-098, AC-118, AC-124, AC-125, AC-231
   - `evidence.received_at`: read `received_at`; write target `evidence_records.received_at`; `direct_scalar_contract_id=timestamp_instant_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
   - `evidence.storage_ref`: read `storage_ref`; write target `evidence_records.storage_ref`; `string_contract_id=locator_text_v1`; `conflict_resolution_class=atomic_replace`
   - `evidence.collector_party_text`: read `collector_party_text`; write target `evidence_records.collector_party_text`; `string_contract_id=party_text_v1`; `conflict_resolution_class=text_compare_merge`
-  - `evidence.collector_party_id`: read the canonical collector party reference; write target `evidence_records.collector_party_id`; `conflict_resolution_class=atomic_replace`
+  - `evidence.collector_party_id`: read the canonical collector party reference; write target `evidence_records.collector_party_id`; `direct_reference_contract_id=same_incident_party_ref_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
   - `evidence.source_party_text`: read `source_party_text`; write target `evidence_records.source_party_text`; `string_contract_id=party_text_v1`; `conflict_resolution_class=text_compare_merge`
-  - `evidence.source_party_id`: read the canonical source party reference; write target `evidence_records.source_party_id`; `conflict_resolution_class=atomic_replace`
+  - `evidence.source_party_id`: read the canonical source party reference; write target `evidence_records.source_party_id`; `direct_reference_contract_id=same_incident_party_ref_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
 - read-only computed fields: `evidence.blob_hash`, `evidence.upload_state`, `evidence.linked_record_count`, `evidence.edited_at`. `evidence.blob_hash` and `evidence.upload_state` are derived fields and MUST NOT satisfy the minimum create signal.
 - blob attach or replacement MUST remain an explicit evidence action. It MUST NOT be modeled as a direct write to `evidence.blob_hash` or `evidence.upload_state`.
 Profiles: base
-Verified by: AC-100, AC-118, AC-124, AC-125, AC-128, AC-231, AC-278, AC-279, AC-280, AC-300, AC-301, AC-303
+Verified by: AC-100, AC-118, AC-124, AC-125, AC-128, AC-231, AC-278, AC-279, AC-280, AC-300, AC-301, AC-303, AC-315, AC-316, AC-317, AC-318
 
 #### 7.4.5 `cartulary.view.notes.v1`
 
@@ -3082,10 +3300,11 @@ Verified by: AC-100, AC-118, AC-124, AC-125, AC-128, AC-231, AC-278, AC-279, AC-
 - `default_visible_fields`: `note.title`, `note.body`, `note.tags`, `note.linked_record_count`, `note.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `note.created_by_user_id`
 - `default_sort`: `note.updated_at desc`, `record_id asc`
+- `sort_fields`: `note.title`, `note.body`, `note.linked_record_count`, `note.updated_at`, `note.created_by_user_id`
 - `filter_fields`: `note.tags`, `note.created_by_user_id`, `note.updated_at`, `note.full_text`
 - `note.full_text` is a filter-only synthetic predicate key declared by this view schema. It applies case-insensitive token search over `note.title` and `note.body`. It is not a writable field and need not be a visible column.
 - inline create: zero-field create is forbidden
-- minimum create signal: blank-row or equivalent grid-native creation MUST commit only when at least one of `note.title` or `note.body` is non-empty after create-time normalization; whitespace-only text MUST be treated as absent
+- minimum create signal: inline create from the sheet itself MUST commit only when at least one of `note.title` or `note.body` is non-empty after create-time normalization; whitespace-only text MUST be treated as absent
 - the server MUST fill `artifact_type='note'`, timestamps, and attribution on first commit
 - context-preseeded links from `add linked note` MUST remain editable context and MUST NOT by themselves satisfy the minimum create signal
 - `note.tags` is optional follow-on structure and MUST NOT satisfy the minimum create signal
@@ -3111,9 +3330,10 @@ Verified by: AC-068, AC-069, AC-070, AC-112, AC-118, AC-124, AC-125, AC-185, AC-
 - `default_visible_fields`: `indicator.indicator_type`, `indicator.value_kind`, `indicator.display_value`, `indicator.normalized_value`, `indicator.defanged_value`, `indicator.hash_algorithm`, `indicator.hash_value`, `indicator.stix_pattern`, `indicator.first_observed_at`, `indicator.last_observed_at`, `indicator.observation_count`, `indicator.lifecycle_summary`, `indicator.supporting_link_count`
 - `default_hidden_fields`: `record_id`, `row_version`
 - `default_sort`: `indicator.last_observed_at desc`, `indicator.display_value asc`, `record_id asc`
+- `sort_fields`: `indicator.indicator_type`, `indicator.value_kind`, `indicator.display_value`, `indicator.normalized_value`, `indicator.defanged_value`, `indicator.hash_algorithm`, `indicator.hash_value`, `indicator.stix_pattern`, `indicator.first_observed_at`, `indicator.last_observed_at`, `indicator.observation_count`, `indicator.lifecycle_summary`, `indicator.supporting_link_count`
 - `filter_fields`: `indicator.indicator_type`, `indicator.value_kind`, `indicator.hash_algorithm`, `indicator.first_observed_at`, `indicator.last_observed_at`, `indicator.lifecycle_summary`
 - inline create: zero-field create is forbidden
-- minimum create signal: blank-row or equivalent grid-native creation MUST commit only when the request supplies enough information to determine canonical identity: `indicator.indicator_type`, `indicator.value_kind`, `indicator.display_value`, and `indicator.normalized_value` whenever the type-specific normalization rule applies and the server cannot derive it deterministically from the other supplied fields
+- minimum create signal: inline create from the sheet itself MUST commit only when the request supplies enough information to determine canonical identity: `indicator.indicator_type`, `indicator.value_kind`, `indicator.display_value`, and `indicator.normalized_value` whenever the type-specific normalization rule applies and the server cannot derive it deterministically from the other supplied fields
 - `indicator.hash_algorithm` and `indicator.hash_value` MUST be supplied together or omitted together on create
 - if the canonical dedupe basis is not determinable at create time, create MUST fail with no partial indicator row
 - writable fields on create only:
@@ -3147,9 +3367,10 @@ Verified by: AC-017, AC-072, AC-073, AC-074, AC-075, AC-076, AC-077, AC-078, AC-
 - `default_visible_fields`: `assessment.subject_ref`, `assessment.subject_type`, `assessment.assessment_state`, `assessment.confidence_band`, `assessment.confidence_score`, `assessment.rationale`, `assessment.assessor`, `assessment.assessed_at`, `assessment.supporting_link_count`
 - `default_hidden_fields`: `record_id`, `row_version`, `assessment.support_refs`
 - `default_sort`: `assessment.assessed_at desc`, `record_id asc`
+- `sort_fields`: `assessment.subject_ref`, `assessment.subject_type`, `assessment.assessment_state`, `assessment.confidence_band`, `assessment.confidence_score`, `assessment.rationale`, `assessment.assessor`, `assessment.assessed_at`, `assessment.supporting_link_count`
 - `filter_fields`: `assessment.subject_type`, `assessment.assessment_state`, `assessment.confidence_band`, `assessment.assessed_at`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `assessment.subject_ref`, `assessment.subject_type`, `assessment.assessment_state`, and non-empty `assessment.rationale` are present after create-time normalization
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `assessment.subject_ref`, `assessment.subject_type`, `assessment.assessment_state`, and non-empty `assessment.rationale` are present after create-time normalization
 - context-preseeded `assessment.subject_ref` and `assessment.subject_type` MAY seed the create surface, but they MUST NOT by themselves make an otherwise empty create valid
 - if omitted on create, the server MUST default `assessment.assessed_at` to the commit timestamp, `assessment.assessor` to the authenticated actor, and `assessment.confidence_score` to `NULL`
 - `assessment.support_refs` MAY be included on create but MUST NOT satisfy the minimum semantic create set
@@ -3215,10 +3436,11 @@ Verified by: AC-018, AC-080, AC-081, AC-082, AC-083, AC-084, AC-118, AC-121, AC-
 - `default_visible_fields`: `task.title`, `task.status`, `task.owner_user_id`, `task.priority`, `task.task_kind`, `task.workstream`, `task.due_at`, `task.requester_party_text`, `task.blocked_reason`, `task.completed_at`, `task.external_ticket_ref`, `task.linked_record_count`, `task.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `task.requester_party_id`, `task.closure_summary`, `task.linked_record_ids`, `task.decision_record_id`, `task.no_owner`
 - `default_sort`: `task.updated_at desc`, `record_id asc`
+- `sort_fields`: `task.title`, `task.status`, `task.owner_user_id`, `task.priority`, `task.task_kind`, `task.workstream`, `task.due_at`, `task.requester_party_text`, `task.blocked_reason`, `task.completed_at`, `task.external_ticket_ref`, `task.linked_record_count`, `task.updated_at`, `task.no_owner`
 - `filter_fields`: `task.status`, `task.owner_user_id`, `task.priority`, `task.task_kind`, `task.workstream`, `task.due_at`, `task.requester_party_text`, `task.blocked_reason`, `task.completed_at`, `task.external_ticket_ref`, `task.no_owner`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `task.title` is non-empty and `task.task_kind` is present after create-time normalization
-- when omitted on interactive blank-row or equivalent grid-native create, the server MUST default `task.status` to `open`, `task.owner_user_id` to the authenticated actor, and `task.priority` to `normal`
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `task.title` is non-empty and `task.task_kind` is present after create-time normalization
+- when omitted on interactive inline create from the sheet itself, the server MUST default `task.status` to `open`, `task.owner_user_id` to the authenticated actor, and `task.priority` to `normal`
 - preseeded `task.linked_record_ids` or `task.decision_record_id` MAY seed the create surface, but they MUST NOT satisfy the minimum create signal
 - `task.requester_party_id` MAY be written through inspector or same-surface enrichment flows, but it MUST NOT by itself satisfy the minimum create signal and MUST NOT clear preserved requester text implicitly
 - these defaults MUST NOT satisfy the minimum create signal
@@ -3231,16 +3453,16 @@ Verified by: AC-018, AC-080, AC-081, AC-082, AC-083, AC-084, AC-118, AC-121, AC-
   - `task.workstream`: read `workstream`; write target the `workstream` field on the underlying `task_request` record; `conflict_resolution_class=atomic_replace`
   - `task.due_at`: read `due_at`; write target the `due_at` field on the underlying `task_request` record; `direct_scalar_contract_id=timestamp_instant_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
   - `task.requester_party_text`: read `requester_party_text`; write target the `requester_party_text` field on the underlying `task_request` record; `string_contract_id=party_text_v1`; `conflict_resolution_class=text_compare_merge`
-  - `task.requester_party_id`: read the canonical requester party reference; write target the `requester_party_id` field on the underlying `task_request` record; `conflict_resolution_class=atomic_replace`
+  - `task.requester_party_id`: read the canonical requester party reference; write target the `requester_party_id` field on the underlying `task_request` record; `direct_reference_contract_id=same_incident_party_ref_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
   - `task.blocked_reason`: read `blocked_reason`; write target the `blocked_reason` field on the underlying `task_request` record; `string_contract_id=reason_note_v1`; `conflict_resolution_class=text_compare_merge`
   - `task.completed_at`: read `completed_at`; write target the `completed_at` field on the underlying `task_request` record; `direct_scalar_contract_id=timestamp_instant_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
   - `task.external_ticket_ref`: read `external_ticket_ref`; write target the `external_ticket_ref` field on the underlying `task_request` record; `string_contract_id=locator_text_v1`; `conflict_resolution_class=atomic_replace`
   - `task.closure_summary`: read `closure_summary`; write target the `closure_summary` field on the underlying `task_request` record; `string_contract_id=multiline_body_v1`; `conflict_resolution_class=text_compare_merge`
   - `task.linked_record_ids`: read linked record references; write action upsert or remove linked `record_links`; `conflict_resolution_class=collection_review`
-  - `task.decision_record_id`: read `decision_record_id`; write target the `decision_record_id` field on the underlying `task_request` record or an equivalent linked decision reference; `conflict_resolution_class=atomic_replace`
+  - `task.decision_record_id`: read `decision_record_id`; write target the `decision_record_id` field on the underlying `task_request` record or an equivalent linked decision reference; `direct_reference_contract_id=same_incident_decision_ref_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
 - read-only computed fields: `task.linked_record_count`, `task.updated_at`, `task.no_owner`
 Profiles: base
-Verified by: AC-085, AC-118, AC-124, AC-137, AC-138, AC-139, AC-140, AC-145, AC-231, AC-278, AC-279, AC-280, AC-300, AC-301, AC-303, AC-304
+Verified by: AC-085, AC-118, AC-124, AC-137, AC-138, AC-139, AC-140, AC-145, AC-231, AC-278, AC-279, AC-280, AC-300, AC-301, AC-303, AC-304, AC-315, AC-316, AC-317, AC-318, AC-319
 
 **REQ-01-337**
 `task.linked_record_ids` MUST use the same `collection_value_v1` item shape and `collection_actions_v1` action vocabulary as `assessment.support_refs`, except the active `field_key` is `task.linked_record_ids` and the server derives the applicable `link_type` from that field key.
@@ -3249,7 +3471,6 @@ Verified by: AC-085, AC-118, AC-124, AC-137, AC-138, AC-139, AC-140, AC-145, AC-
 
 **REQ-01-338**
 - task lifecycle semantics remain authoritative: any committed write set affecting `task.status`, `task.blocked_reason`, `task.completed_at`, or `task.owner_user_id` MUST produce a resulting row that satisfies Core 02 §10.4.1.1. In particular, `status='blocked'` requires `blocked_reason`, `status='done'` requires `completed_at`, active tasks MUST NOT be ownerless, a successful transition away from `blocked` or `done` MUST clear `blocked_reason` or `completed_at` respectively, and a successful write that sets `status='done'` with no explicit `completed_at` MUST fill `completed_at` from the commit timestamp.
-- interactive blank-row or equivalent grid-native create that omits `task.status` MUST commit with `task.status='open'`; this rule is mandatory, not advisory.
 Profiles: base
 Verified by: AC-085, AC-118, AC-124, AC-137, AC-138, AC-139, AC-140, AC-145, AC-231, AC-304
 
@@ -3262,9 +3483,10 @@ Verified by: AC-085, AC-118, AC-124, AC-137, AC-138, AC-139, AC-140, AC-145, AC-
 - `default_visible_fields`: `decision.summary`, `decision.status`, `decision.owner_user_id`, `decision.decision_type`, `decision.decided_at`, `decision.rationale`, `decision.support_refs`, `decision.affected_record_count`, `decision.supersedes_record_id`, `decision.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `decision.is_superseded`
 - `default_sort`: `decision.decided_at desc`, `record_id asc`
+- `sort_fields`: `decision.summary`, `decision.status`, `decision.owner_user_id`, `decision.decision_type`, `decision.decided_at`, `decision.rationale`, `decision.affected_record_count`, `decision.supersedes_record_id`, `decision.updated_at`, `decision.is_superseded`
 - `filter_fields`: `decision.status`, `decision.owner_user_id`, `decision.decision_type`, `decision.decided_at`, `decision.is_superseded`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `decision.decision_type` is present and both `decision.summary` and `decision.rationale` are non-empty after create-time normalization
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `decision.decision_type` is present and both `decision.summary` and `decision.rationale` are non-empty after create-time normalization
 - when omitted on create, the server MUST default `decision.status` to `proposed`, `decision.owner_user_id` to the authenticated actor, and `decision.decided_at` to the commit timestamp
 - preseeded `decision.support_refs` MAY seed the create surface, but they MUST NOT satisfy the minimum create signal
 - these defaults MUST NOT satisfy the minimum create signal
@@ -3484,7 +3706,7 @@ Each rendered artifact MUST bind to one immutable release tuple equivalent to:
 
 - `snapshot_id`,
 - `snapshot_at`,
-- `source_change_set_high_watermark` or equivalent frozen source boundary,
+- `source_change_set_high_watermark`,
 - `derivation_version`,
 - `template_id` and `template_version`,
 - `redaction_profile_id` and `redaction_profile_version`,
@@ -3555,10 +3777,10 @@ Every exportable field or block in the canonical export model MUST carry exactly
 
 - `source_evidence` for direct evidence references, hashes, timestamps, filenames or media labels, and exported excerpts or thumbnails,
 - `derived_analytic` for deterministic transforms such as timelines, counts, ATT&CK rollups, graphs, and relationship summaries,
-- `curated_narrative` for analyst-authored findings prose, executive summaries, recommendations, impact statements, and lessons learned,
+- `curated_narrative` for analyst-authored findings prose, executive summaries, recommendations, impact statements, and analyst-authored lessons-learned narrative,
 - `working_material` for scratch text, unresolved notes, internal comments, and unreviewed excerpts.
 Profiles: snapshot_reporting
-Verified by: AC-057, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-113, AC-114, AC-115, AC-233
+Verified by: AC-057, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-113, AC-114, AC-115, AC-233, AC-333
 
 The closed vocabulary for artifact release scope is:
 
@@ -3572,20 +3794,36 @@ The snapshot and export subsystem MUST evaluate output eligibility against the c
 - `internal_draft`: any `content_class` except raw blob bytes,
 - `internal_review`: any `content_class` except raw blob bytes, and any included `working_material` MUST remain visibly marked non-releasable,
 - `external_release`: `derived_analytic`, `curated_narrative`, and only selected `source_evidence` excerpts or thumbnails that are eligible for the chosen `release_scope`. Raw blob bytes and `working_material` MUST NOT appear.
+
+Eligibility filtering MUST operate on persisted `content_class`; `release_scope` MUST NOT rewrite classification.
 Profiles: snapshot_reporting
-Verified by: AC-057, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-113, AC-114, AC-115, AC-233
+Verified by: AC-057, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-113, AC-114, AC-115, AC-233, AC-333
 
 **REQ-01-379**
 For `external_release`, every `curated_narrative` block MUST carry `support_refs[]` containing one or more stable identifiers to supporting findings, events, evidence records, assessments, or query records. A narrative block lacking `support_refs[]` MUST be ineligible for `external_release`.
 Profiles: snapshot_reporting
-Verified by: AC-057, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-113, AC-114, AC-115, AC-233
-
-Content derived directly from ad hoc note artifacts, `task_request` records, `decision` records, `comm_log` artifacts, `handoff` artifacts, `status_review` artifacts, and `lesson` artifacts SHOULD default to `working_material`.
+Verified by: AC-057, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-113, AC-114, AC-115, AC-233, AC-333
 
 **REQ-01-380**
-Such content MUST NOT appear in `external_release` unless an analyst has explicitly curated it into a separate export-model block that independently satisfies the selected `content_class`, `support_refs[]`, and applicable redaction rules.
+Direct-source text-bearing blocks first materialized from ad hoc note artifacts, `task_request` records, `decision` records, `comm_log` artifacts, `handoff` artifacts, `status_review` artifacts, and `lesson` artifacts:
+
+- MUST default to `content_class='working_material'` when first materialized into the canonical export model,
+- MUST receive that default during snapshot and export-model derivation, before template rendering,
+- MUST preserve that `content_class` across `internal_draft`, `internal_review`, and `external_release`; `release_scope` filters eligibility, but it MUST NOT rewrite classification.
+
+For this rule, copied, quoted, normalized, truncated, concatenated, or lightly reformatted text from those source families counts as direct-source text.
+
+A block composed only of deterministic non-narrative scalars derived from those same source families, such as stable identifiers, enums, timestamps, counts, or other non-narrative scalar values, MAY use `derived_analytic`.
+
+If one block mixes direct-source text with analytic material and there is no explicit curation boundary, that block MUST default to `working_material`.
+
+Templates and renderers MUST consume persisted `content_class`. They MUST NOT infer a more permissive class by omission, heuristic, or template-specific convention.
+
+Raw `lesson` record text follows this same default. A separately materialized analyst-authored lessons-learned block MAY use `curated_narrative` only if it independently satisfies the selected `content_class`, any required `support_refs[]`, and applicable redaction rules.
+
+Such source-derived content MUST NOT appear in `external_release` unless an analyst has explicitly curated it into a separate export-model block that independently satisfies the selected `content_class`, any required `support_refs[]`, and applicable redaction rules.
 Profiles: snapshot_reporting
-Verified by: AC-057, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-113, AC-114, AC-115, AC-233
+Verified by: AC-057, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-113, AC-114, AC-115, AC-233, AC-333
 
 ### 10.4 Template packs and rendering contract
 
@@ -3824,10 +4062,10 @@ Verified by: AC-033, AC-093, AC-094, AC-096, AC-234
 **REQ-01-408**
 The import and update flow MUST satisfy all of the following:
 
-1. the operator supplies a pack bundle through the configured reference-pack storage root or an equivalent administrative upload path backed by that root,
+1. the operator supplies a pack bundle either by placing it in the configured reference-pack storage root or by submitting it through `POST /api/v1/reference-packs/import`,
 2. the system stages the bundle inside the configured temporary-work root,
 3. the system verifies the staged bundle before any extracted content becomes active,
-4. on successful verification, the system records the candidate version as `available` or an equivalent non-active state,
+4. on successful verification, the system records the candidate version in durable condition `verified_available`; in storage this is realized by `reference_packs.status='available'`, `verification_result='passed'`, and the version not being the active version for its `pack_key`,
 5. activation requires an explicit operator action that switches the active version pointer for the target `pack_key`.
 Profiles: reference_pack
 Verified by: AC-033, AC-093, AC-094, AC-096, AC-234
@@ -3889,7 +4127,7 @@ Verified by: AC-033, AC-035, AC-093, AC-094, AC-095, AC-096, AC-234
 ### 11.4 Verification and attestation
 
 **REQ-01-414**
-Before a reference pack becomes `available` or `active`, the implementation MUST verify:
+Before a reference pack enters durable condition `verified_available` or becomes `active`, the implementation MUST verify:
 
 - `pack_key`,
 - `pack_kind`,
@@ -3969,7 +4207,7 @@ If optional reference packs are absent, disabled, failed, or missing, Cartulary 
 Profiles: reference_pack
 Verified by: AC-034, AC-234
 
-Only the affected overlay views, labels, or enrichment semantics MAY degrade.
+Only the affected overlay labels, enrichment semantics, non-canonical analytical widgets, or snapshot/report derivations MAY degrade. This clause does not authorize additional workbook `view_schema` surfaces in the current profile.
 
 ## 12. Portability, backup, restore, and failure handling
 
@@ -4189,7 +4427,7 @@ Verified by: AC-167, AC-168, AC-236
 Import MUST materialize every actor referenced by imported history as either:
 
 - an inert imported actor that is not login-capable and is not automatically added to incident membership, or
-- an equivalent historical actor descriptor bound to an existing local user without rewriting the source bundle actor identifier used by imported history.
+- a historical actor descriptor bound to an existing local user without rewriting the source bundle actor identifier used by imported history.
 Profiles: incident_portability
 Verified by: AC-167, AC-168, AC-236
 
@@ -4214,14 +4452,14 @@ Verified by: AC-165, AC-166, AC-167, AC-169, AC-236
 A conformant import MUST execute the following phases in order:
 
 1. stage the supplied outer archive or logical bundle under the configured temporary-work root,
-2. validate the outer container and every member path,
+2. validate the outer container, every member path, extracted regular-file byte total, extracted regular-file member count, and applicable archive compression ratio against `limits.incident_bundles.max_extracted_bytes`, `limits.archives.max_compression_ratio`, and `limits.archives.max_members`,
 3. verify every required checksum and any supported signature before any structured data becomes visible,
 4. stage blob bytes and verify every required blob hash,
 5. import the structured incident state,
 6. rebuild projections,
 7. mark the imported incident visible only after the structured import and projection rebuild succeed.
 Profiles: incident_portability
-Verified by: AC-165, AC-166, AC-167, AC-169, AC-236
+Verified by: AC-165, AC-166, AC-167, AC-169, AC-236, AC-327, AC-328, AC-332
 
 **REQ-01-449**
 Import MUST fail closed on any of the following:
@@ -4231,11 +4469,14 @@ Import MUST fail closed on any of the following:
 - missing required file,
 - missing required blob or blob-hash mismatch,
 - invalid path or unsupported bundle member type,
+- extracted regular-file bytes exceeding `limits.incident_bundles.max_extracted_bytes`,
+- extracted regular-file bytes exceeding `compressed_bytes * limits.archives.max_compression_ratio`,
+- extracted regular-file member count exceeding `limits.archives.max_members`,
 - unsupported `required_capabilities[]` entry,
 - duplicate `incident_id`,
 - any import path that would require a live remote fetch to complete.
 Profiles: incident_portability
-Verified by: AC-165, AC-166, AC-167, AC-169, AC-236
+Verified by: AC-165, AC-166, AC-167, AC-169, AC-236, AC-327, AC-328, AC-332
 
 **REQ-01-450**
 If import fails after staging begins, the target deployment MUST leave no partially visible incident. Staged bytes MAY be retained only in a non-visible administrative quarantine or temporary-work area.
@@ -4334,9 +4575,9 @@ Profiles: base
 Verified by: AC-231, AC-252, AC-253, AC-256
 
 **REQ-01-461**
-A successful preview-handle issuance MUST set `data.handle_kind='preview'`, `data.single_use=false`, `data.disposition='inline'`, and a non-null `data.preview_kind` that uses the exact tokens owned by Core 02 §18. In the base profile, preview issuance MUST succeed only when `data.preview_kind` is one of `image_inline`, `pdf_inline`, or `text_inline`. Preview handles MUST expire exactly 5 minutes after issuance and MUST be reusable until expiry, including repeated byte-range fetches made by a browser preview surface. The server MUST NOT silently downgrade preview issuance into a download contract. When the evidence is otherwise visible but the base-profile preview allowlist does not allow a safe preview, the route MUST fail with `409`, `error.code='evidence_access_unavailable'`, and `error.details.reason_code='unsupported_preview'`.
+A successful preview-handle issuance MUST set `data.handle_kind='preview'`, `data.single_use=false`, `data.disposition='inline'`, and a non-null `data.preview_kind` that uses the exact tokens owned by Core 02 §18. In the base profile, preview issuance MUST succeed only when `data.preview_kind` is one of `image_inline`, `pdf_inline`, or `text_inline`, when `data.size_bytes <= limits.previews.max_previewable_payload_bytes`, and, for `data.preview_kind='text_inline'`, when `data.size_bytes <= limits.previews.max_text_inline_bytes`. Preview handles MUST expire exactly 5 minutes after issuance and MUST be reusable until expiry, including repeated byte-range fetches made by a browser preview surface. The server MUST NOT silently downgrade preview issuance into a download contract. When the evidence is otherwise visible but the base-profile preview allowlist does not allow a safe preview, the route MUST fail with `409`, `error.code='evidence_access_unavailable'`, and `error.details.reason_code='unsupported_preview'`. When the evidence is otherwise visible but the payload exceeds the configured preview-size ceiling for the requested preview contract, the route MUST fail with `409`, `error.code='evidence_access_unavailable'`, and `error.details.reason_code='preview_payload_too_large'`. Download-handle issuance remains legal when preview is blocked solely by preview-size limits.
 Profiles: base
-Verified by: AC-231, AC-252
+Verified by: AC-231, AC-252, AC-322
 
 Example preview-handle success payload:
 
@@ -4411,9 +4652,9 @@ Profiles: base
 Verified by: AC-231, AC-256
 
 **REQ-01-465**
-Issuance MUST use `invalid_evidence_handle_request`, `evidence_record_not_found`, and `evidence_access_unavailable` from §3.3.6.1. Redemption MUST use `handle_not_found_or_revoked`, `handle_expired`, `handle_consumed`, and `evidence_access_unavailable`. Standard authentication or session failures MUST occur before handle-specific lookup and MUST use the ordinary authentication envelope rather than a handle-specific code. Whenever `evidence_access_unavailable` is used on issuance or redemption, `error.details.reason_code` MUST use the exact `evidence_access_unavailable` registry from §3.3.6.2.
+Issuance MUST use `invalid_evidence_handle_request`, `evidence_record_not_found`, and `evidence_access_unavailable` from §3.3.6.1. Redemption MUST use `handle_not_found_or_revoked`, `handle_expired`, `handle_consumed`, and `evidence_access_unavailable`. Standard authentication or session failures MUST occur before handle-specific lookup and MUST use the ordinary authentication envelope rather than a handle-specific code. Whenever `evidence_access_unavailable` is used on issuance or redemption, `error.details.reason_code` MUST use the exact `evidence_access_unavailable` registry from §3.3.6.2. `preview_payload_too_large` is reserved for preview-size rejections under REQ-01-461 and MUST NOT be used for download-handle issuance.
 Profiles: base
-Verified by: AC-231, AC-251, AC-252, AC-253, AC-254, AC-255
+Verified by: AC-231, AC-251, AC-252, AC-253, AC-254, AC-255, AC-322
 
 Example blocked preview response:
 
@@ -4466,7 +4707,7 @@ Profiles: import, snapshot_reporting, incident_portability, reference_pack
 Verified by: AC-262, AC-264, AC-266, AC-267, AC-268, AC-270, AC-271, AC-273, AC-275, AC-305, AC-308
 
 **REQ-01-471**
-Extension-family routes in this section MUST use only the family-specific `error.code` tokens and `reason_code` registries added to §3.3.6.1 and §3.3.6.2 for that family. Job terminal summaries for those routes MUST surface the same stable codes rather than ad hoc worker strings.
+Extension-family routes in this section MUST use only the family-specific `error.code` tokens and `reason_code` registries added to §3.3.6.1 and §3.3.6.2 for that family. Successful terminal `result_summary.code` values for those routes are family-owned and MUST be declared in the owning family subsection below. Canceled terminal job summaries for those routes MUST use the common `job_canceled` code from §3.3.9.1 rather than family-specific or ad hoc worker strings.
 Profiles: import, snapshot_reporting, incident_portability, reference_pack
 Verified by: AC-265, AC-269, AC-272, AC-276, AC-307, AC-310
 
@@ -4481,24 +4722,197 @@ The Import Extension Profile MUST expose exactly this minimum public route surfa
 - `GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}`,
 - `GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/preview`,
 - `PUT /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/mapping`,
+- `POST /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/select`,
+- `POST /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/skip`,
 - `POST /api/v1/import-sessions/{import_session_id}/apply`.
 Profiles: import
 Verified by: AC-262, AC-263, AC-264
 
 **REQ-01-473**
-`POST /api/v1/import-sessions` MUST accept exactly one uploaded source file plus one JSON metadata object. The source file MUST be CSV or XLSX. The metadata object MUST include required `incident_id` and required `client_txn_id`. It MAY include optional `assistant_profile`, which defaults to `phase2_workbook_import_v1` when omitted and MUST use that exact value when supplied in the current profile. The route MUST compute `source_content_sha256` from the exact uploaded file bytes, create or replay exactly one durable `import_session`, and start discovery as a background job. Normalized request comparison for idempotency MUST include `incident_id`, normalized `assistant_profile`, and the computed `source_content_sha256` from the uploaded bytes.
+`POST /api/v1/import-sessions` MUST accept exactly one uploaded source file plus one JSON metadata object. The source file MUST be CSV or XLSX. The metadata object MUST include required `incident_id` and required `client_txn_id`. It MAY include optional `assistant_profile`, which defaults to `phase2_workbook_import_v1` when omitted and MUST use that exact value when supplied in the current profile. Before `import_session` creation or discovery-job creation, the server MUST compare uploaded source bytes against `limits.imports.max_csv_source_bytes` for CSV and `limits.imports.max_xlsx_source_bytes` for XLSX. A CSV source that exceeds its ceiling MUST fail with `413`, `error.code='import_source_rejected'`, and `error.details.reason_code='csv_source_too_large'`. An XLSX source that exceeds its ceiling MUST fail with `413`, `error.code='import_source_rejected'`, and `error.details.reason_code='xlsx_source_too_large'`. Those rejections MUST create no durable `import_session` and no discovery job. For an accepted source, the route MUST compute `source_content_sha256` from the exact uploaded file bytes, create or replay exactly one durable `import_session`, and start discovery as a background job. Normalized request comparison for idempotency MUST include `incident_id`, normalized `assistant_profile`, and the computed `source_content_sha256` from the uploaded bytes.
 Profiles: import
-Verified by: AC-262
+Verified by: AC-262, AC-323
 
 **REQ-01-474**
-`GET /api/v1/import-sessions/{import_session_id}` MUST return the durable import-session resource. `GET /api/v1/import-sessions/{import_session_id}/units` MUST return the addressed session's units under the common pagination contract. `GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}` and `GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/preview` are singleton read routes. `GET /preview` MUST remain read-only against incident state. `PUT /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/mapping` MUST persist exactly one approved mapping plan and deterministic `mapping_fingerprint`; the request body MUST include required `client_txn_id`, required `target_view_schema_id`, required `header_row_ref`, required `data_start_row_ref`, required `unknown_column_policy`, and required `source_columns[]`. `header_row_ref` and `data_start_row_ref` MUST each be positive 1-based row references within `source_rect_a1`, and `data_start_row_ref` MUST be greater than or equal to `header_row_ref + 1`. `POST /api/v1/import-sessions/{import_session_id}/apply` MUST accept required `client_txn_id` and optional `selected_unit_ids[]`; omitted `selected_unit_ids[]` means use the session's persisted `selected_unit_ids[]`. When serialized, `nonblocking_warning_codes[]` MUST default to `[]` when empty. `mapping_fingerprint` MUST be absent until mapping approval. The import route family MUST preserve the durable session terminal states `applied`, `partially_applied`, `failed`, and `canceled`, and the durable unit terminal states `applied`, `skipped`, `rejected`, and `failed`; it MUST NOT serialize job-phase tokens as session or unit state.
+The import route family MUST use the common success envelope and the following route-specific `data` shapes:
+
+- `GET /api/v1/import-sessions/{import_session_id}` returns `data = <import_session resource>`.
+- `GET /api/v1/import-sessions/{import_session_id}/units` returns `data = { import_units[] }` plus `meta.paging`.
+- `GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}` returns `data = <import_unit resource>`.
+- `GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/preview` returns `data = <import_preview resource>`.
+- `PUT /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/mapping` returns `data = <import_unit resource>`.
+- `POST /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/select` and `POST /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/skip` return `data = { import_session_id, session_status, selected_unit_ids[], unit }`, where `unit` uses the exact `import_unit resource` shape defined here.
+
+The `import_session resource` MUST expose exactly:
+
+- `import_session_id`,
+- `incident_id`,
+- `created_by_user_id`,
+- `created_at`,
+- `source_file_kind`,
+- `original_filename`,
+- `source_content_sha256`,
+- `parser_profile_id`,
+- `parser_version`,
+- `assistant_profile`,
+- `session_status`,
+- `selected_unit_ids[]`,
+- `blocking_diagnostics[]`,
+- `nonblocking_warning_codes[]`.
+
+For `import_session resource` serialization:
+
+- all top-level members above are required and non-null in the current profile;
+- `selected_unit_ids[]`, `blocking_diagnostics[]`, and `nonblocking_warning_codes[]` MUST always be present and MUST default to `[]` when empty;
+- each `blocking_diagnostics[]` item MUST contain exactly `code`, `reason_code`, `message`, and optional `import_unit_id`;
+- `import_unit_id` MUST be absent for session-scoped blockers and MUST be present only for unit-scoped blockers.
+
+The `import_unit resource` MUST expose exactly:
+
+- `import_unit_id`,
+- `import_session_id`,
+- `locator_kind`,
+- `locator`,
+- `source_rect_a1`,
+- `header_row_ref`,
+- `data_start_row_ref`,
+- `inferred_row_count`,
+- `inferred_column_count`,
+- `warning_codes[]`,
+- `unit_status`,
+- optional `mapping_fingerprint`,
+- optional `approved_mapping`.
+
+Each `data.import_units[]` entry returned by `GET /api/v1/import-sessions/{import_session_id}/units` MUST use that exact `import_unit resource` shape.
+
+For `import_unit resource` serialization:
+
+- all top-level members above other than `mapping_fingerprint` and `approved_mapping` are required and non-null in the current profile;
+- `warning_codes[]` MUST always be present and MUST default to `[]` when empty;
+- `mapping_fingerprint` and `approved_mapping` MUST both be absent until mapping approval and MUST both be present after mapping approval;
+- `header_row_ref` and `data_start_row_ref` MUST be positive 1-based row references within `source_rect_a1`;
+- `data_start_row_ref` MUST be greater than or equal to `header_row_ref + 1`;
+- preview rows, preview columns, and `truncated` are not members of the durable `import_unit resource`.
+
+When present, `approved_mapping` MUST expose exactly:
+
+- `target_view_schema_id`,
+- `unknown_column_policy`,
+- `source_columns[]`.
+
+Each `approved_mapping.source_columns[]` item MUST contain exactly:
+
+- `source_column_ordinal`,
+- `source_header_text`,
+- `field_key`,
+- `entity_binding_mode`,
+- `transform_id`,
+- `transform_options`,
+- `empty_value_policy`.
+
+For `approved_mapping` serialization:
+
+- `source_columns[]` MUST be exhaustive over discovered source columns and MUST be ordered by `source_column_ordinal`;
+- `transform_options` MUST always be an object;
+- `field_key = null` means intentionally unmapped;
+- `entity_binding_mode` MUST be `null` for unmapped columns and non-entity targets;
+- `empty_value_policy` MUST be `omit_field` when `field_key = null`.
+
+`GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/preview` is a singleton read route and MUST remain read-only against incident state. The preview resource MUST expose exactly:
+
+- top-level fields `import_session_id`, `import_unit_id`, `locator_kind`, `locator`, `source_rect_a1`, `header_row_ref`, `data_start_row_ref`, `inferred_row_count`, `inferred_column_count`, `warning_codes[]`, `unit_status`, optional `mapping_fingerprint`, `columns[]`, `preview_rows[]`, and `truncated`;
+- `columns[]` items containing exactly `source_column_ordinal` and `source_header_text`;
+- `preview_rows[]` items containing exactly `source_row_ref` and `cells[]`;
+- `cells[]` items containing exactly `source_column_ordinal`, `display_text`, and `cell_kind`.
+
+For preview serialization:
+
+- `cell_kind` MUST use exactly `blank`, `string`, `number`, `boolean`, `datetime`, `formula_cached`, and `error_literal`.
+- `display_text` MUST be a string. When `cell_kind = blank`, `display_text` MUST be `""`.
+- `source_row_ref` MUST use the same 1-based row coordinate system within `source_rect_a1` as `header_row_ref` and `data_start_row_ref`.
+- The server MUST return at most the first 50 data rows after `data_start_row_ref`, preserve source order, and set `truncated = true` when more preview rows exist.
+
+Before any import unit enters `ready` or `applied`, and before any imported incident data becomes visible or applicable through apply, the imports module MUST enforce the bounded ingest contract driven by Core 04 §12.3.1. For CSV, only the raw source-byte ceiling from REQ-01-473 applies. For XLSX, the route family MUST additionally enforce `limits.imports.max_rows`, `limits.imports.max_columns`, `limits.imports.max_cells`, `limits.archives.default_max_extracted_bytes`, `limits.archives.max_compression_ratio`, and `limits.archives.max_members`, treating XLSX as the ZIP-backed workbook container defined by Core 04 §12.3.1. A breach of any of those limits MUST fail the affected route or job with `413` and `error.code='import_source_rejected'`.
+
+`PUT /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/mapping` MUST accept only a JSON object request body and MUST require:
+
+- `client_txn_id`,
+- `target_view_schema_id`,
+- `header_row_ref`,
+- `data_start_row_ref`,
+- `unknown_column_policy`,
+- `source_columns[]`.
+
+`source_columns[]` MUST contain exactly one ordered entry per discovered source column. Each entry MUST contain exactly:
+
+- `source_column_ordinal`,
+- `source_header_text`,
+- `field_key`,
+- `entity_binding_mode`,
+- `transform_id`,
+- `transform_options`,
+- `empty_value_policy`.
+
+For the current profile:
+
+- `source_column_ordinal` MUST be 1-based, unique, contiguous, and serialized in ascending order.
+- `source_header_text` MUST be the raw imported header text or `null` when the header cell is empty.
+- `field_key = null` means intentionally unmapped.
+- Duplicate non-null `field_key` values are invalid.
+- `entity_binding_mode` MUST be present and MUST be `null` for unmapped columns and non-entity targets.
+- `transform_options` MUST always be an object.
+- `empty_value_policy` MUST always be present and MUST be `omit_field` when `field_key = null`.
+- `unknown_column_policy` MUST use exactly `preserve_raw_capture`, `preserve_custom_attrs`, or `reject_if_unmapped`.
+- `transform_id` MUST use exactly `null`, `trim_v1`, `collapse_whitespace_v1`, `lowercase_v1`, or `split_delimited_v1`.
+- `empty_value_policy` MUST use exactly `omit_field` or `write_null`.
+- `split_delimited_v1` is the only transform that MAY use non-empty `transform_options` in the current profile. Its options object MUST contain only `delimiter`, `trim_items`, and `drop_empty_items`, and `delimiter` MUST be one of `,`, `;`, `|`, `\n`, or `\t`.
+- For every current-profile transform other than `split_delimited_v1`, `transform_options` MUST be `{}`.
+
+`POST /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/select` and `POST /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/skip` MUST each accept only a JSON object request body. Both routes MUST require `client_txn_id`. `POST /skip` MAY accept optional `reason`, bound to `string_contract_id=reason_note_v1`. Both routes are singleton action routes and MUST reject pagination members. Both routes MUST be route-scoped idempotent under §17.1. A no-op `select` against an already selected unit and a no-op `skip` against an already skipped unit MUST return the current durable state rather than fail.
+
+`POST /api/v1/import-sessions/{import_session_id}/apply` MUST accept required `client_txn_id` and optional `selected_unit_ids[]`; omitted `selected_unit_ids[]` means use the session's persisted `selected_unit_ids[]`.
+
+The import route family MUST preserve the durable session terminal states `applied`, `partially_applied`, `failed`, and `canceled`, and the durable unit terminal states `applied`, `skipped`, `rejected`, and `failed`; it MUST NOT serialize job-phase tokens as session or unit state.
+
+For terminal common-job summaries produced by this family:
+
+- `POST /api/v1/import-sessions` MUST use `result_summary.code='import_session_discovered'` and MUST emit exactly one `resource_refs[]` item `{ kind: 'import_session', id: <import_session_id>, route: '/api/v1/import-sessions/{import_session_id}' }`.
+- `POST /api/v1/import-sessions/{import_session_id}/apply` MUST use `result_summary.code='import_session_applied'` when the durable `session_status='applied'` and `result_summary.code='import_session_partially_applied'` when the durable `session_status='partially_applied'`. In both success cases it MUST emit exactly one `import_session` ref using that same canonical route.
 Profiles: import
-Verified by: AC-263, AC-264
+Verified by: AC-263, AC-264, AC-324, AC-325
 
 **REQ-01-475**
-The import route family MUST use only `invalid_import_request`, `import_session_not_found`, `import_unit_not_found`, `import_state_conflict`, `import_source_unsupported`, and `import_apply_blocked`. `import_source_unsupported` MUST use only `encrypted_or_unparseable_workbook`, `unsupported_named_range`, and `formula_cached_value_missing`. `import_apply_blocked` MUST use only `overlapping_units`, `duplicate_apply_blocked`, and `unit_not_ready`.
+The import route family MUST use only `invalid_import_request`, `import_session_not_found`, `import_unit_not_found`, `import_state_conflict`, `import_source_unsupported`, `import_source_rejected`, and `import_apply_blocked`.
+
+`invalid_import_request` MUST use only:
+
+- `request_not_object`,
+- `missing_required_field`,
+- `field_not_nullable`,
+- `unknown_field`,
+- `invalid_row_reference`,
+- `invalid_selected_unit_ids`,
+- `unsupported_assistant_profile`,
+- `invalid_source_columns`,
+- `invalid_unknown_column_policy`,
+- `invalid_transform`,
+- `invalid_empty_value_policy`,
+- `duplicate_target_field`.
+
+`import_state_conflict` MUST use only:
+
+- `session_applying`,
+- `session_terminal`,
+- `unit_applying`,
+- `unit_terminal`.
+
+`import_source_unsupported` MUST use only `encrypted_or_unparseable_workbook`, `unsupported_named_range`, and `formula_cached_value_missing`.
+
+`import_source_rejected` MUST use only `csv_source_too_large`, `xlsx_source_too_large`, `import_rows_exceeded`, `import_columns_exceeded`, `import_cells_exceeded`, `archive_extracted_bytes_exceeded`, `archive_compression_ratio_exceeded`, and `archive_member_count_exceeded`.
+
+`import_apply_blocked` MUST use only `overlapping_units`, `duplicate_apply_blocked`, and `unit_not_ready`.
 Profiles: import
-Verified by: AC-265
+Verified by: AC-265, AC-323, AC-324, AC-325
 
 ### 17.3 Snapshot and Reporting Extension Profile public contract
 
@@ -4516,12 +4930,69 @@ Profiles: snapshot_reporting
 Verified by: AC-266, AC-267, AC-268
 
 **REQ-01-477**
+`GET /api/v1/snapshots/{snapshot_id}` MUST return `data = <snapshot resource>`.
+
+The `snapshot resource` MUST expose exactly:
+
+- `snapshot_id`,
+- `incident_id`,
+- `created_by_user_id`,
+- `created_at`,
+- `snapshot_at`,
+- `source_change_set_high_watermark`,
+- `derivation_version`,
+- `export_model_sha256`.
+
+For `snapshot resource` serialization:
+
+- every member above is required and non-null in the current profile;
+- `source_change_set_high_watermark` MUST always serialize as the resolved committed boundary token, even when `POST /api/v1/snapshots` omitted it;
+- the `snapshot resource` MUST NOT include `template_id`, `template_version`, `redaction_profile_id`, `redaction_profile_version`, `release_state`, approval data, redaction manifests, or rendered-output bytes.
+
 `POST /api/v1/snapshots` MUST accept a JSON object with required `incident_id` and required `client_txn_id`. It MAY include optional `source_change_set_high_watermark`; omission means the current committed incident head. `POST /api/v1/releases` MUST accept a JSON object with required `snapshot_id`, required `template_id`, required `template_version`, required `redaction_profile_id`, required `redaction_profile_version`, required `output_kind`, and required `client_txn_id`. It MAY include optional `release_scope`, which defaults to `internal_draft` when omitted. Both routes MUST run as background jobs. The release-create route MUST fail closed if the request omits either version selector or otherwise attempts implicit latest-version resolution.
+
+For terminal common-job summaries produced by this family:
+
+- `POST /api/v1/snapshots` MUST use `result_summary.code='snapshot_created'` and MUST emit exactly one `resource_refs[]` item `{ kind: 'snapshot', id: <snapshot_id>, route: '/api/v1/snapshots/{snapshot_id}' }`.
+- `POST /api/v1/releases` MUST use `result_summary.code='release_created'` and MUST emit exactly one `resource_refs[]` item `{ kind: 'release', id: <release_id>, route: '/api/v1/releases/{release_id}' }`.
 Profiles: snapshot_reporting
 Verified by: AC-266, AC-267
 
 **REQ-01-478**
-`GET /api/v1/releases/{release_id}` MUST return the durable release resource. `POST /api/v1/releases/{release_id}/approve`, `POST /api/v1/releases/{release_id}/publish`, and `POST /api/v1/releases/{release_id}/invalidate` MUST each accept only a JSON object with required `client_txn_id` and optional `reason`. If present, `reason` MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. For idempotency comparison, omission, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` MUST compare equal. Unknown top-level members, a non-object body, missing `client_txn_id`, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_release_request`. Route-scoped idempotency for these three action routes MUST be keyed by `(actor_user_id, release_id, action_route, client_txn_id)` and MUST compare the exact action route plus normalized `reason`. Exact replay of a previously committed success MUST return the original committed success result before any fresh state-conflict evaluation runs. Reuse of the same route-scoped key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. `approve` MUST mean recording an approval against that exact immutable release tuple. A successful `approve` MAY leave `release_state='pending_approval'` when the required approval set is not yet complete. It transitions to `approved` only when the required approval set is now satisfied for that exact release record. A successful `approve` MUST return `200 OK` with the common success envelope and `data` containing required `release` equal to the post-commit durable release resource plus required `approval_progress`, with exactly boolean `approval_recorded`, boolean `approval_requirements_satisfied`, and `resulting_release_state`, where `resulting_release_state` MUST use only `pending_approval` or `approved`. A successful `publish` MUST return `200 OK` with the common success envelope and `data.release` equal to the post-commit durable release resource. A successful `invalidate` MUST return `200 OK` with the common success envelope and `data.release` equal to the post-commit durable release resource. `approve` is legal only when the current `release_state` is `pending_approval`. `publish` is legal only when the current `release_state` is `approved`. `invalidate` is legal only when the current `release_state` is `pending_approval`, `approved`, or `published`. The public `release_state` vocabulary remains exactly `pending_approval`, `approved`, `invalidated`, and `published`. Render jobs MUST NOT introduce `queued`, `running`, `rendering`, or equivalent worker-phase tokens into `release_state`. A successful internal-draft render candidate becomes `approved` immediately because the current profile requires no separate approval action for `release_scope='internal_draft'`.
+`GET /api/v1/releases/{release_id}` MUST return `data = <release resource>`.
+
+The `release resource` MUST expose exactly:
+
+- `release_id`,
+- `incident_id`,
+- `snapshot_id`,
+- `snapshot_at`,
+- `source_change_set_high_watermark`,
+- `derivation_version`,
+- `export_model_sha256`,
+- `template_id`,
+- `template_version`,
+- `redaction_profile_id`,
+- `redaction_profile_version`,
+- `output_kind`,
+- `release_scope`,
+- `output_sha256`,
+- `release_state`,
+- `created_by_user_id`,
+- `created_at`,
+- `approved_at`,
+- `invalidated_at`,
+- `published_at`,
+- `invalidation_reason`.
+
+For `release resource` serialization:
+
+- `approved_at`, `invalidated_at`, `published_at`, and `invalidation_reason` MUST always be present and MUST be JSON `null` when unset;
+- every other member above is required and non-null in the current profile;
+- `data.release` in successful `approve`, `publish`, and `invalidate` responses MUST use the exact `release resource` shape defined here;
+- the `release resource` MUST NOT inline approval records, redaction manifests, rendered bytes, or worker-phase or job-status state.
+
+`POST /api/v1/releases/{release_id}/approve`, `POST /api/v1/releases/{release_id}/publish`, and `POST /api/v1/releases/{release_id}/invalidate` MUST each accept only a JSON object with required `client_txn_id` and optional `reason`. If present, `reason` MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. For idempotency comparison, omission, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` MUST compare equal. Unknown top-level members, a non-object body, missing `client_txn_id`, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_release_request`. Route-scoped idempotency for these three action routes MUST be keyed by `(actor_user_id, release_id, action_route, client_txn_id)` and MUST compare the exact action route plus normalized `reason`. Exact replay of a previously committed success MUST return the original committed success result before any fresh state-conflict evaluation runs. Reuse of the same route-scoped key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. `approve` MUST mean recording an approval against that exact immutable release tuple. A successful `approve` MAY leave `release_state='pending_approval'` when the required approval set is not yet complete. It transitions to `approved` only when the required approval set is now satisfied for that exact release record. A successful `approve` MUST return `200 OK` with the common success envelope and `data` containing required `release` equal to the post-commit durable release resource plus required `approval_progress`, with exactly boolean `approval_recorded`, boolean `approval_requirements_satisfied`, and `resulting_release_state`, where `resulting_release_state` MUST use only `pending_approval` or `approved`. A successful `publish` MUST return `200 OK` with the common success envelope and `data.release` equal to the post-commit durable release resource. A successful `invalidate` MUST return `200 OK` with the common success envelope and `data.release` equal to the post-commit durable release resource. `approve` is legal only when the current `release_state` is `pending_approval`. `publish` is legal only when the current `release_state` is `approved`. `invalidate` is legal only when the current `release_state` is `pending_approval`, `approved`, or `published`. The public `release_state` vocabulary remains exactly `pending_approval`, `approved`, `invalidated`, and `published`. Render jobs MUST NOT introduce `queued`, `running`, `rendering`, or equivalent worker-phase tokens into `release_state`. A successful internal-draft render candidate becomes `approved` immediately because the current profile requires no separate approval action for `release_scope='internal_draft'`.
 Profiles: snapshot_reporting
 Verified by: AC-268, AC-305, AC-306
 
@@ -4546,14 +5017,63 @@ Profiles: reference_pack
 Verified by: AC-270, AC-271
 
 **REQ-01-481**
-`POST /api/v1/reference-packs/import` MUST accept exactly one offline pack bundle plus one JSON metadata object containing required `client_txn_id`. It MAY include optional `activation_policy`, which defaults to `staged_only` when omitted. The current profile MUST reject any request that attempts auto-activation at import time. `POST /api/v1/reference-packs/{pack_key}/{pack_version}/activate`, `disable`, and `reverify` MUST require an exact path `pack_version`; the current profile defines no implicit latest-version action route. Each of those action routes MUST accept only a JSON object with required `client_txn_id` and optional `reason`. If present, `reason` MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. For idempotency comparison, omission, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` MUST compare equal. Unknown top-level members, a non-object body, missing `client_txn_id`, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_reference_pack_request`. Route-scoped idempotency for these three action routes MUST be keyed by `(actor_user_id, pack_key, pack_version, action_route, client_txn_id)` and MUST compare the exact action route plus normalized `reason`. Exact replay of a previously committed success or accepted job MUST return the original committed result before any fresh state evaluation runs. Reuse of the same route-scoped key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. `activate` is legal only when the addressed version is in durable condition `verified_available` and is not currently active for its `pack_key`. `disable` is legal only when the addressed version is in durable condition `verified_available`; the action remains legal whether or not that version is currently active through the activation pointer. `reverify` is legal only when the addressed version is in durable condition `verified_available`, `disabled`, `failed`, or `missing`; it is not legal while still `staged`. `POST /api/v1/reference-packs/refresh` MUST accept required `client_txn_id` and optional `pack_keys[]`; omitted `pack_keys[]` means all currently imported pack keys visible to the caller. Import, reverify, and refresh MUST run as background jobs. `activate` and `disable` MAY complete synchronously with `200 OK` using the common success envelope and `data.pack_version` equal to the post-commit durable pack-version resource; if either action performs long-running work, it MUST return `202 Accepted` with the common job resource. `reverify` MUST always return `202 Accepted` with the common job resource. When a reverify job reaches a terminal state, its public result or error summary MUST use the same family-specific stable codes rather than ad hoc worker strings. The durable version conditions exposed to the public surface remain exactly `staged`, `verified_available`, `disabled`, `failed`, and `missing`. `active` MUST remain a derived boolean obtained from the activation pointer for `(pack_key, pack_version)`, not an additional stored version-state token.
+`GET /api/v1/reference-packs` MUST return the common success envelope with `data.pack_versions[]` plus `meta.paging` under §3.3.7. `GET /api/v1/reference-packs/{pack_key}/{pack_version}` MUST return `data = <reference_pack_version resource>`. Every item in `data.pack_versions[]` and every `data.pack_version` member returned by inline `200 OK` success from `activate` or `disable` MUST use the exact `reference_pack_version resource` shape defined here.
+
+The `reference_pack_version resource` MUST expose exactly:
+
+- `pack_key`,
+- `pack_kind`,
+- `pack_version`,
+- `pack_version_state`,
+- `active`,
+- `source_identifier`,
+- `manifest_sha256`,
+- `payload_sha256`,
+- `pack_contract_version`,
+- `verification_method`,
+- `verification_result`,
+- `signer_key_id`,
+- `previous_active_version`,
+- `imported_by_user_id`,
+- `imported_at`,
+- `activated_by_user_id`,
+- `activated_at`.
+
+For `reference_pack_version resource` serialization:
+
+- `pack_version_state` MUST use exactly `staged`, `verified_available`, `disabled`, `failed`, and `missing`;
+- `verification_result` MUST use exactly `pending`, `passed`, and `failed`;
+- `active` MUST always be present and MUST be the derived activation-pointer boolean for `(pack_key, pack_version)` rather than an additional durable version-state token;
+- `pack_kind` MUST serialize as the exact stored metadata string and MUST NOT be narrowed to a closed v1 public enum;
+- `pack_version` MUST serialize as the exact version identifier and MUST NOT imply `latest`, `current`, semantic-version ordering, or other route-local interpretation;
+- `source_identifier`, `signer_key_id`, `previous_active_version`, `imported_by_user_id`, `activated_by_user_id`, and `activated_at` MUST always be present and MUST be JSON `null` when unset;
+- every other member above is required and non-null in the current profile;
+- `payload_sha256` is the canonical public digest field and MUST serialize as one canonical aggregate digest when storage retains more than one payload SHA-256 digest;
+- object-member order is not part of the wire contract; array order is;
+- the resource MUST NOT inline bundle bytes, extracted member lists, raw signatures, object-store paths, staging paths, or attestation-history arrays.
+
+`data.pack_versions[]` MUST be exhaustive over pack versions visible to the caller for this route family and MUST sort by `pack_key asc`, then exact `pack_version asc`.
+
+`POST /api/v1/reference-packs/import` MUST accept exactly one offline pack bundle plus one JSON metadata object containing required `client_txn_id`. It MAY include optional `activation_policy`, which defaults to `staged_only` when omitted. The current profile MUST reject any request that attempts auto-activation at import time. `POST /api/v1/reference-packs/{pack_key}/{pack_version}/activate`, `disable`, and `reverify` MUST require an exact path `pack_version`; the current profile defines no implicit latest-version action route. Each of those action routes MUST accept only a JSON object with required `client_txn_id` and optional `reason`. If present, `reason` MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. For idempotency comparison, omission, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` MUST compare equal. Unknown top-level members, a non-object body, missing `client_txn_id`, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_reference_pack_request`. Route-scoped idempotency for these three action routes MUST be keyed by `(actor_user_id, pack_key, pack_version, action_route, client_txn_id)` and MUST compare the exact action route plus normalized `reason`. Exact replay of a previously committed success or accepted job MUST return the original committed result before any fresh state evaluation runs. Reuse of the same route-scoped key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. `activate` is legal only when the addressed version is in durable condition `verified_available` and is not currently active for its `pack_key`. `disable` is legal only when the addressed version is in durable condition `verified_available`; the action remains legal whether or not that version is currently active through the activation pointer. `reverify` is legal only when the addressed version is in durable condition `verified_available`, `disabled`, `failed`, or `missing`; it is not legal while still `staged`. `POST /api/v1/reference-packs/refresh` MUST accept required `client_txn_id` and optional `pack_keys[]`; omitted `pack_keys[]` means all currently imported pack keys visible to the caller. Import, reverify, and refresh MUST enforce `limits.reference_packs.max_extracted_bytes`, `limits.archives.max_compression_ratio`, and `limits.archives.max_members` before a candidate version can remain or become `verified_available` or before refresh can keep or move the active pointer. A breach of any of those limits MUST fail closed using `reference_pack_verification_failed` and the exact corresponding archive-limit `reason_code`. Import, reverify, and refresh MUST run as background jobs. `activate` and `disable` MAY complete synchronously with `200 OK` using the common success envelope and `data.pack_version` equal to the post-commit durable `reference_pack_version resource`; if either action performs long-running work, it MUST return `202 Accepted` with the common job resource. `reverify` MUST always return `202 Accepted` with the common job resource. When a reverify job reaches a terminal state, its public result or error summary MUST use the same family-specific stable codes rather than ad hoc worker strings. The durable version conditions exposed to the public surface remain exactly `staged`, `verified_available`, `disabled`, `failed`, and `missing`. `active` MUST remain a derived boolean obtained from the activation pointer for `(pack_key, pack_version)`, not an additional stored version-state token.
+
+For every `reference_pack_version` ref emitted by this family, `kind` MUST be `reference_pack_version` and both `id` and `route` MUST equal the canonical `/api/v1/reference-packs/{pack_key}/{pack_version}` path.
+
+For terminal common-job summaries produced by this family:
+
+- `POST /api/v1/reference-packs/import` MUST use `result_summary.code='reference_pack_imported'` and MUST emit exactly one `reference_pack_version` ref.
+- A long-running `POST /api/v1/reference-packs/{pack_key}/{pack_version}/activate` MUST use `result_summary.code='reference_pack_activated'` and MUST emit exactly one `reference_pack_version` ref.
+- A long-running `POST /api/v1/reference-packs/{pack_key}/{pack_version}/disable` MUST use `result_summary.code='reference_pack_disabled'` and MUST emit exactly one `reference_pack_version` ref.
+- `POST /api/v1/reference-packs/{pack_key}/{pack_version}/reverify` MUST use `result_summary.code='reference_pack_reverified'` and MUST emit exactly one `reference_pack_version` ref.
+- `POST /api/v1/reference-packs/refresh` MUST use `result_summary.code='reference_packs_refreshed'`. Its `resource_refs[]` MAY be empty or contain one or more `reference_pack_version` refs. When present, those refs are non-exhaustive when multiple versions changed and MUST sort by `route asc`.
+
+These success-code rules apply only when the route completes through the common job resource. Inline `200 OK` `activate` or `disable` success continues to use `data.pack_version` equal to the exact `reference_pack_version resource` defined here.
 Profiles: reference_pack
-Verified by: AC-270, AC-271, AC-308, AC-309
+Verified by: AC-270, AC-271, AC-308, AC-309, AC-326
 
 **REQ-01-482**
-The reference-pack route family MUST use only `invalid_reference_pack_request`, `reference_pack_not_found`, `reference_pack_state_conflict`, `reference_pack_verification_failed`, and `reference_pack_activation_rejected`. `reference_pack_verification_failed` MUST use only `checksum_mismatch`, `signature_mismatch`, `missing_integrity_metadata`, `contract_incompatible`, `path_traversal`, `disallowed_content`, and `payload_missing`. `reference_pack_activation_rejected` MUST use only `already_active` and `not_verified_available`, and it is reserved for `activate`. `reference_pack_state_conflict` MUST use only `already_disabled`, `not_disableable`, and `verification_pending`.
+The reference-pack route family MUST use only `invalid_reference_pack_request`, `reference_pack_not_found`, `reference_pack_state_conflict`, `reference_pack_verification_failed`, and `reference_pack_activation_rejected`. `reference_pack_verification_failed` MUST use only `checksum_mismatch`, `signature_mismatch`, `missing_integrity_metadata`, `contract_incompatible`, `path_traversal`, `disallowed_content`, `payload_missing`, `archive_extracted_bytes_exceeded`, `archive_compression_ratio_exceeded`, and `archive_member_count_exceeded`. `reference_pack_activation_rejected` MUST use only `already_active` and `not_verified_available`, and it is reserved for `activate`. `reference_pack_state_conflict` MUST use only `already_disabled`, `not_disableable`, and `verification_pending`.
 Profiles: reference_pack
-Verified by: AC-272, AC-310
+Verified by: AC-272, AC-310, AC-326
 
 ### 17.5 Incident Portability Extension Profile public contract
 
@@ -4567,26 +5087,26 @@ Profiles: incident_portability
 Verified by: AC-273, AC-274, AC-275
 
 **REQ-01-484**
-`POST /api/v1/incident-bundles/export` MUST accept a JSON object with required `incident_id` and required `client_txn_id`. It MAY include optional `reference_pack_mode`, optional `optional_sections[]`, and optional `required_capabilities[]`. `reference_pack_mode` defaults to `refs_only` when omitted. `optional_sections[]` defaults to `[]` when omitted. `required_capabilities[]` defaults to `[]` when omitted. The current profile MUST NOT expose user-tunable partial-history or partial-blob request modes; if `history_mode` or `blob_mode` is supplied, the route MUST fail closed. Export MUST run as a background job. The durable export descriptor under `GET /api/v1/incident-bundles/{bundle_id}` MUST exist only after successful export, MUST reject pagination, and MUST expose at minimum `bundle_id`, `incident_id`, `exported_at`, `manifest_sha256`, `reference_pack_mode`, `optional_sections[]`, `required_capabilities[]`, fixed `history_mode='full'`, and fixed `blob_mode='full'`.
+`POST /api/v1/incident-bundles/export` MUST accept a JSON object with required `incident_id` and required `client_txn_id`. It MAY include optional `reference_pack_mode`, optional `optional_sections[]`, and optional `required_capabilities[]`. `reference_pack_mode` defaults to `refs_only` when omitted. `optional_sections[]` defaults to `[]` when omitted. `required_capabilities[]` defaults to `[]` when omitted. The current profile MUST NOT expose user-tunable partial-history or partial-blob request modes; if `history_mode` or `blob_mode` is supplied, the route MUST fail closed. Export MUST run as a background job. The durable export descriptor under `GET /api/v1/incident-bundles/{bundle_id}` MUST exist only after successful export, MUST reject pagination, and MUST expose at minimum `bundle_id`, `incident_id`, `exported_at`, `manifest_sha256`, `reference_pack_mode`, `optional_sections[]`, `required_capabilities[]`, fixed `history_mode='full'`, and fixed `blob_mode='full'`. On successful export, the terminal common-job summary MUST use `result_summary.code='incident_bundle_exported'` and MUST emit exactly one `resource_refs[]` item `{ kind: 'incident_bundle', id: <bundle_id>, route: '/api/v1/incident-bundles/{bundle_id}' }`.
 Profiles: incident_portability
 Verified by: AC-273, AC-274
 
 **REQ-01-485**
-`POST /api/v1/incident-bundles/import` MUST accept exactly one bundle file plus one JSON metadata object containing required `client_txn_id`. Import MUST run as a background job. The current profile defines no durable import resource; on success the terminal job result summary MUST expose the imported `incident_id`. Import remains create-only into an empty incident namespace. The current profile MUST reject clone, merge, identifier-remap, remote-fetch, or equivalent alternative import modes.
+`POST /api/v1/incident-bundles/import` MUST accept exactly one bundle file plus one JSON metadata object containing required `client_txn_id`. Import MUST run as a background job. The current profile defines no durable import resource; on success the terminal job result summary MUST use `result_summary.code='incident_bundle_imported'` and MUST emit exactly one `resource_refs[]` item `{ kind: 'incident', id: <incident_id>, route: '/api/v1/incidents/{incident_id}' }`. Import remains create-only into an empty incident namespace. The current profile MUST reject clone, merge, identifier-remap, remote-fetch, or equivalent alternative import modes.
 Profiles: incident_portability
 Verified by: AC-275
 
 **REQ-01-486**
-The incident-bundle route family MUST use only `invalid_incident_bundle_request`, `incident_bundle_not_found`, `incident_bundle_export_rejected`, and `incident_bundle_import_rejected`. `incident_bundle_export_rejected` MUST use only `missing_required_file` and `missing_required_blob`. `incident_bundle_import_rejected` MUST use only `invalid_member_path`, `unsupported_member_type`, `checksum_mismatch`, `signature_mismatch`, `blob_hash_mismatch`, `duplicate_incident_id`, `unsupported_required_capability`, and `remote_fetch_required`.
+The incident-bundle route family MUST use only `invalid_incident_bundle_request`, `incident_bundle_not_found`, `incident_bundle_export_rejected`, and `incident_bundle_import_rejected`. `incident_bundle_export_rejected` MUST use only `missing_required_file` and `missing_required_blob`. `incident_bundle_import_rejected` MUST use only `invalid_member_path`, `unsupported_member_type`, `checksum_mismatch`, `signature_mismatch`, `blob_hash_mismatch`, `duplicate_incident_id`, `unsupported_required_capability`, `remote_fetch_required`, `archive_extracted_bytes_exceeded`, `archive_compression_ratio_exceeded`, and `archive_member_count_exceeded`.
 Profiles: incident_portability
-Verified by: AC-276
+Verified by: AC-276, AC-327, AC-328, AC-332
 
 ## 18. Writable-string contract registry
 
 **REQ-01-487**
-This section and §18A are the primary owners for the base-profile writable string and direct temporal scalar surface contracts used by route-scoped request members and by view-schema field or action-member bindings. A writable human-authored string surface closed by this core MUST bind to one `string_contract_id` from the closed registry in this section. A writable direct temporal scalar surface closed by this core MUST bind to one `direct_scalar_contract_id` from the closed registry in §18A rather than inventing route-local lexical, normalization, or clearability prose.
+This section and §18A and §18B are the primary owners for the base-profile writable string, direct temporal scalar, and direct-reference scalar surface contracts used by route-scoped request members and by view-schema field or action-member bindings. A writable human-authored string surface closed by this core MUST bind to one `string_contract_id` from the closed registry in this section. A writable direct temporal scalar surface closed by this core MUST bind to one `direct_scalar_contract_id` from the closed registry in §18A rather than inventing route-local lexical, normalization, or clearability prose. A writable direct-reference scalar surface closed by this core MUST bind to one `direct_reference_contract_id` from the closed registry in §18B rather than inventing route-local lexical, normalization, clearability, or identifier-resolution prose.
 Profiles: base
-Verified by: AC-015, AC-068, AC-085, AC-086, AC-112, AC-118, AC-152, AC-175, AC-176, AC-181, AC-182, AC-186, AC-194, AC-196, AC-200, AC-202, AC-216, AC-221, AC-225, AC-231, AC-300, AC-301, AC-302, AC-303
+Verified by: AC-015, AC-068, AC-085, AC-086, AC-112, AC-118, AC-152, AC-175, AC-176, AC-181, AC-182, AC-186, AC-194, AC-196, AC-200, AC-202, AC-216, AC-221, AC-225, AC-231, AC-300, AC-301, AC-302, AC-303, AC-315, AC-316, AC-317, AC-318, AC-319
 
 **REQ-01-488**
 Unless a bound contract below explicitly says otherwise:
@@ -4600,7 +5120,7 @@ Unless a bound contract below explicitly says otherwise:
 - for direct temporal scalar contracts whose binding is non-clearable, explicit JSON `null` MUST be rejected,
 - the base profile MUST NOT preserve the empty string as a distinct authoritative value for any field bound to a clear-to-null string contract.
 Profiles: base
-Verified by: AC-015, AC-068, AC-085, AC-086, AC-112, AC-118, AC-152, AC-175, AC-176, AC-181, AC-182, AC-186, AC-194, AC-196, AC-200, AC-202, AC-216, AC-221, AC-225, AC-231, AC-300, AC-301, AC-302, AC-303
+Verified by: AC-015, AC-068, AC-085, AC-086, AC-112, AC-118, AC-152, AC-175, AC-176, AC-181, AC-182, AC-186, AC-194, AC-196, AC-200, AC-202, AC-216, AC-221, AC-225, AC-231, AC-300, AC-301, AC-302, AC-303, AC-315, AC-316, AC-317, AC-318, AC-319
 
 **REQ-01-489**
 `display_name_line_v1` is the required single-line display-name contract.
@@ -4719,6 +5239,26 @@ Verified by: AC-175, AC-176, AC-178, AC-231, AC-247, AC-277, AC-279, AC-311, AC-
 Profiles: base
 Verified by: AC-277, AC-231
 
+**REQ-01-521**
+`local_password_provision_v1` is the required exact-string secret-input contract for local-password provisioning surfaces.
+
+- evaluate input after JSON decoding,
+- accepted non-null input MUST be a JSON string,
+- MUST NOT apply Unicode NFC normalization,
+- MUST NOT trim leading or trailing Unicode whitespace,
+- MUST NOT case-fold,
+- MUST NOT normalize line endings,
+- leading and trailing whitespace are significant,
+- reject input composed entirely of Unicode whitespace code points,
+- reject every C0 or C1 control code point,
+- enforce a minimum length of 12 Unicode scalar values after JSON decoding,
+- enforce a maximum length of 1024 Unicode scalar values after JSON decoding,
+- idempotency equality and structurally valid no-op comparison MUST use exact post-decoding code-point equality,
+- this contract defines only transport, validation, canonical comparison, and rejection boundaries; it does not define password-composition policy beyond those boundaries,
+- when the binding is required, `null`, non-string, all-whitespace, control-bearing, shorter-than-minimum, or longer-than-maximum input is invalid.
+Profiles: base
+Verified by: AC-175, AC-176, AC-231, AC-244, AC-245
+
 ## 18A. Direct-scalar timestamp contract registry
 
 The base profile currently closes exactly one writable direct-temporal-scalar contract: `timestamp_instant_v1`.
@@ -4734,6 +5274,51 @@ A field entry or create-time member binding that declares `direct_scalar_contrac
 
 The base profile defines no other writable direct-temporal-scalar contract.
 
+## 18B. Writable direct-reference-scalar contract registry
+
+**REQ-01-516**
+Any writable direct-reference scalar surface closed by this core MUST bind to one `direct_reference_contract_id` from the closed registry in this section. These surfaces remain direct-write fields that use `value` under §3.3.5. A writable direct-reference scalar surface MUST NOT be reclassified as an `action_payload` field unless a later version defines a distinct write-action contract for that surface.
+Profiles: base
+Verified by: AC-315, AC-317, AC-319
+
+**REQ-01-517**
+Unless a bound contract below explicitly says otherwise:
+
+- on patch, omission means unchanged,
+- on patch, authoritative clear for a clearable direct-reference scalar MUST be explicit JSON `null`,
+- on create, omission and explicit JSON `null` compare equal only when the bound field is optional and the resulting authoritative state is `null`,
+- when the binding is non-clearable, explicit JSON `null` MUST be rejected,
+- the empty string is never a clear token and MUST be rejected,
+- numbers, booleans, arrays, and objects MUST be rejected,
+- non-null values MUST be exact stable identifiers only.
+Profiles: base
+Verified by: AC-315, AC-316, AC-317, AC-319
+
+**REQ-01-518**
+For any direct-reference contract in this section, the contract layer MUST NOT trim, case-fold, label-resolve, email-resolve, fuzzy-match, or auto-create a target from a non-null submitted value. Any target-type, same-incident, active-row, or authorization checks remain owned by the bound field's view-schema entry and the authoritative domain-model rules.
+Profiles: base
+Verified by: AC-317, AC-319
+
+**REQ-01-519**
+`same_incident_party_ref_v1` is the exact same-incident party-reference contract.
+
+- accepted non-null input is a JSON string whose exact value is one stable `party_id`,
+- `null` clears only when the bound field entry declares `clearable=true`,
+- a submitted value that is not one exact `party_id` string is invalid,
+- same-incident active-party validation remains governed by the owning field contract and Core 02 §19.
+Profiles: base
+Verified by: AC-315, AC-316, AC-317, AC-318
+
+**REQ-01-520**
+`same_incident_decision_ref_v1` is the exact same-incident decision-reference contract.
+
+- accepted non-null input is a JSON string whose exact value is one stable `record_id`,
+- the addressed target MUST be an active same-incident `decision` record,
+- `null` clears only when the bound field entry declares `clearable=true`,
+- if the bound field is realized as a denormalized convenience scalar over authoritative `record_links`, set and clear operations MUST update the convenience field and the authoritative distinguished decision association atomically.
+Profiles: base
+Verified by: AC-315, AC-316, AC-317, AC-319
+
 ## 19. Parties system-view addendum
 
 **REQ-01-499**
@@ -4744,13 +5329,14 @@ The base profile defines no other writable direct-temporal-scalar contract.
 - `default_visible_fields`: `party.display_name`, `party.party_kind`, `party.organization_name`, `party.role_title`, `party.primary_email`, `party.timezone_name`, `party.external_ref`, `party.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `party.notes`
 - `default_sort`: `party.display_name asc`, `record_id asc`
+- `sort_fields`: `party.display_name`, `party.party_kind`, `party.organization_name`, `party.role_title`, `party.primary_email`, `party.timezone_name`, `party.external_ref`, `party.updated_at`
 - `filter_fields`: `party.display_name`, `party.party_kind`, `party.organization_name`, `party.primary_email`, `party.external_ref`, `party.updated_at`
 Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-231, AC-277
 
 **REQ-01-500**
 - inline create: zero-field create is forbidden
-- minimum create set: blank-row or equivalent grid-native creation MUST commit only when `party.display_name` is non-empty and `party.party_kind` is present after create-time normalization
+- minimum create set: inline create from the sheet itself MUST commit only when `party.display_name` is non-empty and `party.party_kind` is present after create-time normalization
 - server-managed timestamps, attribution, and `row_version` MUST NOT satisfy the minimum create set
 - ordinary grid edits to `party.display_name`, `party.party_kind`, `party.organization_name`, `party.role_title`, `party.primary_email`, `party.timezone_name`, `party.external_ref`, and `party.notes` are permitted subject to their field contracts
 Profiles: base
@@ -4773,21 +5359,22 @@ Verified by: AC-118, AC-231, AC-277
 **REQ-01-502**
 Hidden writable party-link fields on other base-profile surfaces MUST remain supplemental to the visible source-preserving text fields. In particular, `task.requester_party_id`, `evidence.collector_party_id`, and `evidence.source_party_id` MAY be written through inspector or same-surface enrichment flows, but they MUST NOT replace the visible text fields or require those fields to be shown as mandatory grid columns.
 Profiles: base
-Verified by: AC-118, AC-231, AC-278, AC-279
+Verified by: AC-118, AC-231, AC-278, AC-279, AC-318
 
 ### Additional coordination and optional artifact-backed surface addenda
 
 **REQ-01-503**
-- surface: workbook-native coordination surface for `cartulary.view.comm_log.v1`; an implementation MAY expose it either as a contract-backed system view or as an implementation-owned `scope='system'` saved view bound to this exact `view_schema_id`
+- surface: required workbook-native coordination surface with canonical public identity `cartulary.view.comm_log.v1`; any saved view over this same `view_schema_id` is a distinct saved-view object rather than the required base surface
 - source record types: `artifact` filtered to `artifact_type='comm_log'`
 - base projection: `artifact_grid_projection` filtered to `artifact_type='comm_log'`
 - `default_visible_fields`: `comm_log.timestamp_utc`, `comm_log.comm_type`, `comm_log.audience`, `comm_log.channel_or_meeting`, `comm_log.summary`, `comm_log.next_report_at`, `comm_log.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `comm_log.comm_id`, `comm_log.privilege_tag`, `comm_log.decision_ids`, `comm_log.action_task_ids`, `comm_log.audience_party_ids`, `comm_log.attendee_party_ids`, `comm_log.timestamp_day`, `comm_log.next_report_day`
 - `default_sort`: `comm_log.timestamp_utc desc`, `record_id asc`
+- `sort_fields`: `comm_log.timestamp_utc`, `comm_log.comm_type`, `comm_log.audience`, `comm_log.channel_or_meeting`, `comm_log.summary`, `comm_log.next_report_at`, `comm_log.updated_at`, `comm_log.privilege_tag`, `comm_log.timestamp_day`, `comm_log.next_report_day`
 - `filter_fields`: `comm_log.comm_type`, `comm_log.timestamp_day`, `comm_log.next_report_day`, `comm_log.audience`, `comm_log.channel_or_meeting`, `comm_log.privilege_tag`
 - `grouping_fields`: `comm_log.comm_type`, `comm_log.timestamp_day`, `comm_log.next_report_day`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `comm_log.comm_type` is present and `comm_log.audience`, `comm_log.channel_or_meeting`, and `comm_log.summary` are non-empty after create-time normalization
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `comm_log.comm_type` is present and `comm_log.audience`, `comm_log.channel_or_meeting`, and `comm_log.summary` are non-empty after create-time normalization
 - when omitted on create, the server MUST generate `comm_log.comm_id`, default `comm_log.timestamp_utc` to the commit timestamp, default `comm_log.decision_ids`, `comm_log.action_task_ids`, `comm_log.audience_party_ids`, and `comm_log.attendee_party_ids` to empty collections, and default `comm_log.next_report_at` plus `comm_log.privilege_tag` to `null`
 - these defaults MUST NOT satisfy the minimum create signal
 - writable fields:
@@ -4798,26 +5385,56 @@ Verified by: AC-118, AC-231, AC-278, AC-279
   - `comm_log.summary`: read `summary`; write target the `summary` field on the underlying `comm_log` artifact subtype; `string_contract_id=single_line_title_v1`; `conflict_resolution_class=text_compare_merge`
   - `comm_log.next_report_at`: read `next_report_at`; write target the `next_report_at` field on the underlying `comm_log` artifact subtype; `direct_scalar_contract_id=timestamp_instant_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
   - `comm_log.privilege_tag`: read `privilege_tag`; write target the `privilege_tag` field on the underlying `comm_log` artifact subtype; `string_contract_id=single_line_title_v1`; `conflict_resolution_class=atomic_replace`
-  - `comm_log.decision_ids`: read linked decision references; write action upsert or remove linked decision references or equivalent denormalized refs; `conflict_resolution_class=collection_review`
-  - `comm_log.action_task_ids`: read linked task-request references; write action upsert or remove linked task-request references or equivalent denormalized refs; `conflict_resolution_class=collection_review`
-  - `comm_log.audience_party_ids`: read supplemental audience party references; write action upsert or remove same-incident party references; `conflict_resolution_class=collection_review`
-  - `comm_log.attendee_party_ids`: read supplemental attendee party references; write action upsert or remove same-incident party references; `conflict_resolution_class=collection_review`
+  - `comm_log.decision_ids`: read linked decision references; write action upsert or remove same-incident `decision` references using the `record_ref` family defined below; `conflict_resolution_class=collection_review`
+  - `comm_log.action_task_ids`: read linked task-request references; write action upsert or remove same-incident `task_request` references using the `record_ref` family defined below; `conflict_resolution_class=collection_review`
+  - `comm_log.audience_party_ids`: read supplemental audience party references; write action upsert or remove same-incident `party` references using the `party_ref` family defined below; `conflict_resolution_class=collection_review`
+  - `comm_log.attendee_party_ids`: read supplemental attendee party references; write action upsert or remove same-incident `party` references using the `party_ref` family defined below; `conflict_resolution_class=collection_review`
+- collection-review wire contract:
+  - `comm_log.decision_ids` and `comm_log.action_task_ids` MUST use the exact `collection_value_v1` item shape and `collection_actions_v1` action vocabulary defined for `assessment.support_refs` in `REQ-01-333` and `REQ-01-334`, except the active `field_key` is `comm_log.decision_ids` or `comm_log.action_task_ids` and the server derives `references_record` routing from that field key under `REQ-01-311`.
+  - `comm_log.decision_ids` accepts only same-incident active `decision` targets. `comm_log.action_task_ids` accepts only same-incident active `task_request` targets.
+  - For those two `record_ref` fields, duplicate adds for the same patched `record_id`, `linked_record_id`, and active `field_key` MUST coalesce to one surviving logical reference binding. Removal MUST target `item_ref` only. A target from another incident, a target of the wrong `record_type`, a soft-deleted target, or an invalid or foreign `item_ref` MUST fail with `400 Bad Request` and `error.code = invalid_mutation_payload`.
+  - `comm_log.audience_party_ids` and `comm_log.attendee_party_ids` MUST use `collection_value_v1` with `ordered=false`.
+  - Each `items[]` entry MUST use this shape:
+
+```json
+{
+  "item_ref": "party_ref:<party_id>",
+  "item_kind": "party_ref",
+  "display_text": "<party display_name>",
+  "party_id": "<party_id>"
+}
+```
+
+  - Allowed actions are:
+
+```json
+{ "op": "add_party_ref", "party_id": "<party_id>" }
+```
+
+```json
+{ "op": "remove_party_ref", "item_ref": "party_ref:<party_id>" }
+```
+
+  - `party_id` in `add_party_ref` MUST identify a same-incident active `party` record.
+  - Duplicate adds for the same patched `record_id`, `party_id`, and active `field_key` MUST coalesce to one surviving logical reference binding. Removal MUST target `item_ref` only. A target from another incident, a target of the wrong `record_type`, a soft-deleted target, or an invalid or foreign `item_ref` MUST fail with `400 Bad Request` and `error.code = invalid_mutation_payload`.
 - read-only computed or system-managed fields: `comm_log.comm_id`, `comm_log.timestamp_day`, `comm_log.next_report_day`, `comm_log.updated_at`
 - `comm_log.audience` remains required source-preserving text even when supplemental party references are present
+- removing a supplemental party reference MUST NOT clear or rewrite `comm_log.audience`
 Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-231, AC-281, AC-300, AC-301, AC-302, AC-303
 
 **REQ-01-504**
-- surface: workbook-native coordination surface for `cartulary.view.handoff.v1`; an implementation MAY expose it either as a contract-backed system view or as an implementation-owned `scope='system'` saved view bound to this exact `view_schema_id`
+- surface: required workbook-native coordination surface with canonical public identity `cartulary.view.handoff.v1`; any saved view over this same `view_schema_id` is a distinct saved-view object rather than the required base surface
 - source record types: `artifact` filtered to `artifact_type='handoff'`
 - base projection: `artifact_grid_projection` filtered to `artifact_type='handoff'`
 - `default_visible_fields`: `handoff.timestamp_utc`, `handoff.outgoing_owner_user_id`, `handoff.incoming_owner_user_id`, `handoff.current_state_summary`, `handoff.next_checks`, `handoff.acknowledged_at`, `handoff.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `handoff.handoff_id`, `handoff.open_task_ids`, `handoff.open_decision_ids`, `handoff.open_risk_refs`, `handoff.timestamp_day`, `handoff.ack_state`
 - `default_sort`: `handoff.timestamp_utc desc`, `record_id asc`
+- `sort_fields`: `handoff.timestamp_utc`, `handoff.outgoing_owner_user_id`, `handoff.incoming_owner_user_id`, `handoff.current_state_summary`, `handoff.next_checks`, `handoff.acknowledged_at`, `handoff.updated_at`, `handoff.timestamp_day`, `handoff.ack_state`
 - `filter_fields`: `handoff.timestamp_day`, `handoff.outgoing_owner_user_id`, `handoff.incoming_owner_user_id`, `handoff.ack_state`
 - `grouping_fields`: `handoff.timestamp_day`, `handoff.outgoing_owner_user_id`, `handoff.incoming_owner_user_id`, `handoff.ack_state`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `handoff.incoming_owner_user_id` is present and `handoff.current_state_summary` is non-empty after create-time normalization
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `handoff.incoming_owner_user_id` is present and `handoff.current_state_summary` is non-empty after create-time normalization
 - when omitted on create, the server MUST generate `handoff.handoff_id`, default `handoff.timestamp_utc` to the commit timestamp, default `handoff.outgoing_owner_user_id` to the authenticated actor, default `handoff.open_task_ids`, `handoff.open_decision_ids`, and `handoff.open_risk_refs` to empty collections, and default `handoff.next_checks` plus `handoff.acknowledged_at` to `null`
 - these defaults MUST NOT satisfy the minimum create signal
 - writable fields:
@@ -4825,53 +5442,90 @@ Verified by: AC-116, AC-117, AC-118, AC-231, AC-281, AC-300, AC-301, AC-302, AC-
   - `handoff.outgoing_owner_user_id`: read `outgoing_owner_user_id`; write target the `outgoing_owner_user_id` field on the underlying `handoff` artifact subtype; `conflict_resolution_class=atomic_replace`
   - `handoff.incoming_owner_user_id`: read `incoming_owner_user_id`; write target the `incoming_owner_user_id` field on the underlying `handoff` artifact subtype; `conflict_resolution_class=atomic_replace`
   - `handoff.current_state_summary`: read `current_state_summary`; write target the `current_state_summary` field on the underlying `handoff` artifact subtype; `string_contract_id=multiline_body_v1`; `conflict_resolution_class=text_compare_merge`
-  - `handoff.open_task_ids`: read linked task-request references; write action upsert or remove linked task-request references or equivalent denormalized refs; `conflict_resolution_class=collection_review`
-  - `handoff.open_decision_ids`: read linked decision references; write action upsert or remove linked decision references or equivalent denormalized refs; `conflict_resolution_class=collection_review`
-  - `handoff.open_risk_refs`: read open risk references; write action upsert or remove structured risk references; `conflict_resolution_class=collection_review`
+  - `handoff.open_task_ids`: read linked task-request references; write action upsert or remove same-incident `task_request` references using the `record_ref` family defined below; `conflict_resolution_class=collection_review`
+  - `handoff.open_decision_ids`: read linked decision references; write action upsert or remove same-incident `decision` references using the `record_ref` family defined below; `conflict_resolution_class=collection_review`
+  - `handoff.open_risk_refs`: read open risk references; write action upsert or remove structured risk references using the `risk_ref` family defined below; `conflict_resolution_class=collection_review`
   - `handoff.next_checks`: read `next_checks`; write target the `next_checks` field on the underlying `handoff` artifact subtype; `string_contract_id=multiline_body_v1`; `conflict_resolution_class=text_compare_merge`
   - `handoff.acknowledged_at`: read `acknowledged_at`; write target the `acknowledged_at` field on the underlying `handoff` artifact subtype; `direct_scalar_contract_id=timestamp_instant_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
+- collection-review wire contract:
+  - `handoff.open_task_ids` and `handoff.open_decision_ids` MUST use the exact `collection_value_v1` item shape and `collection_actions_v1` action vocabulary defined for `assessment.support_refs` in `REQ-01-333` and `REQ-01-334`, except the active `field_key` is `handoff.open_task_ids` or `handoff.open_decision_ids` and the server derives `references_record` routing from that field key under `REQ-01-311`.
+  - `handoff.open_task_ids` accepts only same-incident active `task_request` targets. `handoff.open_decision_ids` accepts only same-incident active `decision` targets.
+  - For those two `record_ref` fields, duplicate adds for the same patched `record_id`, `linked_record_id`, and active `field_key` MUST coalesce to one surviving logical reference binding. Removal MUST target `item_ref` only. A target from another incident, a target of the wrong `record_type`, a soft-deleted target, or an invalid or foreign `item_ref` MUST fail with `400 Bad Request` and `error.code = invalid_mutation_payload`.
+  - `handoff.open_risk_refs` MUST use `collection_value_v1` with `ordered=false`.
+  - Each `items[]` entry MUST use this shape:
+
+```json
+{
+  "item_ref": "risk_ref:<risk_ref_id>",
+  "item_kind": "risk_ref",
+  "display_text": "<risk_ref_text>",
+  "risk_ref_id": "<risk_ref_id>",
+  "risk_ref_text": "<source-preserving risk text>"
+}
+```
+
+  - Allowed actions are:
+
+```json
+{ "op": "add_risk_ref", "risk_ref_text": "<text>" }
+```
+
+```json
+{ "op": "remove_risk_ref", "item_ref": "risk_ref:<risk_ref_id>" }
+```
+
+  - `risk_ref_text` in `add_risk_ref` MUST use `string_contract_id=single_line_title_v1`.
+  - Duplicate adds for the same patched `record_id`, active `field_key`, and normalized `risk_ref_text` under `single_line_title_v1` MUST coalesce to one surviving active risk reference. Removal MUST target `item_ref` only.
+  - `risk_ref_id` MUST be a stable server-generated child-row identifier. Clients MUST NOT derive or predict `risk_ref_id` from raw text or a public hash.
+  - An invalid or foreign `item_ref` MUST fail with `400 Bad Request` and `error.code = invalid_mutation_payload`.
 - read-only computed or system-managed fields: `handoff.handoff_id`, `handoff.timestamp_day`, `handoff.ack_state`, `handoff.updated_at`
 - `handoff.ack_state` MUST be `acknowledged` when `handoff.acknowledged_at` is non-null and `pending` otherwise
 Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-231, AC-282, AC-300, AC-301, AC-302, AC-303
 
 **REQ-01-505**
-- surface: workbook-native coordination surface for `cartulary.view.status_review.v1`; an implementation MAY expose it either as a contract-backed system view or as an implementation-owned `scope='system'` saved view bound to this exact `view_schema_id`
+- surface: required workbook-native coordination surface with canonical public identity `cartulary.view.status_review.v1`; any saved view over this same `view_schema_id` is a distinct saved-view object rather than the required base surface
 - source record types: `artifact` filtered to `artifact_type='status_review'`
 - base projection: `artifact_grid_projection` filtered to `artifact_type='status_review'`
 - `default_visible_fields`: `status_review.timestamp_utc`, `status_review.review_owner_user_id`, `status_review.current_state_summary`, `status_review.active_risks_summary`, `status_review.next_report_at`, `status_review.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `status_review.status_review_id`, `status_review.blocked_task_ids`, `status_review.pending_evidence_ids`, `status_review.open_decision_ids`, `status_review.timestamp_day`, `status_review.next_report_day`
 - `default_sort`: `status_review.timestamp_utc desc`, `record_id asc`
+- `sort_fields`: `status_review.timestamp_utc`, `status_review.review_owner_user_id`, `status_review.current_state_summary`, `status_review.active_risks_summary`, `status_review.next_report_at`, `status_review.updated_at`, `status_review.timestamp_day`, `status_review.next_report_day`
 - `filter_fields`: `status_review.timestamp_day`, `status_review.review_owner_user_id`, `status_review.next_report_day`
 - `grouping_fields`: `status_review.timestamp_day`, `status_review.review_owner_user_id`, `status_review.next_report_day`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `status_review.current_state_summary` is non-empty after create-time normalization
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `status_review.current_state_summary` is non-empty after create-time normalization
 - when omitted on create, the server MUST generate `status_review.status_review_id`, default `status_review.timestamp_utc` to the commit timestamp, default `status_review.review_owner_user_id` to the authenticated actor, default `status_review.blocked_task_ids`, `status_review.pending_evidence_ids`, and `status_review.open_decision_ids` to empty collections, and default `status_review.active_risks_summary` plus `status_review.next_report_at` to `null`
 - these defaults MUST NOT satisfy the minimum create signal
 - writable fields:
   - `status_review.timestamp_utc`: read `timestamp_utc`; write target the `timestamp_utc` field on the underlying `status_review` artifact subtype; `direct_scalar_contract_id=timestamp_instant_v1`; `clearable=false`; `conflict_resolution_class=atomic_replace`
   - `status_review.review_owner_user_id`: read `review_owner_user_id`; write target the `review_owner_user_id` field on the underlying `status_review` artifact subtype; `conflict_resolution_class=atomic_replace`
   - `status_review.current_state_summary`: read `current_state_summary`; write target the `current_state_summary` field on the underlying `status_review` artifact subtype; `string_contract_id=multiline_body_v1`; `conflict_resolution_class=text_compare_merge`
-  - `status_review.blocked_task_ids`: read linked blocked task references; write action upsert or remove linked task-request references or equivalent denormalized refs; `conflict_resolution_class=collection_review`
-  - `status_review.pending_evidence_ids`: read linked pending evidence references; write action upsert or remove linked evidence references or equivalent denormalized refs; `conflict_resolution_class=collection_review`
-  - `status_review.open_decision_ids`: read linked decision references; write action upsert or remove linked decision references or equivalent denormalized refs; `conflict_resolution_class=collection_review`
+  - `status_review.blocked_task_ids`: read linked blocked task references; write action upsert or remove same-incident `task_request` references using the `record_ref` family defined below; `conflict_resolution_class=collection_review`
+  - `status_review.pending_evidence_ids`: read linked pending evidence references; write action upsert or remove same-incident `evidence` references using the `record_ref` family defined below; `conflict_resolution_class=collection_review`
+  - `status_review.open_decision_ids`: read linked decision references; write action upsert or remove same-incident `decision` references using the `record_ref` family defined below; `conflict_resolution_class=collection_review`
   - `status_review.active_risks_summary`: read `active_risks_summary`; write target the `active_risks_summary` field on the underlying `status_review` artifact subtype; `string_contract_id=multiline_body_v1`; `conflict_resolution_class=text_compare_merge`
   - `status_review.next_report_at`: read `next_report_at`; write target the `next_report_at` field on the underlying `status_review` artifact subtype; `direct_scalar_contract_id=timestamp_instant_v1`; `clearable=true`; `conflict_resolution_class=atomic_replace`
+- collection-review wire contract:
+  - `status_review.blocked_task_ids`, `status_review.pending_evidence_ids`, and `status_review.open_decision_ids` MUST use the exact `collection_value_v1` item shape and `collection_actions_v1` action vocabulary defined for `assessment.support_refs` in `REQ-01-333` and `REQ-01-334`, except the active `field_key` is the patched coordination field and the server derives `references_record` routing from that field key under `REQ-01-311`.
+  - Accepted targets are same-incident active `task_request` for `status_review.blocked_task_ids`, same-incident active `evidence` for `status_review.pending_evidence_ids`, and same-incident active `decision` for `status_review.open_decision_ids`.
+  - Duplicate adds for the same patched `record_id`, `linked_record_id`, and active `field_key` MUST coalesce to one surviving logical reference binding. Removal MUST target `item_ref` only. A target from another incident, a target of the wrong `record_type`, a soft-deleted target, or an invalid or foreign `item_ref` MUST fail with `400 Bad Request` and `error.code = invalid_mutation_payload`.
 - read-only computed or system-managed fields: `status_review.status_review_id`, `status_review.timestamp_day`, `status_review.next_report_day`, `status_review.updated_at`
 Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-231, AC-283, AC-300, AC-301, AC-302, AC-303
 
 **REQ-01-506**
-- surface: workbook-native coordination surface for `cartulary.view.lesson.v1`; an implementation MAY expose it either as a contract-backed system view or as an implementation-owned `scope='system'` saved view bound to this exact `view_schema_id`
+- surface: required workbook-native coordination surface with canonical public identity `cartulary.view.lesson.v1`; any saved view over this same `view_schema_id` is a distinct saved-view object rather than the required base surface
 - source record types: `artifact` filtered to `artifact_type='lesson'`
 - base projection: `artifact_grid_projection` filtered to `artifact_type='lesson'`
 - `default_visible_fields`: `lesson.timestamp_utc`, `lesson.summary`, `lesson.owner_user_id`, `lesson.closure_state`, `lesson.follow_up_task_ids`, `lesson.evidence_refs`, `lesson.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `lesson.lesson_id`, `lesson.timestamp_day`
 - `default_sort`: `lesson.timestamp_utc desc`, `record_id asc`
+- `sort_fields`: `lesson.timestamp_utc`, `lesson.summary`, `lesson.owner_user_id`, `lesson.closure_state`, `lesson.updated_at`, `lesson.timestamp_day`
 - `filter_fields`: `lesson.closure_state`, `lesson.owner_user_id`, `lesson.timestamp_day`
 - `grouping_fields`: `lesson.closure_state`, `lesson.owner_user_id`, `lesson.timestamp_day`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `lesson.summary` is non-empty after create-time normalization
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `lesson.summary` is non-empty after create-time normalization
 - when omitted on create, the server MUST generate `lesson.lesson_id`, default `lesson.timestamp_utc` to the commit timestamp, default `lesson.owner_user_id` to the authenticated actor, default `lesson.follow_up_task_ids` and `lesson.evidence_refs` to empty collections, and default `lesson.closure_state` to `open`
 - these defaults MUST NOT satisfy the minimum create signal
 - writable fields:
@@ -4879,8 +5533,12 @@ Verified by: AC-116, AC-117, AC-118, AC-231, AC-283, AC-300, AC-301, AC-302, AC-
   - `lesson.summary`: read `summary`; write target the `summary` field on the underlying `lesson` artifact subtype; `string_contract_id=single_line_title_v1`; `conflict_resolution_class=text_compare_merge`
   - `lesson.owner_user_id`: read `owner_user_id`; write target the `owner_user_id` field on the underlying `lesson` artifact subtype; `conflict_resolution_class=atomic_replace`
   - `lesson.closure_state`: read `closure_state`; write target the `closure_state` field on the underlying `lesson` artifact subtype; `conflict_resolution_class=atomic_replace`
-  - `lesson.follow_up_task_ids`: read linked follow-up task references; write action upsert or remove linked task-request references or equivalent denormalized refs; `conflict_resolution_class=collection_review`
-  - `lesson.evidence_refs`: read linked evidence references; write action upsert or remove linked evidence references or equivalent denormalized refs; `conflict_resolution_class=collection_review`
+  - `lesson.follow_up_task_ids`: read linked follow-up task references; write action upsert or remove same-incident `task_request` references using the `record_ref` family defined below; `conflict_resolution_class=collection_review`
+  - `lesson.evidence_refs`: read linked evidence references; write action upsert or remove same-incident `evidence` references using the `record_ref` family defined below; `conflict_resolution_class=collection_review`
+- collection-review wire contract:
+  - `lesson.follow_up_task_ids` and `lesson.evidence_refs` MUST use the exact `collection_value_v1` item shape and `collection_actions_v1` action vocabulary defined for `assessment.support_refs` in `REQ-01-333` and `REQ-01-334`, except the active `field_key` is `lesson.follow_up_task_ids` or `lesson.evidence_refs` and the server derives `references_record` routing from that field key under `REQ-01-311`.
+  - Accepted targets are same-incident active `task_request` for `lesson.follow_up_task_ids` and same-incident active `evidence` for `lesson.evidence_refs`.
+  - Duplicate adds for the same patched `record_id`, `linked_record_id`, and active `field_key` MUST coalesce to one surviving logical reference binding. Removal MUST target `item_ref` only. A target from another incident, a target of the wrong `record_type`, a soft-deleted target, or an invalid or foreign `item_ref` MUST fail with `400 Bad Request` and `error.code = invalid_mutation_payload`.
 - read-only computed or system-managed fields: `lesson.lesson_id`, `lesson.timestamp_day`, `lesson.updated_at`
 Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-231, AC-284, AC-300, AC-302, AC-303
@@ -4892,10 +5550,11 @@ Verified by: AC-116, AC-117, AC-118, AC-231, AC-284, AC-300, AC-302, AC-303
 - `default_visible_fields`: `finding.statement`, `finding.state`, `finding.owner_user_id`, `finding.confidence_score`, `finding.closed_at`, `finding.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `finding.supporting_refs`, `finding.contradictory_refs`, `finding.confidence_band`
 - `default_sort`: `finding.updated_at desc`, `record_id asc`
+- `sort_fields`: `finding.statement`, `finding.state`, `finding.owner_user_id`, `finding.confidence_score`, `finding.closed_at`, `finding.updated_at`, `finding.confidence_band`
 - `filter_fields`: `finding.state`, `finding.owner_user_id`, `finding.confidence_band`, `finding.closed_at`
 - `grouping_fields`: `finding.state`, `finding.owner_user_id`, `finding.confidence_band`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `finding.statement` is non-empty after create-time normalization
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `finding.statement` is non-empty after create-time normalization
 - when omitted on create, the server MUST default `finding.state` to `open`, default `finding.owner_user_id` to the authenticated actor, and default `finding.confidence_score` plus `finding.closed_at` to `null`
 - these defaults MUST NOT satisfy the minimum create signal
 - writable fields:
@@ -4916,10 +5575,11 @@ Verified by: AC-116, AC-117, AC-118, AC-231, AC-285
 - `default_visible_fields`: `investigative_query.platform`, `investigative_query.purpose`, `investigative_query.query_text`, `investigative_query.created_by_user_id`, `investigative_query.created_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `investigative_query.query_id`, `investigative_query.created_day`
 - `default_sort`: `investigative_query.created_at desc`, `record_id asc`
+- `sort_fields`: `investigative_query.platform`, `investigative_query.purpose`, `investigative_query.query_text`, `investigative_query.created_by_user_id`, `investigative_query.created_at`, `investigative_query.created_day`
 - `filter_fields`: `investigative_query.platform`, `investigative_query.purpose`, `investigative_query.created_by_user_id`, `investigative_query.created_day`
 - `grouping_fields`: `investigative_query.platform`, `investigative_query.created_by_user_id`, `investigative_query.created_day`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `investigative_query.platform`, `investigative_query.purpose`, and `investigative_query.query_text` are non-empty after create-time normalization
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `investigative_query.platform`, `investigative_query.purpose`, and `investigative_query.query_text` are non-empty after create-time normalization
 - when omitted on create, the server MUST generate `investigative_query.query_id`, default `investigative_query.created_by_user_id` to the authenticated actor, and default `investigative_query.created_at` to the commit timestamp
 - these defaults MUST NOT satisfy the minimum create signal
 - writable fields:
@@ -4937,10 +5597,11 @@ Verified by: AC-116, AC-117, AC-118, AC-231, AC-286
 - `default_visible_fields`: `forensic_keyword.pattern`, `forensic_keyword.reason`, `forensic_keyword.match_mode`, `forensic_keyword.case_sensitive`, `forensic_keyword.created_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `forensic_keyword.keyword_id`, `forensic_keyword.created_day`
 - `default_sort`: `forensic_keyword.created_at desc`, `record_id asc`
+- `sort_fields`: `forensic_keyword.pattern`, `forensic_keyword.reason`, `forensic_keyword.match_mode`, `forensic_keyword.case_sensitive`, `forensic_keyword.created_at`, `forensic_keyword.created_day`
 - `filter_fields`: `forensic_keyword.match_mode`, `forensic_keyword.case_sensitive`, `forensic_keyword.created_day`
 - `grouping_fields`: `forensic_keyword.match_mode`, `forensic_keyword.case_sensitive`, `forensic_keyword.created_day`
 - inline create: zero-field create is forbidden
-- minimum semantic create set: blank-row or equivalent grid-native creation MUST commit only when `forensic_keyword.pattern` and `forensic_keyword.reason` are non-empty after create-time normalization
+- minimum semantic create set: inline create from the sheet itself MUST commit only when `forensic_keyword.pattern` and `forensic_keyword.reason` are non-empty after create-time normalization
 - when omitted on create, the server MUST generate `forensic_keyword.keyword_id`, default `forensic_keyword.match_mode` to `literal`, default `forensic_keyword.case_sensitive` to `false`, and default `forensic_keyword.created_at` to the commit timestamp
 - these defaults MUST NOT satisfy the minimum create signal
 - writable fields:
@@ -4968,24 +5629,31 @@ Verified by: AC-235, AC-288, AC-290, AC-291
 **REQ-01-511**
 `GET /api/v1/auth/providers` MUST return the common success envelope with `data.providers[]`, sorted by `display_name asc`, then `provider_key asc`. Each item MUST contain exactly `provider_key`, `provider_type`, and `display_name`; `provider_type` on this route MUST be `oidc` or `saml`. The route MUST list only enabled interactive providers and MUST NOT expose provider secrets, raw metadata, claim maps, or provider-side policy. The route MUST reject `limit`, `cursor_token`, and pagination aliases with `400`, `error.code = invalid_pagination_request`, and `error.details.reason_code = pagination_not_supported`.
 
-`POST /api/v1/auth/providers/{provider_key}/begin` MUST accept only a JSON object with optional `return_to`. Omitted or explicit JSON `null` `return_to` means the deployment default post-login landing route. `return_to` MUST be a same-origin relative-path reference. Unknown top-level members, including `client_txn_id`, MUST fail with `400` and `error.code = invalid_enterprise_auth_request`. A successful `begin` response MUST return the common success envelope with `data.provider_key`, `data.provider_type`, `data.redirect_url`, and `data.expires_at`; it MUST create no public durable auth-transaction resource.
+`POST /api/v1/auth/providers/{provider_key}/begin` MUST accept only a JSON object with optional `return_to`. Omitted or explicit JSON `null` `return_to` MUST normalize to `/`. In the Enterprise Authentication Extension Profile, `/` is the canonical authenticated post-login landing route. After successful provider authentication, navigation to `/` MUST resolve in this order:
+
+1. if the resulting session has exactly one current visible incident membership, the browser MUST open that incident's workbook without an explicit launch `sheet_ref`;
+2. once that workbook open begins, startup-surface selection inside the workbook MUST use the ordered fallback owned by Core 03 §2.4;
+3. if the resulting session has zero visible incident memberships or more than one visible incident membership, the browser MUST remain on `/` and the application MUST render the caller's visible incident list;
+4. if step 1 selected a sole visible incident but that incident is no longer visible by workbook bootstrap time, the browser MUST remain on `/` and the application MUST render the caller's visible incident list.
+
+When more than one visible incident exists, the implementation MUST NOT implicitly choose one incident by recency, sort order, provider claim content, or any other heuristic. `return_to` MUST be a same-origin relative-path reference. Unknown top-level members, including `client_txn_id`, MUST fail with `400` and `error.code = invalid_enterprise_auth_request`. A successful `begin` response MUST return the common success envelope with `data.provider_key`, `data.provider_type`, `data.redirect_url`, and `data.expires_at`; it MUST create no public durable auth-transaction resource.
 Profiles: enterprise_authentication
 Verified by: AC-235, AC-288, AC-289
 
 **REQ-01-512**
-The OIDC callback and SAML ACS routes are browser protocol endpoints and are the only Enterprise Authentication family exception to the otherwise JSON-shaped public API. On success they MUST issue the same server-managed session family defined by §3.3.2.1 and MUST complete with `303 See Other` to the validated `return_to`. On failure they MUST create no session and MUST use the common error envelope. The current profile standardizes OIDC authorization-code flow only, with PKCE `S256` and `nonce` required. Implicit and hybrid OIDC flows are non-conformant. The current profile standardizes SAML SP-initiated flow only. IdP-initiated SAML is non-conformant.
+The OIDC callback and SAML ACS routes are browser protocol endpoints and are the only Enterprise Authentication family exception to the otherwise JSON-shaped public API. On success they MUST issue the same server-managed session family defined by §3.3.2.1 and MUST complete with `303 See Other` to the validated `return_to`. When the validated `return_to` resolves to a workbook surface, startup-surface selection inside that workbook MUST use the ordered fallback in Core 03 §2.4. The Enterprise Authentication Extension Profile MUST NOT define a separate workbook-startup fallback order. On failure they MUST create no session and MUST use the common error envelope. The current profile standardizes OIDC authorization-code flow only, with PKCE `S256` and `nonce` required. Implicit and hybrid OIDC flows are non-conformant. The current profile standardizes SAML SP-initiated flow only. IdP-initiated SAML is non-conformant.
 
 Enterprise-auth initiation MUST create one server-side single-use auth transaction bound at minimum to `provider_key`, `provider_type`, validated `return_to`, `started_at`, `expires_at`, browser-binding context, and protocol correlation material. For OIDC, correlation material MUST include `state`, `nonce`, and PKCE verifier material. For SAML, correlation material MUST include the SP-generated request correlation data and `RelayState`. `data.expires_at` returned by `begin` MUST be no later than 10 minutes after transaction creation. Replay, expiry, provider mismatch, or browser-binding mismatch MUST fail closed rather than silently minting a fresh transaction.
 Profiles: enterprise_authentication
 Verified by: AC-235, AC-290, AC-291
 
 **REQ-01-513**
-The authoritative provider-to-user bind key MUST be one active unique `(provider_id, provider_subject) -> user_id` mapping in deployment-local auth state. `provider_subject` is the authoritative external identifier. For OIDC, the default authoritative subject is `sub`. For SAML, each provider configuration MUST declare exactly one stable authoritative subject source. `email`, `username`, `display_name`, and similar provider claims are secondary profile attributes only. Group claims are not authorization inputs in the current profile. Successful provider authentication MUST NOT auto-create a local user, auto-create an `auth_identity`, auto-create incident membership, or map provider groups into incident roles.
+The authoritative provider-to-user bind key MUST be one active unique `(provider_id, provider_subject) -> user_id` mapping in deployment-local auth state. Enterprise-auth binding in the current profile is additive to an existing local user addressed by stable `user_id`; the current profile defines no enterprise-only user-creation path. `provider_subject` is the opaque authoritative external identifier and MUST compare by exact post-JSON-decoding code-point equality with no trimming, case-folding, Unicode normalization, or email-style normalization. For OIDC, the default authoritative subject is `sub`. For SAML, each provider configuration MUST declare exactly one stable authoritative subject source. `email`, `username`, `display_name`, and similar provider claims are secondary profile attributes only. Group claims are not authorization inputs in the current profile. Successful provider authentication MUST update `last_auth_at` on the resolved active binding only. Successful provider authentication MUST NOT auto-create a local user, auto-create an `auth_identity`, auto-create incident membership, or map provider groups into incident roles.
 Profiles: enterprise_authentication
 Verified by: AC-235, AC-292, AC-293
 
 **REQ-01-514**
-The Enterprise Authentication route family MUST use only `invalid_enterprise_auth_request`, `auth_provider_not_found`, `auth_provider_disabled`, `enterprise_auth_transaction_rejected`, `provider_response_rejected`, and `provider_identity_rejected`. `invalid_enterprise_auth_request` MUST use only `request_not_object`, `field_not_nullable`, `unknown_field`, and `return_to_not_allowed`. `enterprise_auth_transaction_rejected` MUST use only `not_found`, `expired`, `already_used`, `provider_mismatch`, and `browser_binding_mismatch`. `provider_response_rejected` MUST use only `missing_required_field`, `state_mismatch`, `relay_state_mismatch`, `nonce_mismatch`, `code_exchange_failed`, `issuer_mismatch`, `audience_mismatch`, `signature_invalid`, and `assertion_expired`. `provider_identity_rejected` MUST use only `subject_missing`, `no_linked_user`, `ambiguous_link`, and `inactive_user`.
+The Enterprise Authentication protocol routes under `/api/v1/auth/*` MUST use only `invalid_enterprise_auth_request`, `auth_provider_not_found`, `auth_provider_disabled`, `enterprise_auth_transaction_rejected`, `provider_response_rejected`, and `provider_identity_rejected`. `invalid_enterprise_auth_request` MUST use only `request_not_object`, `field_not_nullable`, `unknown_field`, and `return_to_not_allowed`. `enterprise_auth_transaction_rejected` MUST use only `not_found`, `expired`, `already_used`, `provider_mismatch`, and `browser_binding_mismatch`. `provider_response_rejected` MUST use only `missing_required_field`, `state_mismatch`, `relay_state_mismatch`, `nonce_mismatch`, `code_exchange_failed`, `issuer_mismatch`, `audience_mismatch`, `signature_invalid`, and `assertion_expired`. `provider_identity_rejected` MUST use only `subject_missing`, `no_linked_user`, `ambiguous_link`, and `inactive_user`.
 Profiles: enterprise_authentication
 Verified by: AC-235, AC-293
 
@@ -4993,3 +5661,34 @@ Verified by: AC-235, AC-293
 `POST /api/v1/auth/providers/{provider_key}/begin` is intentionally non-idempotent and MUST NOT accept `client_txn_id`. `GET /api/v1/auth/oidc/{provider_key}/callback` and `POST /api/v1/auth/saml/{provider_key}/acs` are intentionally non-idempotent protocol completion endpoints and MUST NOT accept `client_txn_id`. The current profile defines no public durable auth-transaction resource and no public transaction-recovery route. Replaying a structurally valid `begin` request MAY mint a fresh transaction and redirect target. Replaying a callback or ACS request after a successful completion or after transaction expiry MUST fail with `enterprise_auth_transaction_rejected` rather than succeeding a second time.
 Profiles: enterprise_authentication
 Verified by: AC-235, AC-289, AC-290, AC-291
+
+**REQ-01-537**
+The Enterprise Authentication Extension Profile MUST additionally expose these deployment-admin binding-management routes outside `/api/v1/auth/*`:
+
+- `POST /api/v1/users/{user_id}/auth-bindings`,
+- `POST /api/v1/users/{user_id}/auth-bindings/{auth_binding_id}/rotate`,
+- `DELETE /api/v1/users/{user_id}/auth-bindings/{auth_binding_id}`.
+
+These routes manage enterprise bindings only. They MUST NOT create, rotate, or retire the derived local binding summary.
+Profiles: enterprise_authentication
+Verified by: AC-348, AC-352
+
+**REQ-01-538**
+`POST /api/v1/users/{user_id}/auth-bindings` binds one enterprise-auth provider subject to the existing local user addressed by `user_id`. The route MUST accept only a JSON object with required `base_user_version`, required `client_txn_id`, required `provider_key`, required `provider_subject`, and optional `reason`. `reason`, when present, MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. Unknown top-level members, a non-object body, a missing required member, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_mutation_payload`. `provider_key` MUST identify a configured enterprise-auth provider of `provider_type='oidc'` or `provider_type='saml'`; a configured provider remains eligible for this route even when it is currently disabled for interactive sign-in. `provider_subject` MUST be a non-null JSON string. A first-time successful create MUST return `201 Created` with `data` equal to the resulting safe user resource. Route-scoped idempotency MUST be keyed by `(actor_user_id, user_id, client_txn_id)` and MUST compare exact `base_user_version`, exact `provider_key`, exact `provider_subject`, and normalized `reason`, with omitted `reason`, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` comparing equal. Exact replay of a previously committed success MUST return `200 OK` with the original committed result before fresh `user_version_conflict` or binding-state evaluation. Reuse of the same key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. If no prior committed idempotency hit exists and the current `user_version` differs from `base_user_version`, the route MUST fail with `409` and `error.code = user_version_conflict`. If no configured enterprise provider matches `provider_key`, or the matched provider is not of type `oidc` or `saml`, the route MUST fail with `404` and `error.code = auth_provider_not_found`. If another active binding already uses the same `(provider_id, provider_subject)`, the route MUST fail with `409`, `error.code = auth_binding_conflict`, and `error.details.reason_code = provider_subject_in_use`. If the addressed user already has one active binding for that same provider, the route MUST fail with `409`, `error.code = auth_binding_conflict`, and `error.details.reason_code = provider_already_linked_for_user`. This route MUST NOT create a local user, mutate incident membership, or mutate local credential state.
+Profiles: enterprise_authentication
+Verified by: AC-348, AC-349
+
+**REQ-01-539**
+`POST /api/v1/users/{user_id}/auth-bindings/{auth_binding_id}/rotate` MUST accept only a JSON object with required `base_user_version`, required `client_txn_id`, required `new_provider_subject`, and optional `reason`. `reason`, when present, MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. Unknown top-level members, a non-object body, a missing required member, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_mutation_payload`. `new_provider_subject` MUST be a non-null JSON string. The route is valid only for one active enterprise binding addressed by the supplied `{user_id, auth_binding_id}` pair. Rotation MUST preserve the same `user_id` and provider, MUST retire the addressed active binding and create one replacement binding atomically in one commit, MUST preserve audit lineage, and MUST NOT re-key the old binding in place. A first-time successful rotate MUST return `200 OK` with `data` equal to the resulting safe user resource. If `new_provider_subject` is exactly equal to the current active subject, the route MUST return `200 OK` as a structural no-op, MUST return the current safe user resource, and MUST NOT advance `user_version`. Route-scoped idempotency MUST be keyed by `(actor_user_id, auth_binding_id, client_txn_id)` and MUST compare exact `base_user_version`, exact `new_provider_subject`, and normalized `reason`, with omitted `reason`, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` comparing equal. Exact replay of a previously committed success MUST return `200 OK` with the original committed result before fresh `user_version_conflict` or binding-state evaluation. Reuse of the same key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. If no prior committed idempotency hit exists and the current `user_version` differs from `base_user_version`, the route MUST fail with `409` and `error.code = user_version_conflict`. If `{user_id, auth_binding_id}` identifies no current enterprise binding target, the route MUST fail with `404` and `error.code = auth_binding_not_found`. If the addressed binding is not active, the route MUST fail with `409`, `error.code = auth_binding_conflict`, and `error.details.reason_code = binding_not_active`. If another active binding already uses the same replacement `(provider_id, new_provider_subject)`, the route MUST fail with `409`, `error.code = auth_binding_conflict`, and `error.details.reason_code = provider_subject_in_use`. Rotation MUST NOT change the authoritative local email or local login identifier, MUST NOT mutate local credential state, and MUST NOT change incident memberships.
+Profiles: enterprise_authentication
+Verified by: AC-350, AC-352
+
+**REQ-01-540**
+`DELETE /api/v1/users/{user_id}/auth-bindings/{auth_binding_id}` MUST accept only a JSON object with required `base_user_version`, required `client_txn_id`, and optional `reason`. `reason`, when present, MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. Unknown top-level members, a non-object body, a missing required member, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_mutation_payload`. The route is valid only for one active enterprise binding addressed by the supplied `{user_id, auth_binding_id}` pair. Retirement MUST remove that binding from active callback resolution and from active `auth_bindings[]` summaries, MUST preserve deployment-local audit history, MUST NOT delete the local user, MUST NOT delete incident memberships, and MUST NOT change local credential state or the authoritative local email or login identifier. A first-time successful retire MUST return `200 OK` with `data` equal to the resulting safe user resource. Route-scoped idempotency MUST be keyed by `(actor_user_id, auth_binding_id, client_txn_id)` and MUST compare exact `base_user_version` and normalized `reason`, with omitted `reason`, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` comparing equal. Exact replay of a previously committed success MUST return `200 OK` with the original committed result before fresh `user_version_conflict` or binding-state evaluation. Reuse of the same key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. If no prior committed idempotency hit exists and the current `user_version` differs from `base_user_version`, the route MUST fail with `409` and `error.code = user_version_conflict`. If `{user_id, auth_binding_id}` identifies no current enterprise binding target, the route MUST fail with `404` and `error.code = auth_binding_not_found`. If the addressed binding is not active, the route MUST fail with `409`, `error.code = auth_binding_conflict`, and `error.details.reason_code = binding_not_active`.
+Profiles: enterprise_authentication
+Verified by: AC-351, AC-352
+
+**REQ-01-541**
+The binding-management routes in REQ-01-537..REQ-01-540 are part of the Enterprise Authentication Extension Profile but are not part of the `/api/v1/auth/*` protocol route family. They bind only existing local users addressed by stable `user_id`. Successful provider-auth callback MUST update `last_auth_at` on the resolved active binding only. After a successful rotate or retire, the superseded or retired `provider_subject` MUST fail future callbacks with `409`, `error.code = provider_identity_rejected`, and `error.details.reason_code = no_linked_user`. Switching providers is not a rotate operation in the current profile; the supported path is create a new active binding for the second provider and, if desired, retire the prior provider binding separately. These binding-management routes MUST reuse the common success and error envelopes, MUST reuse `auth_provider_not_found`, `user_version_conflict`, and `client_txn_conflict` where applicable, MUST use `auth_binding_not_found` when `{user_id, auth_binding_id}` identifies no visible current binding target, and MUST use `auth_binding_conflict` with the reason-code registry in §3.3.6.2 for active-binding state conflicts.
+Profiles: enterprise_authentication
+Verified by: AC-349, AC-350, AC-351, AC-352

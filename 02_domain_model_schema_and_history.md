@@ -84,12 +84,12 @@ Profiles: base
 Verified by: AC-231, AC-277
 
 **REQ-02-007**
-Internal users, auth-provider identities, sessions, and incident memberships are authoritative normalized administrative state but are not user-visible first-class incident records. They MUST NOT consume `record_id` values, MUST NOT be modeled as generic record-envelope rows, and MUST NOT be the target of workbook row-mutation routes.
+Internal users, auth-provider identities, sessions, incident memberships, local-account credential lifecycle state, and first-deployment-admin bootstrap-completion state are authoritative normalized administrative state but are not user-visible first-class incident records. They MUST NOT consume `record_id` values, MUST NOT be modeled as generic record-envelope rows, MUST NOT be the target of workbook row-mutation routes, and MUST NOT be serialized as incident-portability content.
 Profiles: base
 Verified by: AC-231
 
 **REQ-02-008**
-User-account and incident-membership mutations MUST remain auditable, but they MUST use a dedicated deployment-local administrative audit substrate rather than incident `change_set` or `record_revisions` rows.
+User-account, incident-membership, and successful first-deployment-admin bootstrap mutations MUST remain auditable, but they MUST use a dedicated deployment-local administrative audit substrate rather than incident `change_set` or `record_revisions` rows.
 Profiles: base
 Verified by: AC-231
 
@@ -147,7 +147,7 @@ JSONB MUST NOT be the authoritative storage for:
 Profiles: base
 Verified by: AC-097, AC-098, AC-099, AC-100, AC-101, AC-231
 
-Saved-view `query_json` MAY remain in JSONB only when it is normalized against the owning `view_schema_id` and uses stable `field_key` values, ordered sort/filter entries, optional `group_by`, and normalized scalar values. Saved-view `layout_json` MAY describe presentation only. Neither `query_json` nor `layout_json` MAY be the authoritative source for saved-view identity, scope, ownership, authorization, or startup/default surface selection.
+Saved-view `query_json` MAY remain in JSONB only when it stores the canonical persisted user query state rather than the route's applied effective sort. Persisted `query_json.sort` MUST always be an array and MUST use `[]` as the only canonical stored representation of no user sort override. Persisted `query_json.group_by` MUST be omitted when grouping is inactive and MUST NOT be stored as JSON `null`. Persisted `query_json.sort` stores only the normalized user sort override list; comparator policy, sortable-field eligibility, applied default-tail expansion, and response-side `meta.query` semantics remain owned by Core 01. Saved-view `layout_json` MAY describe presentation only. Neither `query_json` nor `layout_json` MAY be the authoritative source for saved-view identity, scope, ownership, authorization, or startup/default surface selection.
 
 **REQ-02-011**
 Multi-valued relationships MUST NOT remain only in `custom_attrs` or other JSONB fields. They MUST use typed link rows or dedicated child tables. Scalar convenience projections MAY exist, but they MUST NOT be the authoritative relationship store.
@@ -207,7 +207,7 @@ The `task_request` model MUST expose, as structured state:
 - optional `completed_at`,
 - optional `external_ticket_ref`.
 Profiles: base
-Verified by: AC-097, AC-098, AC-099, AC-100, AC-101, AC-211, AC-212, AC-213, AC-214, AC-231, AC-278
+Verified by: AC-097, AC-098, AC-099, AC-100, AC-101, AC-211, AC-212, AC-213, AC-214, AC-231, AC-278, AC-318
 
 **REQ-02-018**
 The current `host` record type is the structured home for recurrent asset-scoping fields. A host record MUST expose, as structured state:
@@ -252,12 +252,12 @@ An evidence record or its deterministic joined projection from authoritative obj
 - optional `source_party_id`,
 - `source_party_text`.
 Profiles: base
-Verified by: AC-097, AC-098, AC-099, AC-100, AC-101, AC-211, AC-212, AC-213, AC-214, AC-231, AC-278, AC-280
+Verified by: AC-097, AC-098, AC-099, AC-100, AC-101, AC-211, AC-212, AC-213, AC-214, AC-231, AC-278, AC-280, AC-318
 
 **REQ-02-022**
 The current profile standardizes a standalone incident-scoped `party` record as the stable coordination-identity substrate for requester, collector, source, audience, attendee, and similar party-like references. `party_id` is the only stable base-profile party-reference shape. `user_id`, auth-provider identity, email text, or other ad hoc identifiers MUST NOT be treated as equivalent stable party references. When requester, collector, or source surfaces preserve raw or source wording, that wording MUST remain in first-class structured text fields alongside any optional `*_party_id` link. These fields MUST NOT live only in `custom_attrs`.
 Profiles: base
-Verified by: AC-097, AC-098, AC-099, AC-100, AC-101, AC-211, AC-212, AC-213, AC-214, AC-231, AC-277, AC-278, AC-279, AC-280
+Verified by: AC-097, AC-098, AC-099, AC-100, AC-101, AC-211, AC-212, AC-213, AC-214, AC-231, AC-277, AC-278, AC-279, AC-280, AC-318
 
 **REQ-02-023**
 If the implementation exposes structured findings, communications logs, investigative queries, or forensic keywords as dedicated surfaces or typed artifact subtypes, their defining fields MUST also be structured state rather than JSON-only payload:
@@ -448,7 +448,7 @@ Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-064, AC-065, AC-066, AC-067, AC-232
 
 **REQ-02-050**
-For imported rows, mentions, aliases, and indicator observations, `origin_locator` MUST be derivable from the canonical import-unit locator plus deterministic row and column coordinates within that unit.
+For imported rows, mentions, aliases, and indicator observations, `origin_locator` MUST be derivable from the canonical import-unit locator plus deterministic `source_row_ref` and `source_column_ordinal`, using the same 1-based unit-local coordinate systems used by preview and mapping.
 Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-064, AC-065, AC-066, AC-067, AC-232
 
@@ -458,7 +458,7 @@ Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-064, AC-065, AC-066, AC-067, AC-232
 
 **REQ-02-052**
-`mapping_fingerprint` MUST identify the operator-approved header-to-field mapping plan deterministically. The fingerprint input MUST include, at minimum, mapping contract version, target view schema identifier, header-row reference, data-start-row reference, unknown-column policy, and one ordered entry per source column containing source ordinal, raw imported header text, target field key, `entity_binding_mode`, and any declared transform or empty-value policy. The implementation MUST serialize that mapping input canonically with lexicographically sorted object keys and source columns ordered by `source_column_ordinal`, then hash the result as lower-hex SHA-256.
+`mapping_fingerprint` MUST identify the operator-approved header-to-field mapping plan deterministically. The fingerprint input MUST be the fully closed current-profile mapping plan owned by Core 01 §17.2 and Core 03 §11.2.5. It MUST include, at minimum, mapping contract version, target view schema identifier, header-row reference, data-start-row reference, `unknown_column_policy`, and the canonical `source_columns[]` entry shape, with one exhaustive ordered entry per discovered source column containing `source_column_ordinal`, raw imported `source_header_text`, `field_key`, `entity_binding_mode`, `transform_id`, `transform_options`, and `empty_value_policy`. The implementation MUST serialize that mapping input canonically with lexicographically sorted object keys and source columns ordered by `source_column_ordinal`, then hash the result as lower-hex SHA-256.
 Profiles: import
 Verified by: AC-027, AC-028, AC-029, AC-063, AC-064, AC-065, AC-066, AC-067, AC-232
 
@@ -635,7 +635,7 @@ Profiles: base
 Verified by: AC-017, AC-072, AC-073, AC-074, AC-075, AC-076, AC-077, AC-078, AC-079, AC-122, AC-231
 
 **REQ-02-074**
-Canonical indicator identity MUST be derived from the incident plus the deterministic type-specific dedupe key or an equivalent stable canonical identity. In the current profile, the stored field inputs to that canonical identity are `indicator_type`, `value_kind`, the canonical display value, and `normalized_value` when applicable, plus the pair `hash_algorithm` and `hash_value` when both are populated and incorporated into the canonical dedupe key for the row. `defanged_value` MAY be stored for presentation or export, and `stix_pattern` MAY be stored for interoperability or export. Neither `defanged_value` nor `stix_pattern` MAY be the source of truth for canonical identity. Any later additional stored identity-basis field MUST be introduced explicitly by a versioned schema change.
+Canonical indicator identity MUST be derived from the incident plus the deterministic type-specific dedupe key. In the current profile, the stored field inputs to that canonical identity are `indicator_type`, `value_kind`, the canonical display value, and `normalized_value` when applicable, plus the pair `hash_algorithm` and `hash_value` when both are populated and incorporated into the canonical dedupe key for the row. `defanged_value` MAY be stored for presentation or export, and `stix_pattern` MAY be stored for interoperability or export. Neither `defanged_value` nor `stix_pattern` MAY be the source of truth for canonical identity. Any later additional stored identity-basis field MUST be introduced explicitly by a versioned schema change.
 Profiles: base
 Verified by: AC-017, AC-072, AC-073, AC-074, AC-075, AC-076, AC-077, AC-078, AC-079, AC-122, AC-231
 
@@ -862,6 +862,11 @@ If `linked_record_ids[]` or `decision_record_id` are persisted as denormalized c
 Profiles: base
 Verified by: AC-085, AC-137, AC-138, AC-139, AC-140, AC-145, AC-231
 
+**REQ-02-233**
+When `decision_record_id` is present on a `task_request`, it MUST reference one same-incident active `decision` record. If `decision_record_id` is implemented as a denormalized convenience scalar, set and clear operations for that field MUST remain atomically consistent with the authoritative `record_links` representation required by REQ-02-101.
+Profiles: base
+Verified by: AC-319
+
 ##### 10.4.1.1 Task-request lifecycle machine
 
 The current profile defines `task_request.status` as a normative lifecycle machine rather than only a closed vocabulary.
@@ -878,7 +883,7 @@ The machine states mean:
 
 Allowed lifecycle triggers are record creation that sets an initial `status` and later record patches that change `status` or one of the guard fields above.
 
-Initial creation MAY set `status` to any value in the closed vocabulary. Interactive blank-row creation SHOULD default to `open` unless the operator explicitly chooses another allowed initial state.
+Initial creation MAY set `status` to any value in the closed vocabulary.
 
 The legal persisted status transitions are:
 
@@ -1019,7 +1024,7 @@ The explicit supersession flow MUST satisfy all of the following:
 - the target decision MAY have `status` `proposed`, `approved`, or `executed`,
 - the committed action MUST persist the authoritative supersession relation as a typed `record_links` row with `link_type='supersedes'` from the superseding decision to the target decision; any `supersedes_record_id` field MAY be refreshed only as a read-only computed or denormalized convenience projection,
 - if the target decision has `status` `proposed` or `approved`, the same committed action MUST set the target decision's persisted `status` to `superseded`,
-- if the target decision has `status` `executed`, the target decision MUST remain `executed`; a projection MAY still surface `decision.is_superseded=true` for that record, but the persisted `status` MUST NOT change away from `executed`.
+- if the target decision has `status` `executed`, the target decision MUST remain `executed`; the decision view MUST surface `decision.is_superseded=true` for that record, and the persisted `status` MUST NOT change away from `executed`.
 Profiles: base
 Verified by: AC-086, AC-141, AC-142, AC-143, AC-144, AC-145, AC-231
 
@@ -1057,7 +1062,7 @@ The current profile MUST keep the following coordination surfaces artifact-backe
 - status-review artifacts with `artifact_type='status_review'`,
 - lesson or follow-up artifacts with `artifact_type='lesson'`.
 
-Workbook-native view schemas or implementation-owned system saved views over these surfaces do not change this artifact-backed storage decision.
+Workbook-native view schemas, and any non-canonical helper configuration used to realize them, do not change this artifact-backed storage decision.
 Profiles: base
 Verified by: AC-087, AC-088, AC-089, AC-231, AC-281, AC-282, AC-283, AC-284
 
@@ -1071,7 +1076,7 @@ A `comm_log` artifact MUST carry, at minimum:
 - `channel_or_meeting`,
 - `summary`.
 
-`audience` remains required source-preserving text even when supplemental party references are also present. `comm_id` MUST be server-generated when omitted on create and immutable after first commit.
+`audience` remains required source-preserving text even when supplemental party references are also present. `comm_id` MUST be immutable after first commit.
 Profiles: base
 Verified by: AC-087, AC-088, AC-089, AC-231, AC-278, AC-281
 
@@ -1098,7 +1103,7 @@ A `handoff` artifact MUST carry, at minimum:
 - `incoming_owner_user_id`,
 - `current_state_summary`.
 
-`handoff_id` MUST be server-generated when omitted on create and immutable after first commit.
+`handoff_id` MUST be immutable after first commit.
 Profiles: base
 Verified by: AC-087, AC-088, AC-089, AC-231, AC-282
 
@@ -1121,7 +1126,7 @@ A `status_review` artifact MUST carry, at minimum:
 - `review_owner_user_id`,
 - `current_state_summary`.
 
-`status_review_id` MUST be server-generated when omitted on create and immutable after first commit.
+`status_review_id` MUST be immutable after first commit.
 Profiles: base
 Verified by: AC-087, AC-088, AC-089, AC-231, AC-283
 
@@ -1144,7 +1149,7 @@ A `lesson` artifact MUST carry, at minimum:
 - `summary`,
 - `owner_user_id`.
 
-`lesson_id` MUST be server-generated when omitted on create and immutable after first commit.
+`lesson_id` MUST be immutable after first commit.
 Profiles: base
 Verified by: AC-087, AC-088, AC-089, AC-231, AC-284
 
@@ -1155,7 +1160,7 @@ A `lesson` artifact MUST also be able to persist, at minimum, the following opti
 - `closure_state`,
 - `evidence_refs[]`.
 
-`closure_state` MUST use the exact closed vocabulary defined in §18. In the current profile, interactive create defaults for `closure_state` are `open`.
+`closure_state` MUST use the exact closed vocabulary defined in §18.
 Profiles: base
 Verified by: AC-087, AC-088, AC-089, AC-231, AC-284
 
@@ -1165,7 +1170,10 @@ Profiles: base
 Verified by: AC-087, AC-088, AC-089, AC-231, AC-281, AC-282, AC-283, AC-284
 
 **REQ-02-133**
-Any `*_ids[]` fields on coordination artifacts are denormalized convenience fields only. Authoritative many-to-many association MUST remain representable through generic `record_links` or dedicated child tables when per-link metadata is required.
+- The nine coordination record-reference fields `comm_log.decision_ids[]`, `comm_log.action_task_ids[]`, `handoff.open_task_ids[]`, `handoff.open_decision_ids[]`, `status_review.blocked_task_ids[]`, `status_review.pending_evidence_ids[]`, `status_review.open_decision_ids[]`, `lesson.follow_up_task_ids[]`, and `lesson.evidence_refs[]` are denormalized convenience projections that use the public `record_ref` family defined by Core 01. Their authoritative association remains representable through typed `record_links`.
+- Where such fields are realized through `record_links`, the field-derived base-profile relation token is `references_record`, and the public item kind remains `record_ref` rather than `decision_ref`, `task_ref`, or `evidence_ref`.
+- `comm_log.audience_party_ids[]` and `comm_log.attendee_party_ids[]` are public `party_ref` collections whose public target identifier remains `party_id` even when storage uses a record envelope internally.
+- `handoff.open_risk_refs[]` uses dedicated child rows with stable `risk_ref_id` and source-preserving `risk_ref_text`. Each `risk_ref_id` is scoped to exactly one parent `handoff` artifact, is not a generic `record_id`, and coalesces duplicates only within that parent `handoff` by normalized `risk_ref_text`. This model does not imply a first-class `risk` record type in the current profile.
 Profiles: base
 Verified by: AC-087, AC-088, AC-089, AC-231, AC-281, AC-282, AC-283, AC-284
 
@@ -1195,7 +1203,7 @@ A structured finding or finding-like hypothesis subtype MUST be able to persist,
 - optional `closed_at`,
 - optional supporting or contradictory record references.
 
-In the current profile, `state` defaults to `open`. `closed_at` MUST be server-managed and MUST be set only when the finding transitions to `state='closed'`. Supporting or contradictory references MUST remain structured link or child-row state rather than JSON-only blobs.
+`closed_at` MUST be server-managed and MUST be set only when the finding transitions to `state='closed'`. Supporting or contradictory references MUST remain structured link or child-row state rather than JSON-only blobs.
 Profiles: base
 Verified by: AC-101, AC-231, AC-285
 
@@ -1208,7 +1216,7 @@ A structured investigative-query subtype MUST be able to persist, at minimum:
 - `query_text`,
 - `created_by_user_id`.
 
-`query_id` MUST be server-generated when omitted on create and immutable after first commit.
+`query_id` MUST be immutable after first commit.
 Profiles: base
 Verified by: AC-101, AC-231, AC-286
 
@@ -1221,7 +1229,7 @@ A structured forensic-keyword subtype MUST be able to persist, at minimum:
 - `match_mode` from the exact closed vocabulary defined in §18,
 - `case_sensitive`.
 
-In the current profile, `match_mode` defaults to `literal` and `case_sensitive` defaults to `false`. `keyword_id` MUST be server-generated when omitted on create and immutable after first commit.
+`keyword_id` MUST be immutable after first commit.
 Profiles: base
 Verified by: AC-101, AC-231, AC-287
 
@@ -1237,28 +1245,33 @@ If the Snapshot and Reporting Extension Profile is implemented, the domain model
 - redaction manifests,
 - artifact release records.
 Profiles: snapshot_reporting
-Verified by: AC-030, AC-031, AC-032, AC-056, AC-057, AC-058, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-104, AC-105, AC-106, AC-113, AC-114, AC-115, AC-233
+Verified by: AC-030, AC-031, AC-032, AC-056, AC-057, AC-058, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-104, AC-105, AC-106, AC-113, AC-114, AC-115, AC-233, AC-333
 
 **REQ-02-140**
-At minimum, an immutable snapshot descriptor MUST persist the release tuple defined by Core 01 §10.2.
+At minimum, an immutable snapshot descriptor MUST persist:
+
+- `snapshot_id`,
+- `incident_id`,
+- `created_by_user_id`,
+- `created_at`,
+- `snapshot_at`,
+- `source_change_set_high_watermark`,
+- `derivation_version`,
+- `export_model_sha256`.
+
+These fields are snapshot-boundary state only. Template selectors, redaction-profile selectors, release-state metadata, approval metadata, and rendered-output hashes belong to release records rather than to the snapshot descriptor.
 Profiles: snapshot_reporting
 Verified by: AC-030, AC-031, AC-032, AC-056, AC-057, AC-058, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-104, AC-105, AC-106, AC-113, AC-114, AC-115, AC-233
 
 **REQ-02-141**
-For rendered-output lifecycle, the authoritative persisted state MUST be artifact-scoped release records plus any bound approval records.
+For rendered-output lifecycle, the authoritative persisted state MUST be artifact-scoped release records plus any bound approval records. Public release resources MAY surface snapshot-boundary fields by deterministic join to the bound immutable snapshot descriptor, but those fields MUST NOT require the snapshot descriptor itself to persist template, redaction-profile, output, or lifecycle state.
 Profiles: snapshot_reporting
 Verified by: AC-030, AC-031, AC-032, AC-056, AC-057, AC-058, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-104, AC-105, AC-106, AC-113, AC-114, AC-115, AC-233
 
 For this lifecycle, the logical output slot is the bound release tuple excluding `output_sha256`.
 
 **REQ-02-142**
-Each release record MUST also persist, at minimum:
-
-- `release_state` from the exact closed vocabulary defined in §18,
-- `approved_at`,
-- `invalidated_at`,
-- `published_at`,
-- optional `invalidation_reason`.
+`release_state` MUST use the exact closed vocabulary defined in §18. `approved_at`, `invalidated_at`, `published_at`, and optional `invalidation_reason` are artifact-scoped release metadata and MUST remain on the release record rather than on the snapshot descriptor.
 Profiles: snapshot_reporting
 Verified by: AC-030, AC-031, AC-032, AC-056, AC-057, AC-058, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-104, AC-105, AC-106, AC-113, AC-114, AC-115, AC-233
 
@@ -1272,7 +1285,7 @@ Each exportable field or block in the canonical export model MUST persist:
 - deterministic order metadata sufficient to reproduce export ordering,
 - when `content_class='curated_narrative'`, zero or more `support_refs[]`.
 Profiles: snapshot_reporting
-Verified by: AC-030, AC-031, AC-032, AC-056, AC-057, AC-058, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-104, AC-105, AC-106, AC-113, AC-114, AC-115, AC-233
+Verified by: AC-030, AC-031, AC-032, AC-056, AC-057, AC-058, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-104, AC-105, AC-106, AC-113, AC-114, AC-115, AC-233, AC-333
 
 **REQ-02-144**
 When recipient-specific reporting is implemented, each exportable field or block MUST also be able to carry zero or more stable incident-local `disclosure_partition_refs[]`. Each `disclosure_partition_ref` names an export-only withholding boundary such as an affected party or other approved recipient partition. `disclosure_partition_refs[]` MUST be stored as snapshot or export metadata only. They MUST NOT change live workspace authorization.
@@ -1282,6 +1295,8 @@ Verified by: AC-030, AC-031, AC-032, AC-056, AC-057, AC-058, AC-059, AC-060, AC-
 **REQ-02-145**
 A release record MUST bind, at minimum:
 
+- `release_id`,
+- `incident_id`,
 - `snapshot_id`,
 - `template_id`,
 - `template_version`,
@@ -1291,9 +1306,12 @@ A release record MUST bind, at minimum:
 - `release_scope`,
 - `output_sha256`,
 - `release_state`,
+- `created_by_user_id`,
+- `created_at`,
 - `approved_at`,
 - `invalidated_at`,
-- `published_at`.
+- `published_at`,
+- optional `invalidation_reason`.
 Profiles: snapshot_reporting
 Verified by: AC-030, AC-031, AC-032, AC-056, AC-057, AC-058, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-104, AC-105, AC-106, AC-113, AC-114, AC-115, AC-233
 
@@ -1359,9 +1377,9 @@ Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-151, AC-152, AC-231
 
 **REQ-02-155**
-`query_json` MUST preserve saved-view sort, filter, and grouping state using stable `field_key` values, stable grouping identifiers, and normalized scalar values. It MUST NOT store visible labels as the authoritative identifier for any saved sort, filter, or grouping element. `query_json.filters[]` MUST use the exact filter predicate wire shape defined by Core 01 §3.3.4.1, preserve the operator-specific `arg` object, and persist canonical `filters[]` ordering by `field_key asc`.
+`query_json` MUST preserve saved-view sort, filter, and grouping state using stable `field_key` values, stable grouping identifiers, and normalized scalar values. It MUST NOT store visible labels as the authoritative identifier for any saved sort, filter, or grouping element. Persisted `query_json.sort` MUST always be an array and MUST use `[]` as the canonical stored representation of no user sort override. Persisted `query_json.group_by` MUST be omitted when grouping is inactive and MUST NOT be stored as JSON `null`. Persisted `query_json.sort` stores only the normalized user sort override list rather than the effective default-extended sort. `query_json.filters[]` MUST use the exact filter predicate wire shape defined by Core 01 §3.3.4.1, preserve the operator-specific `arg` object, and persist canonical `filters[]` ordering by `field_key asc`.
 Profiles: base
-Verified by: AC-146, AC-147, AC-148, AC-149, AC-151, AC-152, AC-231
+Verified by: AC-146, AC-147, AC-148, AC-149, AC-151, AC-152, AC-231, AC-360
 
 **REQ-02-156**
 A saved view created by duplicating another saved view MUST persist a full normalized copy of the source `view_schema_id`, `query_json`, and `layout_json`. The new saved view MUST NOT carry a runtime dependency on the source `saved_view_id`.
@@ -1462,14 +1480,14 @@ Profiles: base
 Verified by: AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-231
 
 **REQ-02-168**
-There MUST be at most one non-deleted `record_link` for the same `(incident_id, src_record_id, dst_record_id, link_type)` tuple.
+There MUST be at most one non-deleted `record_link` for the same `(incident_id, src_record_id, dst_record_id, link_type)` tuple. For active Timeline-to-Timeline `supersedes` links, there MUST also be at most one non-deleted `record_link` whose `link_type='supersedes'` and whose `dst_record_id` is the same superseded `timeline_event`. The same replacement `timeline_event` MAY remain the `src_record_id` for multiple non-deleted `supersedes` links to different superseded Timeline rows.
 Profiles: base
-Verified by: AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-231
+Verified by: AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-231, AC-329
 
 **REQ-02-169**
-For projection, count, and ordinary export purposes, a link is active only when the `record_link` row is not soft-deleted and both endpoint records are not soft-deleted. Soft-deleted links and links whose endpoint records are soft-deleted MUST remain reconstructible through history and rollback.
+For projection, count, ordinary export, snapshot-source derivation, and incident portability purposes, a link is active only when the `record_link` row is not soft-deleted and both endpoint records are not soft-deleted. Soft-deleted links and links whose endpoint records are soft-deleted MUST remain reconstructible through history and rollback.
 Profiles: base
-Verified by: AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-231
+Verified by: AC-196, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-231, AC-332
 
 **REQ-02-170**
 Merge-time repoint semantics from §9 apply to `record_links`. Incoming and outgoing active links to a losing entity MUST be repointed or deterministically recreated on the survivor in the same `change_set`, and duplicate active tuples created by repointing MUST be deduplicated without losing history.
@@ -1521,9 +1539,11 @@ For persisted `record_links`, `src_record_id` and `dst_record_id` MUST use these
 - `merged_into`: losing record -> survivor,
 - `supported_by`: assessment or decision -> supporting record,
 - `references_record`: task request or other coordination record -> referenced record,
-- `supersedes`: superseding decision -> superseded decision.
+- `supersedes`: superseding decision -> superseded decision, or replacement `timeline_event` -> superseded `timeline_event`.
+
+In the base profile, `link_type='supersedes'` is legal only for `decision -> decision` and `timeline_event -> timeline_event` endpoint pairs.
 Profiles: base
-Verified by: AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-231
+Verified by: AC-196, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-231, AC-332
 
 **REQ-02-176**
 Client-visible reverse traversal or reverse counts MUST be derived from these canonical directions. They MUST NOT imply a second persisted link.
@@ -1572,9 +1592,12 @@ A timeline event MUST be able to relate to:
 - unresolved host and account strings via entity mentions,
 - source-bound indicator occurrences via `indicator_observation` rows,
 - notes and other artifacts via typed record links,
-- evidence via typed record links to evidence records.
+- evidence via typed record links to evidence records,
+- other Timeline events via typed `supersedes` links for direct replacement or supersession.
+
+Any surfaced Timeline `replacement_record_id` MUST remain a read-only computed or denormalized convenience projection over the authoritative `record_links` relation. It MUST NOT be the authoritative store for Timeline supersession.
 Profiles: base
-Verified by: AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-231
+Verified by: AC-196, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-231, AC-331, AC-332
 
 **REQ-02-182**
 Hosts, identities, and evidence records MUST also be able to relate to note artifacts and canonical indicators through the same generic typed relationship store.
@@ -1738,11 +1761,13 @@ The schema MUST support:
 - `record_link` fields sufficient to persist stable `record_link_id`, directed `src_record_id` and `dst_record_id`, closed-vocabulary `link_type`, closed-vocabulary `provenance`, nullable `confidence`, optional `note`, creation attribution, creation timestamp, and soft-delete attribution,
 - append-only indicator lifecycle interval fields separate from observation timestamps,
 - append-only compromise-assessment fields sufficient to persist closed-vocabulary `assessment_state`, `assessed_at`, assessor attribution, nullable `confidence_score`, rationale, optional supporting record references, and deterministic derivation of `confidence_band`,
-- reference-pack manifest fields sufficient to persist `pack_key`, `pack_kind`, `pack_version`, `source_identifier`, `manifest_sha256`, one or more payload SHA-256 digests in deterministic member order or an equivalent canonical aggregate digest, declared `pack_contract_version`, signature or trusted-source metadata, `verification_method`, and non-active availability state,
+- reference-pack manifest fields sufficient to persist `pack_key`, `pack_kind`, `pack_version`, `source_identifier`, `manifest_sha256`, one or more payload SHA-256 digests in deterministic member order or an equivalent canonical aggregate digest, declared `pack_contract_version`, signature or trusted-source metadata, `verification_method`, and the storage-level verification fields sufficient, together with the separately listed activation-pointer fields, to derive the Core 01-owned durable condition `verified_available` without introducing `verified_available` as a second stored `reference_packs.status` token,
 - reference-pack activation and attestation fields sufficient to persist one active-version pointer per `pack_key`, imported and activated actor attribution with timestamps, `previous_active_version`, `verification_result`, and optional operator note or change ticket,
 - incident fields sufficient to persist `incident_key`, `title`, optional `description`, `status`, optional `severity`, optional `tlp`, optional `current_phase`, optional `primary_external_case_ref`, `created_at`, `updated_at`, nullable `closed_at`, creation attribution, update attribution, and monotonically increasing `incident_version`, plus a canonical `incident_key` uniqueness form or equivalent deterministic uniqueness substrate derived by trimming leading and trailing Unicode whitespace and applying Unicode NFC normalization,
-- internal-user fields sufficient to persist stable `user_id`, a canonical case-insensitive email uniqueness form or equivalent deterministic lookup substrate, `display_name`, `password_hash`, `mfa_required`, `is_active`, `is_deployment_admin`, `created_at`, `updated_at`, nullable `updated_by_user_id`, nullable `last_login_at`, and monotonically increasing `user_version`,
-- auth-binding fields sufficient to persist provider-backed or local binding data keyed to stable internal `user_id`, including `provider_key`, `provider_type`, provider subject or equivalent identity key, and creation and last-auth timestamps, without making incident memberships depend on provider subject, without requiring a second persisted local-login identifier distinct from the authoritative user email, and permitting any emitted local-binding summary `username` only as derived presentation from that same authoritative email rather than as an independent stored namespace,
+- internal-user fields sufficient to persist stable `user_id`, a canonical case-insensitive email uniqueness form or equivalent deterministic lookup substrate, `display_name`, `password_hash`, `password_changed_at`, `mfa_required`, active wrapped or encrypted-at-rest TOTP secret material, `totp_enrolled_at`, safe derived `totp_state`, one pending TOTP enrollment with stable `enrollment_id`, wrapped pending secret material, `expires_at`, `consumed_at`, one non-reversible bootstrap-token lookup substrate such as `bootstrap_token_hash`, `bootstrap_expires_at`, `bootstrap_consumed_at`, `is_active`, `is_deployment_admin`, `created_at`, `updated_at`, nullable `updated_by_user_id`, nullable `last_login_at`, and monotonically increasing `user_version`,
+- local-binding summary derivation fields sufficient to derive exactly one safe local binding summary from the authoritative local user row, using that user's `email` and `created_at` as the only local-login namespace and local-summary creation timestamp, without requiring a second persisted local-login identifier distinct from the authoritative user email,
+- auth-binding fields sufficient to persist provider-backed enterprise binding data keyed to stable internal `user_id`, including `provider_key`, `provider_type`, provider subject or equivalent identity key, and creation and last-auth timestamps, without making incident memberships depend on provider subject, and without treating cleartext passwords, cleartext TOTP seeds, raw bootstrap tokens, or `otpauth_uri` payloads as authoritative stored state,
+- deployment-local bootstrap-completion fields sufficient to persist one first-deployment-admin bootstrap marker with `bootstrap_schema_id`, `bootstrap_artifact_id`, `artifact_sha256` computed from the exact raw manifest bytes consumed, `created_user_id`, and `consumed_at`,
 - incident-membership fields sufficient to persist `(incident_id, user_id)`, `role`, `joined_at`, `added_by_user_id`, `updated_at`, `updated_by_user_id`, and monotonically increasing `membership_version`,
 - saved-view fields sufficient to persist immutable `view_schema_id`, `scope`, `display_name`, normalized `query_json`, `layout_json`, nullable `owner_user_id`, and monotonically increasing `saved_view_version`,
 - workbook-preference fields sufficient to persist per-user `home_sheet_ref` and incident-wide `default_sheet_ref` separately without overloading a saved-view row flag,
@@ -1760,6 +1785,40 @@ The schema MUST support:
 - optional structured artifact subtype fields sufficient to persist findings, investigative queries, and forensic keywords when those surfaces are implemented.
 Profiles: base, import, snapshot_reporting, reference_pack
 Verified by: AC-017, AC-018, AC-072, AC-073, AC-074, AC-075, AC-118, AC-128, AC-154, AC-155, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-231, AC-232, AC-233, AC-234, AC-277, AC-278, AC-280
+
+**REQ-02-234**
+The auth-binding fields referenced in REQ-02-202 MUST additionally persist, at minimum:
+
+- stable `auth_binding_id`,
+- stable `user_id`,
+- stable `provider_id` or an equivalent resolved provider anchor,
+- `provider_key`,
+- `provider_type`,
+- authoritative `provider_subject`,
+- `created_at`,
+- `created_by_user_id`,
+- nullable `last_auth_at`,
+- nullable `retired_at`,
+- nullable `retired_by_user_id`,
+- optional `retire_reason`,
+- optional `replaced_by_auth_binding_id`.
+Profiles: enterprise_authentication
+Verified by: AC-348, AC-349, AC-350, AC-351
+
+**REQ-02-235**
+The schema MUST enforce at most one active binding for each `(provider_id, provider_subject)` tuple and at most one active binding for each `(user_id, provider_id)` tuple. Rotation MUST be realizable as retire-plus-create with stable lineage from the retired binding to its replacement binding.
+Profiles: enterprise_authentication
+Verified by: AC-349, AC-350, AC-351
+
+**REQ-02-236**
+Auth bindings remain deployment-local administrative state. They MUST NOT be record-envelope rows, MUST NOT be workbook-row mutation targets, MUST NOT be serialized as incident-portability content, and MUST NOT require incident memberships or audit lineage to depend on provider subject rather than stable `user_id`.
+Profiles: enterprise_authentication
+Verified by: AC-348, AC-351, AC-352
+
+**REQ-02-237**
+The local safe-user binding summary defined by Core 01 §3.3.5.1 is a derived read-model projection from the authoritative local user row. It MUST use `provider_type='local'`, `provider_key='local'`, `username` equal to the authoritative user `email`, and `created_at` equal to the user `created_at`. It MUST NOT consume `auth_binding_id`, MUST NOT persist local `provider_subject` or local `last_auth_at` state, MUST NOT be realized as a persisted enterprise-auth binding row of its own, and MUST NOT be created, rotated, or retired by the enterprise binding-management routes in Core 01 §20 except through safe-user re-rendering.
+Profiles: enterprise_authentication
+Verified by: AC-175, AC-348, AC-351
 
 **REQ-02-203**
 For incidents created through the public base-profile route, the schema MUST support `status='active'`, `incident_version=1`, `closed_at=NULL`, and one committed create timestamp written to both `created_at` and `updated_at`; that public create route MUST bind both creation and initial update attribution to the creating local `user_id`.
@@ -1838,7 +1897,7 @@ If the Snapshot and Reporting Extension Profile is implemented, the schema MUST 
 - `output_sha256`,
 - redaction-manifest entries keyed by stable export-model path and rule identifier.
 Profiles: snapshot_reporting
-Verified by: AC-057, AC-060, AC-061, AC-062, AC-113, AC-114, AC-115, AC-233
+Verified by: AC-057, AC-060, AC-061, AC-062, AC-113, AC-114, AC-115, AC-233, AC-333
 
 ## 15. History and rollback
 
@@ -1969,6 +2028,8 @@ Where an earlier section also defines lifecycle rules, semantic meanings, or gua
 | `entity_mentions.origin_kind` and `indicator_observation.origin_kind` | `manual_entry`, `clipboard_paste`, `csv_import`, `xlsx_import`, `api_import`, `extraction`, `system` |
 | `host.entity_origin` and `identity.entity_origin` | `entity_sheet`, `entity_import`, `created_from_mention`, `system_upsert` |
 | `party.party_kind` | `person`, `team`, `organization`, `distribution_list`, `other` |
+| `credential_state.recovery_model` | `admin_assisted` |
+| `credential_state.totp_state` | `not_enrolled`, `pending`, `active` |
 | `indicator.value_kind` | `atomic`, `pattern`, `reference` |
 | `assessment_state` | `unknown`, `suspected`, `confirmed`, `disproven`, `cleared` |
 | `task_request.task_kind` | `question`, `request`, `collection`, `containment`, `follow_up` |

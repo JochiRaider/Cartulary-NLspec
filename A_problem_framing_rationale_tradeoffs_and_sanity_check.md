@@ -59,7 +59,7 @@ Low-friction capture is the make-or-break requirement because IR work is lossy u
    Spreadsheet-style sheets should be projections over disciplined source tables, not the source of truth themselves.
 
 1. **Few built-in sheets, many saved/system views.**
-   The workbook should expose a small set of core tabs. Indicators and assessments can remain contract-backed system views even when backed by first-class records; framework overlays should stay contract-backed views until repeated usage justifies a dedicated sheet.
+   The workbook should expose a small set of core tabs. Indicators and assessments can remain contract-backed system views even when backed by first-class records; pack-dependent framework overlays are not standardized workbook surfaces in the current profile, and any future ATT&CK, D3FEND, VERIS, or similar workbook surface belongs in a dedicated extension profile with its own explicit contract.
 
 1. **Reference packs and enrichment are optional overlays.**
    Framework mappings, type registries, and other enrichment datasets must be versioned separately from incident data and cannot sit on the hot capture path.
@@ -86,6 +86,12 @@ Single-user notebooks can be fast and flexible. They also fail the collaboration
 ### Recommended approach: spreadsheet-like grid on top of relational source tables
 
 This is the hardest option to implement well, but it is the only one that attacks the actual problem. It preserves near-spreadsheet entry friction while adding the relational and audit capabilities that justify migration.
+
+### First-deployment-admin bootstrap: why the current profile chooses a deployment-local manifest
+
+A setup-page wizard or other unauthenticated bootstrap route would move first-admin creation onto the public surface and would create avoidable ambiguity around trust, replay, and one-time semantics. The deployment-local manifest approach keeps the runtime contract small and deterministic: the application reads one operator-supplied file at startup, validates one exact schema, records one completion marker, and then hands the created account into the ordinary local-auth and MFA lifecycle.
+
+CLI-only bootstrap, direct environment-variable user creation, and manual database writes were also rejected as the normative contract. Those can remain helper-tooling strategies that produce the same manifest artifact, but they are not second runtime mechanisms. That choice better matches disconnected or low-infrastructure deployments, the portable workbook-centric operating posture visible in SoD-style practice, and the local-file administration patterns seen in tools such as Aurora and Kanvas.
 
 ### Hardest implementation risks
 

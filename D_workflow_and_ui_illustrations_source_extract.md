@@ -110,6 +110,94 @@ sequenceDiagram
 
 This is the core progressive-structuring workflow. The timeline row stays fast to create, but later becomes relationally useful.
 
+### 3.0 Bootstrap first deployment admin during startup
+
+```mermaid
+sequenceDiagram
+    participant Proc as Process start
+    participant App as App startup
+    participant PG as Postgres
+    participant FS as Bootstrap manifest file
+
+    Proc->>App: start
+    App->>App: validate deployment config
+    App->>PG: query active deployment admins
+    App->>PG: query bootstrap-completion state
+    alt zero active admins and no completion marker
+        App->>FS: read configured manifest path
+        App->>App: validate cartulary.bootstrap_admin.v1
+        App->>PG: create user + bootstrap marker + admin audit event in one transaction
+        PG-->>App: commit
+    else active admin exists
+        App->>App: skip bootstrap consumption
+    else completion marker already exists and no active admin remains
+        App->>App: fail closed
+    end
+    App->>App: start HTTP / WebSocket / background-job listeners only after successful preflight
+```
+
+The bootstrap-created user's first login then follows the existing TOTP setup flow in **3A. First login requiring TOTP setup** unchanged.
+
+### 3A. First login requiring TOTP setup
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant UI as Login screen
+    participant App as App API
+    participant PG as Postgres
+
+    U->>UI: Submit valid email and password
+    UI->>App: POST /api/v1/auth/login
+    App->>PG: verify local password and inspect MFA enrollment state
+    PG-->>App: local account valid, mfa_required=true, no active TOTP
+    App-->>UI: 401 mfa_setup_required + bootstrap_token + bootstrap_expires_at
+    U->>UI: Continue TOTP setup
+    UI->>App: POST /api/v1/auth/mfa/totp/begin {bootstrap_token}
+    App->>PG: create pending enrollment + issue secret material
+    PG-->>App: pending enrollment
+    App-->>UI: enrollment_id + secret_base32 + otpauth_uri
+    U->>UI: Enter six-digit code from authenticator
+    UI->>App: POST /api/v1/auth/mfa/totp/complete {bootstrap_token, enrollment_id, code}
+    App->>PG: activate TOTP and clear pending state
+    PG-->>App: commit
+    App-->>UI: success, no session issued
+    U->>UI: Submit email and password again
+    UI->>App: POST /api/v1/auth/login + second_factor
+    App-->>UI: authenticated session
+```
+
+This keeps the base profile on an administrator-assisted recovery model while still making first-time MFA enrollment deterministic and interoperable.
+
+### 3B. Lost-device recovery through administrator TOTP reset
+
+```mermaid
+sequenceDiagram
+    participant A as Deployment admin
+    participant UI as Admin console
+    participant App as App API
+    participant PG as Postgres
+    participant U as User
+
+    A->>UI: Reset user's TOTP credential
+    UI->>App: POST /api/v1/users/{user_id}/mfa/totp/reset
+    App->>PG: clear active and pending TOTP state + revoke all sessions
+    PG-->>App: commit
+    App-->>UI: safe user resource returned
+    U->>UI: Submit valid email and password later
+    UI->>App: POST /api/v1/auth/login
+    App->>PG: verify password and inspect MFA enrollment state
+    PG-->>App: mfa_required=true, no active TOTP
+    App-->>UI: 401 mfa_setup_required + bootstrap_token + bootstrap_expires_at
+    U->>UI: complete begin/complete TOTP setup flow
+    UI->>App: POST /api/v1/auth/mfa/totp/begin then /complete
+    App->>PG: activate replacement factor
+    PG-->>App: commit
+    U->>UI: log in normally with new factor
+```
+
+This recovery path stays outside the workbook hot path and keeps deployment-local credential recovery distinct from incident-scoped authorization.
+
 ### 3a. Create party from requester or source text
 
 ```mermaid
@@ -159,6 +247,279 @@ sequenceDiagram
 
 This flow layers canonical linkage over already-captured text without requiring the analyst to leave the workbook surface or re-enter the row.
 
+### 3c. Clear requester, collector, or source party link with `value: null`
+
+The examples below are illustrative only. The authoritative wire contract remains Core 01 §18B, Core 01 §19, and the shared mutation rules in Core 01 §3.3.5.
+
+#### Example: clear `task.requester_party_id`
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.task_requests.v1",
+  "base_row_version": 22,
+  "client_txn_id": "txn_task_requester_party_clear_01",
+  "changes": [
+    {
+      "field_key": "task.requester_party_id",
+      "value": null
+    }
+  ]
+}
+```
+
+#### Example: clear `evidence.collector_party_id`
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.evidence.v1",
+  "base_row_version": 9,
+  "client_txn_id": "txn_evidence_collector_party_clear_01",
+  "changes": [
+    {
+      "field_key": "evidence.collector_party_id",
+      "value": null
+    }
+  ]
+}
+```
+
+#### Example: clear `evidence.source_party_id`
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.evidence.v1",
+  "base_row_version": 10,
+  "client_txn_id": "txn_evidence_source_party_clear_01",
+  "changes": [
+    {
+      "field_key": "evidence.source_party_id",
+      "value": null
+    }
+  ]
+}
+```
+
+### 3d. Clear both preserved party text and linked party ref in one patch
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.task_requests.v1",
+  "base_row_version": 23,
+  "client_txn_id": "txn_task_requester_clear_both_01",
+  "changes": [
+    {
+      "field_key": "task.requester_party_text",
+      "value": null
+    },
+    {
+      "field_key": "task.requester_party_id",
+      "value": null
+    }
+  ]
+}
+```
+
+This example shows the ordinary `Clear both` shape: one record patch with two direct-write field changes and no bespoke action route.
+
+### 3e. Clear `task.decision_record_id` with `value: null`
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.task_requests.v1",
+  "base_row_version": 24,
+  "client_txn_id": "txn_task_decision_clear_01",
+  "changes": [
+    {
+      "field_key": "task.decision_record_id",
+      "value": null
+    }
+  ]
+}
+```
+
+### 3f. Coordination collection patch examples
+
+The examples below are illustrative only. The authoritative wire contract remains Core 01 §19 plus the shared mutation rules in Core 01 §3.3.5.
+
+#### Example: add one audience party ref on `comm_log.audience_party_ids`
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.comm_log.v1",
+  "base_row_version": 12,
+  "client_txn_id": "txn_comm_log_party_01",
+  "changes": [
+    {
+      "field_key": "comm_log.audience_party_ids",
+      "action_payload": {
+        "kind": "collection_actions_v1",
+        "actions": [
+          { "op": "add_party_ref", "party_id": "pty_01" }
+        ]
+      }
+    }
+  ]
+}
+```
+
+Matching read-side fragment:
+
+```json
+{
+  "field_key": "comm_log.audience_party_ids",
+  "value": {
+    "kind": "collection_value_v1",
+    "ordered": false,
+    "items": [
+      {
+        "item_ref": "party_ref:pty_01",
+        "item_kind": "party_ref",
+        "display_text": "Email Distribution Team",
+        "party_id": "pty_01"
+      }
+    ]
+  }
+}
+```
+
+#### Example: add one pending evidence ref on `status_review.pending_evidence_ids`
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.status_review.v1",
+  "base_row_version": 7,
+  "client_txn_id": "txn_status_review_evidence_01",
+  "changes": [
+    {
+      "field_key": "status_review.pending_evidence_ids",
+      "action_payload": {
+        "kind": "collection_actions_v1",
+        "actions": [
+          { "op": "add_record_ref", "linked_record_id": "rec_evidence_01" }
+        ]
+      }
+    }
+  ]
+}
+```
+
+Matching read-side fragment:
+
+```json
+{
+  "field_key": "status_review.pending_evidence_ids",
+  "value": {
+    "kind": "collection_value_v1",
+    "ordered": false,
+    "items": [
+      {
+        "item_ref": "record_ref:rec_evidence_01",
+        "item_kind": "record_ref",
+        "display_text": "EDR package for WS-023",
+        "linked_record_id": "rec_evidence_01"
+      }
+    ]
+  }
+}
+```
+
+#### Example: add then remove one open risk ref on `handoff.open_risk_refs`
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.handoff.v1",
+  "base_row_version": 19,
+  "client_txn_id": "txn_handoff_risk_add_01",
+  "changes": [
+    {
+      "field_key": "handoff.open_risk_refs",
+      "action_payload": {
+        "kind": "collection_actions_v1",
+        "actions": [
+          { "op": "add_risk_ref", "risk_ref_text": "Pending confirmation of outbound data access scope" }
+        ]
+      }
+    }
+  ]
+}
+```
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.handoff.v1",
+  "base_row_version": 20,
+  "client_txn_id": "txn_handoff_risk_remove_01",
+  "changes": [
+    {
+      "field_key": "handoff.open_risk_refs",
+      "action_payload": {
+        "kind": "collection_actions_v1",
+        "actions": [
+          { "op": "remove_risk_ref", "item_ref": "risk_ref:rsk_01" }
+        ]
+      }
+    }
+  ]
+}
+```
+
+Matching read-side fragment:
+
+```json
+{
+  "field_key": "handoff.open_risk_refs",
+  "value": {
+    "kind": "collection_value_v1",
+    "ordered": false,
+    "items": [
+      {
+        "item_ref": "risk_ref:rsk_01",
+        "item_kind": "risk_ref",
+        "display_text": "Pending confirmation of outbound data access scope",
+        "risk_ref_id": "rsk_01",
+        "risk_ref_text": "Pending confirmation of outbound data access scope"
+      }
+    ]
+  }
+}
+```
+
 ### 4. Review, version inspection, and rollback of a mistaken edit
 
 ```mermaid
@@ -189,6 +550,62 @@ The reviewer UI MUST allow rollback of a single logical history entry when that 
 
 Arbitrary user-selected subsets of fields from historical snapshots are not required in MVP. Rollback remains a new attributed action by the reviewer, not a hidden database revert.
 
+#### Destructive-operation contention precedence
+
+```mermaid
+sequenceDiagram
+    participant A as Reviewer A
+    participant B as Reviewer B
+    participant UI as Browser / inspector
+    participant App as App API
+    participant PG as Postgres
+
+    A->>UI: Start restore, rollback, or merge
+    UI->>App: destructive-operation request A
+    App->>PG: acquire protected-set locks in canonical record_id order
+    PG-->>App: locks acquired
+    B->>UI: Submit overlapping destructive-operation request B
+    UI->>App: destructive-operation request B
+    App->>PG: try acquire same protected-set locks
+    PG-->>App: lock unavailable
+    App-->>UI: 409 record_locked + retryable=true
+    A->>App: continue operation A
+    App->>PG: commit and release locks
+    PG-->>App: complete
+    B->>UI: retry request B without refreshed inputs
+    UI->>App: destructive-operation request B retry
+    App->>PG: acquire locks, then re-read authoritative state
+    PG-->>App: current state shows stale version or route precondition failure
+    App-->>UI: 409 row_version_conflict or route-specific precondition error
+```
+
+This sequence is explanatory only. The owner contract makes `record_locked` the fail-fast outcome while overlapping destructive work is still in flight on the same protected set. After those locks are released, the same request falls through to the ordinary stale-version or route-precondition path.
+
+### 4a. Timeline supersede with a direct replacement relation
+
+```mermaid
+sequenceDiagram
+    participant R as Reviewer
+    participant UI as Inspector / history surface
+    participant App as App API
+    participant PG as Postgres
+
+    R->>UI: Choose Supersede and optionally select replacement row
+    UI->>App: POST /api/v1/records/{record_id}/supersede {base_row_version, client_txn_id, reason, replacement_record_id?}
+    App->>PG: validate reviewer role, lifecycle state, and replacement-target guards
+    App->>PG: insert change_set
+    alt replacement selected
+        App->>PG: insert record_links(replacement -> superseded, link_type='supersedes')
+    end
+    App->>PG: update timeline_events.capture_state='superseded'
+    App->>PG: insert change_set_mutations + record_revisions and rebuild projection row
+    PG-->>App: commit
+    App-->>UI: success includes committed replacement_record_id
+    App-->>UI: row history shows capture_state change plus replacement-link unit
+```
+
+This illustration keeps the UI obligation lightweight: the reviewer invokes supersede from the inspector, history surface, or another reviewer-only non-grid surface; an optional replacement row can be selected there; and when the action succeeds the selected replacement remains recoverable nearby without adding a default visible Timeline column. Correction is rollback and re-supersede rather than direct editing of the hidden replacement field on a superseded row.
+
 ### Bulk paste/import from existing spreadsheet or clipboard
 
 - **Clipboard paste is day-one functionality.**\
@@ -206,6 +623,276 @@ For file-based onboarding, keep workbook interaction on the grid surface and iso
 For file-based import, start with a bounded contract rather than promising full spreadsheet fidelity. The first assistant should support CSV file import plus selected-sheet or selected-region XLSX import, with preview, header mapping, provenance capture, and unknown-column preservation. It should prioritize sheets or regions that map to timeline, systems/hosts, accounts/identities, indicators, evidence tracker, and VERIS-like summaries when present. Mapping contracts, not sheet labels alone, should decide whether a source column is `mention_origin` or `entity_origin`.
 
 Formulas, macros, workbook automation, external links, comments, pivot tables, charts, workbook protection, and merged-cell layout semantics should not be treated as live workbook logic. Formula cells should be imported as inert values or raw source metadata only, with visible warnings or explicit rejection when a feature is unsupported. File-based import should not auto-resolve host/account aliases; imported tokens should remain unresolved mentions until an analyst resolves them explicitly.
+
+#### Example preview payload
+
+```json
+{
+  "data": {
+    "import_session_id": "imp_sess_01",
+    "import_unit_id": "imp_unit_03",
+    "locator_kind": "xlsx_region",
+    "locator": {
+      "sheet_name": "Timeline",
+      "rect_a1": "A1:C4"
+    },
+    "source_rect_a1": "A1:C4",
+    "header_row_ref": 1,
+    "data_start_row_ref": 2,
+    "inferred_row_count": 3,
+    "inferred_column_count": 3,
+    "warning_codes": [],
+    "unit_status": "selected",
+    "columns": [
+      { "source_column_ordinal": 1, "source_header_text": "Occurred At" },
+      { "source_column_ordinal": 2, "source_header_text": "Summary" },
+      { "source_column_ordinal": 3, "source_header_text": "User" }
+    ],
+    "preview_rows": [
+      {
+        "source_row_ref": 2,
+        "cells": [
+          { "source_column_ordinal": 1, "display_text": "2026-03-14T09:14:00Z", "cell_kind": "datetime" },
+          { "source_column_ordinal": 2, "display_text": "VPN login", "cell_kind": "string" },
+          { "source_column_ordinal": 3, "display_text": "jdoe", "cell_kind": "string" }
+        ]
+      },
+      {
+        "source_row_ref": 3,
+        "cells": [
+          { "source_column_ordinal": 1, "display_text": "", "cell_kind": "blank" },
+          { "source_column_ordinal": 2, "display_text": "Possible follow-up action", "cell_kind": "string" },
+          { "source_column_ordinal": 3, "display_text": "asmith", "cell_kind": "string" }
+        ]
+      }
+    ],
+    "truncated": false
+  }
+}
+```
+
+#### Example import_session resource
+
+```json
+{
+  "data": {
+    "import_session_id": "imp_sess_01",
+    "incident_id": "inc_2026_017",
+    "created_by_user_id": "usr_analyst_01",
+    "created_at": "2026-03-14T09:10:00Z",
+    "source_file_kind": "xlsx",
+    "original_filename": "timeline.xlsx",
+    "source_content_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "parser_profile_id": "example_parser_profile_id",
+    "parser_version": "2026-04-02",
+    "assistant_profile": "phase2_workbook_import_v1",
+    "session_status": "mapped",
+    "selected_unit_ids": ["imp_unit_03"],
+    "blocking_diagnostics": [
+      {
+        "code": "import_apply_blocked",
+        "reason_code": "unit_not_ready",
+        "message": "Selected unit is not ready to apply.",
+        "import_unit_id": "imp_unit_04"
+      }
+    ],
+    "nonblocking_warning_codes": []
+  }
+}
+```
+
+#### Example import_unit resource before mapping approval
+
+```json
+{
+  "data": {
+    "import_unit_id": "imp_unit_03",
+    "import_session_id": "imp_sess_01",
+    "locator_kind": "xlsx_region",
+    "locator": {
+      "sheet_name": "Timeline",
+      "rect_a1": "A1:C4"
+    },
+    "source_rect_a1": "A1:C4",
+    "header_row_ref": 1,
+    "data_start_row_ref": 2,
+    "inferred_row_count": 3,
+    "inferred_column_count": 3,
+    "warning_codes": [],
+    "unit_status": "selected"
+  }
+}
+```
+
+#### Example import_unit resource after mapping approval
+
+```json
+{
+  "data": {
+    "import_unit_id": "imp_unit_03",
+    "import_session_id": "imp_sess_01",
+    "locator_kind": "xlsx_region",
+    "locator": {
+      "sheet_name": "Timeline",
+      "rect_a1": "A1:C4"
+    },
+    "source_rect_a1": "A1:C4",
+    "header_row_ref": 1,
+    "data_start_row_ref": 2,
+    "inferred_row_count": 3,
+    "inferred_column_count": 3,
+    "warning_codes": [],
+    "unit_status": "ready",
+    "mapping_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+    "approved_mapping": {
+      "target_view_schema_id": "cartulary.view.timeline.v1",
+      "unknown_column_policy": "preserve_raw_capture",
+      "source_columns": [
+        {
+          "source_column_ordinal": 1,
+          "source_header_text": "Occurred At",
+          "field_key": "timeline.occurred_at",
+          "entity_binding_mode": null,
+          "transform_id": null,
+          "transform_options": {},
+          "empty_value_policy": "write_null"
+        },
+        {
+          "source_column_ordinal": 2,
+          "source_header_text": "Summary",
+          "field_key": "timeline.summary",
+          "entity_binding_mode": null,
+          "transform_id": "trim_v1",
+          "transform_options": {},
+          "empty_value_policy": "omit_field"
+        },
+        {
+          "source_column_ordinal": 3,
+          "source_header_text": "User",
+          "field_key": "timeline.identity_refs",
+          "entity_binding_mode": "mention_origin",
+          "transform_id": "trim_v1",
+          "transform_options": {},
+          "empty_value_policy": "omit_field"
+        }
+      ]
+    }
+  }
+}
+```
+
+#### Example select/skip flow before apply
+
+```mermaid
+sequenceDiagram
+    participant A as Analyst
+    participant UI as Browser grid
+    participant App as App API
+    participant PG as Postgres
+
+    A->>UI: Create import session and review discovered units
+    A->>UI: Preview unit A
+    UI->>App: GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/preview
+    App-->>UI: preview payload with columns[] and preview_rows[]
+    A->>UI: Approve mapping for unit A
+    UI->>App: PUT /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/mapping
+    App->>PG: persist approved mapping and recompute unit status
+    PG-->>App: commit
+    App-->>UI: updated durable unit resource
+    A->>UI: Select unit A
+    UI->>App: POST /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/select {client_txn_id}
+    App->>PG: update selected_unit_ids[] and recompute session/unit status
+    PG-->>App: commit
+    App-->>UI: selected_unit_ids[] + updated unit
+    A->>UI: Skip unit B
+    UI->>App: POST /api/v1/import-sessions/{import_session_id}/units/{other_import_unit_id}/skip {client_txn_id, reason}
+    App->>PG: persist skipped state without deleting prior mapping
+    PG-->>App: commit
+    App-->>UI: selected_unit_ids[] + updated unit
+    A->>UI: Apply selected units
+    UI->>App: POST /api/v1/import-sessions/{import_session_id}/apply {client_txn_id}
+    App->>PG: read persisted selected_unit_ids[]
+    App-->>UI: 202 Accepted + common job resource
+```
+
+### Illustrative terminal job-result summaries
+
+The fragments below are illustrative only. The authoritative owner is Core 01 §3.3.9.1 and §17.
+
+#### `snapshot_created`
+
+```json
+{
+  "job_id": "job_snapshot_01",
+  "status": "succeeded",
+  "result_summary": {
+    "code": "snapshot_created",
+    "message": "Snapshot created.",
+    "resource_refs": [
+      {
+        "kind": "snapshot",
+        "id": "snap_01",
+        "route": "/api/v1/snapshots/snap_01"
+      }
+    ]
+  }
+}
+```
+
+#### `import_session_partially_applied`
+
+```json
+{
+  "job_id": "job_import_apply_01",
+  "status": "succeeded",
+  "result_summary": {
+    "code": "import_session_partially_applied",
+    "message": "Selected units applied with partial success.",
+    "resource_refs": [
+      {
+        "kind": "import_session",
+        "id": "imp_01",
+        "route": "/api/v1/import-sessions/imp_01"
+      }
+    ]
+  }
+}
+```
+
+#### `incident_bundle_imported`
+
+```json
+{
+  "job_id": "job_bundle_import_01",
+  "status": "succeeded",
+  "result_summary": {
+    "code": "incident_bundle_imported",
+    "message": "Incident bundle imported.",
+    "resource_refs": [
+      {
+        "kind": "incident",
+        "id": "inc_01",
+        "route": "/api/v1/incidents/inc_01"
+      }
+    ]
+  }
+}
+```
+
+#### `job_canceled`
+
+```json
+{
+  "job_id": "job_any_01",
+  "status": "canceled",
+  "result_summary": {
+    "code": "job_canceled",
+    "message": "Job canceled before completion."
+  }
+}
+```
+
+UI note: on receipt of a terminal result, the client keeps the current workbook surface in place, surfaces known refs as non-modal completion chips or links, degrades unknown refs to `message`-only, and never auto-navigates from the incoming `route`.
 
 ### Non-Timeline create-policy examples
 
@@ -312,6 +999,90 @@ stateDiagram-v2
     invalidated --> pending_approval: new render candidate
 ```
 
+#### Example snapshot resource
+
+```json
+{
+  "data": {
+    "snapshot_id": "snap_2026_017_01",
+    "incident_id": "inc_2026_017",
+    "created_by_user_id": "usr_reviewer_01",
+    "created_at": "2026-03-14T12:00:00Z",
+    "snapshot_at": "2026-03-14T12:00:00Z",
+    "source_change_set_high_watermark": "cs_000184",
+    "derivation_version": "derivation_v1",
+    "export_model_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+  }
+}
+```
+
+#### Example release resource
+
+```json
+{
+  "data": {
+    "release_id": "rel_2026_017_01",
+    "incident_id": "inc_2026_017",
+    "snapshot_id": "snap_2026_017_01",
+    "snapshot_at": "2026-03-14T12:00:00Z",
+    "source_change_set_high_watermark": "cs_000184",
+    "derivation_version": "derivation_v1",
+    "export_model_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "template_id": "tmpl_exec_html",
+    "template_version": "3",
+    "redaction_profile_id": "redact_external_a",
+    "redaction_profile_version": "5",
+    "output_kind": "html",
+    "release_scope": "internal_review",
+    "output_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "release_state": "pending_approval",
+    "created_by_user_id": "usr_reviewer_01",
+    "created_at": "2026-03-14T12:03:00Z",
+    "approved_at": null,
+    "invalidated_at": null,
+    "published_at": null,
+    "invalidation_reason": null
+  }
+}
+```
+
+#### Example approve success response
+
+```json
+{
+  "data": {
+    "release": {
+      "release_id": "rel_2026_017_01",
+      "incident_id": "inc_2026_017",
+      "snapshot_id": "snap_2026_017_01",
+      "snapshot_at": "2026-03-14T12:00:00Z",
+      "source_change_set_high_watermark": "cs_000184",
+      "derivation_version": "derivation_v1",
+      "export_model_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "template_id": "tmpl_exec_html",
+      "template_version": "3",
+      "redaction_profile_id": "redact_external_a",
+      "redaction_profile_version": "5",
+      "output_kind": "html",
+      "release_scope": "internal_review",
+      "output_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "release_state": "approved",
+      "created_by_user_id": "usr_reviewer_01",
+      "created_at": "2026-03-14T12:03:00Z",
+      "approved_at": "2026-03-14T12:05:00Z",
+      "invalidated_at": null,
+      "published_at": null,
+      "invalidation_reason": null
+    },
+    "approval_progress": {
+      "approval_recorded": true,
+      "approval_requirements_satisfied": true,
+      "resulting_release_state": "approved"
+    }
+  }
+}
+```
+
 ### Blob-upload and evidence lifecycle sketch
 
 The diagram below is explanatory only. The authoritative contract is Core 02 §13 and Core 03 §8.
@@ -348,9 +1119,83 @@ flowchart LR
     b3 -. no attached evidence .-> x
 ```
 
+
+### Benchmark timing-state illustrations
+
+This subsection is illustrative only. Core 04 §9 remains the normative owner of the claim-bearing benchmark profile, measurement-predicate registry, and timed or fixture-sensitive pass/fail semantics.
+
+#### Blank-row creation timing boundary
+
+```mermaid
+sequenceDiagram
+    participant A as Analyst
+    participant UI as Timeline grid
+    participant App as App API
+    participant PG as Postgres
+
+    A->>UI: Type one qualifying value into a blank Timeline row
+    A->>UI: Press Enter
+    Note over UI: Start timing at commit acceptance
+    UI->>App: create row
+    App->>PG: insert records + timeline row + revisions
+    PG-->>App: commit
+    App-->>UI: row payload with record_id + row_version
+    Note over UI: Stop when committed row is visible with stable binding
+```
+
+Illustrative start state: authenticated session complete, incident already open, Timeline surface already loaded, and default sort, filter, and grouping state active.
+
+Illustrative stop predicate: the committed row is visible, the entered value is rendered in the target field, and the new row is bound to stable `record_id` plus `row_version`.
+
+#### View-change first-useful versus stable viewport
+
+```mermaid
+sequenceDiagram
+    participant A as Analyst
+    participant UI as Workbook surface
+    participant App as App API
+    participant PG as Postgres
+
+    A->>UI: Submit sort, filter, or grouping change
+    Note over UI: Start timing at submit
+    UI->>App: query updated view
+    App->>PG: read projection rows
+    PG-->>App: first visible block
+    App-->>UI: first visible block
+    Note over UI: first useful viewport
+    App->>PG: finish remaining ordered read
+    PG-->>App: final ordered block
+    App-->>UI: final ordered viewport state
+    Note over UI: stable viewport
+```
+
+Illustrative first-useful predicate: the first visible row window for the requested state is rendered with stable `record_id` binding and working keyboard navigation.
+
+Illustrative stable predicate: the visible row window and result ordering now match the final deterministic order, and no further reorder occurs without new user or server input.
+
+#### Evidence-inspector metadata-shell boundary
+
+```mermaid
+sequenceDiagram
+    participant A as Analyst
+    participant UI as Inspector
+    participant App as App API
+    participant PG as Postgres
+
+    A->>UI: Open inspector on a Timeline row linked to 100 evidence records
+    Note over UI: Start timing at open action
+    UI->>App: request inspector data
+    App->>PG: fetch row summary + evidence metadata window
+    PG-->>App: selected-row summary + evidence count + first list window
+    App-->>UI: render inspector metadata shell
+    Note over UI: Stop when metadata shell is visible
+```
+
+Illustrative metadata-shell predicate: the selected-row summary, total linked-evidence count, and first rendered evidence-list window are visible, and each evidence item in that first rendered window shows filename or media-type label, attachment state, and preview-handle availability. Binary preview bytes are not required for this stop condition.
+
 ## 9. UI concepts focused on preserving the spreadsheet feel
 
-The UI should feel like a **workbook**, but the sheets are **saved views over projections**, not separate storage silos. The built-in tabs are intentionally few: Timeline, Hosts, Identities, Evidence, and Notes. Indicators and Assessments should remain contract-backed system views over related projections even when canonical indicators or assessments are first-class records underneath. Framework overlays such as ATT&CK or VERIS should start as contract-backed system views and only become dedicated tabs if usage justifies it.
+The UI should feel like a **workbook**, but the sheets are **saved views over projections**, not separate storage silos. The built-in tabs are intentionally few: Timeline, Hosts, Identities, Evidence, and Notes. Indicators and Assessments should remain contract-backed system views over related projections even when canonical indicators or assessments are first-class records underneath. Framework overlays such as ATT&CK or VERIS should start as contract-backed system views and only become dedicated tabs if usage justifies it. Required base coordination surfaces `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1` are opened and addressed by their standardized `view_schema_id`; a saved view over one of those schemas is a separate preset or layout surface rather than the required base surface itself.
 
 ### UI concept 1: Primary workbook-style timeline view
 
@@ -406,7 +1251,7 @@ The UI should feel like a **workbook**, but the sheets are **saved views over pr
 - Column header click sorts.
 - Filter chips apply without leaving the sheet.
 - Timeline grouping is a presentation-only transform over the current filtered result set. It MUST NOT create, delete, or mutate source records, projection rows, links, or tags.
-- Timeline sheets MUST support `Group: None` plus exactly one active grouping key in MVP. The active key MUST be stored as a stable contract value in `saved_views.layout_json.group_by_key`, not as a visible label.
+- Timeline sheets MUST support `Group: None` plus exactly one active grouping key in MVP. The active key MUST be stored as a stable contract value in `saved_views.query_json.group_by`, not as a visible label, and `Group: None` is represented by omission rather than by `null`.
 - Allowed grouping keys for timeline sheets are:
   - `timeline.occurred_day` derived from `occurred_at` at day granularity
   - `timeline.recorded_day` derived from `recorded_at` at day granularity
@@ -433,6 +1278,37 @@ The UI should feel like a **workbook**, but the sheets are **saved views over pr
   - grouping by formulas, ad hoc expressions, or visible labels
   - merged cells, indent-based hierarchy, or parent/child tree rows
 - Views are saveable and shareable within the incident.
+
+Non-normative request example with one user sort override and omitted grouping:
+
+```json
+{
+  "sort": [
+    { "field_key": "timeline.capture_state", "direction": "desc" }
+  ],
+  "filters": [],
+  "limit": 100
+}
+```
+
+Non-normative response fragment showing the effective applied sort in `meta.query`:
+
+```json
+{
+  "meta": {
+    "query": {
+      "sort": [
+        { "field_key": "timeline.capture_state", "direction": "desc" },
+        { "field_key": "timeline.sort_ts", "direction": "asc" },
+        { "field_key": "record_id", "direction": "asc" }
+      ],
+      "filters": []
+    }
+  }
+}
+```
+
+Column-header note: clicking the visible `Time` header emits the stable sort key `timeline.sort_ts`, not `timeline.occurred_at`.
 
 #### Quick-add patterns
 

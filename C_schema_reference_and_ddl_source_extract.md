@@ -54,6 +54,15 @@ erDiagram
 
 The central modeling decision is a **`records` envelope table**. Every user-visible object gets one row there. That costs an extra join but buys strong generic linking, tagging, revisions, and consistent UI routing. Canonical indicators fit this same envelope pattern, while source-bound `indicator_observations` remain separate structured observation rows. Built-in view behavior should live in `view_schemas` and reference-pack tables, not in visible headers or tab names.
 
+### Additional schema requirements for view-query sort and group contract
+
+One conformant non-normative realization of the current sort and grouping contract needs explicit storage for:
+
+- ordered default-sort tuples rather than one `default_sort_key` plus one `default_sort_direction`,
+- an explicit per-view sortable-field whitelist,
+- optional field-level `header_sort_field_key` metadata inside field-registry storage or equivalent child rows,
+- canonical saved-view persistence where `query_json.sort` stores only normalized user sort overrides, `[]` is the only stored representation of `no user sort override`, and inactive grouping omits `query_json.group_by` rather than storing JSON `null`.
+
 ### Additional schema requirements for mention/stub provenance
 
 The schema sketch needs a few explicit contract fields beyond the high-level tables named above:
@@ -62,6 +71,16 @@ The schema sketch needs a few explicit contract fields beyond the high-level tab
 - Host and identity records MUST store `entity_origin` and structured provenance, including an optional seed mention reference when the entity was created from a mention.
 - `view_schemas.writeback_contract` and import mappings MUST declare `entity_binding_mode` per entity-bearing field. Same-field-conflict-capable write-back fields MUST also declare `conflict_resolution_class` per `field_key`.
 - Repeated mentions MUST remain separate rows; repeated entity-origin inputs MAY upsert the same entity when exact-match rules select a unique active target.
+
+### Additional schema requirements for import-session and mapping reconstruction
+
+The schema sketch now needs one explicit import-session and mapping-reconstruction section so the durable read resources in Core 01 §17.2 do not depend on inferred field names or lossy persistence:
+
+- `import_sessions` or equivalent structured rows SHOULD persist the durable session fields already required by Core 03, including `import_session_id`, incident anchor, creator attribution, source-file identity, parser identity, assistant profile, durable `session_status`, `selected_unit_ids[]`, `blocking_diagnostics[]`, and `nonblocking_warning_codes[]`.
+- `import_units` or equivalent structured rows SHOULD persist the durable unit fields already required by Core 03, including locator identity, source rectangle, row-boundary refs, inferred dimensions, `warning_codes[]`, durable `unit_status`, and optional `mapping_fingerprint`.
+- Each approved unit SHOULD persist one approved-mapping parent object or an equivalent structured row set sufficient to reconstruct the exact Core 01 §17.2 `approved_mapping` object.
+- That approved-mapping realization SHOULD persist one child row per discovered source column carrying at minimum `source_column_ordinal`, `source_header_text`, `field_key`, `entity_binding_mode`, `transform_id`, `transform_options`, and `empty_value_policy`.
+- Read-side reconstruction of `approved_mapping.source_columns[]` MUST remain exhaustive, ordered by `source_column_ordinal`, and lossless for deterministic `mapping_fingerprint` recomputation.
 
 ### Additional schema requirements for incident-scoped parties
 
@@ -72,6 +91,44 @@ The schema sketch needs an explicit party model now that the core closes request
 - Task-request, evidence, and optional coordination-artifact refs such as requester, collector, source, audience, or attendee refs MUST use same-incident `party_id` values while preserving raw or source text separately.
 - Exact-match reuse for direct party creation or explicit create-from-text is incident-scoped and limited to unique exact matches on normalized `primary_email` or `external_ref`; display name, organization, role title, and phone-like text are suggestion inputs only.
 - The current profile does not standardize party merge or phone-based dedupe.
+
+### Additional schema requirements for coordination collection fields
+
+The schema sketch needs one explicit mapping table for the coordination-surface collection families closed by the current profile:
+
+| Field set | Public family | `item_kind` | `item_ref` form | Authoritative target or child identity | Storage note |
+| --- | --- | --- | --- | --- | --- |
+| `comm_log.decision_ids[]`, `comm_log.action_task_ids[]`, `handoff.open_task_ids[]`, `handoff.open_decision_ids[]`, `status_review.blocked_task_ids[]`, `status_review.pending_evidence_ids[]`, `status_review.open_decision_ids[]`, `lesson.follow_up_task_ids[]`, `lesson.evidence_refs[]` | `record_ref` | `record_ref` | `record_ref:<linked_record_id>` | same-incident active target `record_id` constrained by the owning `field_key` | The authoritative association MAY remain `record_links` with field-derived relation token `references_record`. |
+| `comm_log.audience_party_ids[]`, `comm_log.attendee_party_ids[]` | `party_ref` | `party_ref` | `party_ref:<party_id>` | same-incident active `party_id` | The public target identifier remains `party_id` even when storage uses a record envelope internally. |
+| `handoff.open_risk_refs[]` | `risk_ref` | `risk_ref` | `risk_ref:<risk_ref_id>` | dedicated child-row `risk_ref_id` scoped to one `handoff` record | `risk_ref_text` remains source-preserving text on the child row; the current profile does not imply a first-class `risk` record type. |
+
+Additional contract notes:
+
+- The base profile does not introduce public `decision_ref`, `task_ref`, or `evidence_ref` item kinds for these coordination fields.
+- `add_risk_ref.risk_ref_text` uses `single_line_title_v1` and duplicate adds coalesce by normalized `risk_ref_text` within one `handoff` record.
+- Same-field conflict payloads for these coordination collections reuse the same family shapes on `collection_value_v1`; the wire contract does not fall back to raw string arrays.
+
+#### Illustrative child-row sketch for handoff risk refs
+
+One conformant realization of the `risk_ref` family is a dedicated child-row table or equivalent child-row structure with these properties:
+
+- each child row belongs to exactly one parent `handoff` record;
+- minimum child-row state is the parent `handoff` `record_id`, stable `risk_ref_id`, source-preserving `risk_ref_text`, and normalized `risk_ref_text` used for duplicate coalescing;
+- `risk_ref_id` is the child identity that backs public `item_ref="risk_ref:<risk_ref_id>"`;
+- the implementation must be able to enforce at most one active child row per `(handoff_record_id, normalized_risk_ref_text)`;
+- the child row is not a record-envelope row, does not consume a `record_id`, and does not imply a standalone public route family or a reusable future `risk` object;
+- add/remove history remains in the existing mutation/history substrate, while whole-row restore remains parent-row behavior on the `handoff` artifact.
+
+### Additional schema requirements for Timeline supersede replacement relation
+
+The schema sketch now needs one explicit non-normative realization note for Timeline supersession with direct replacement:
+
+- `record_links.link_type='supersedes'` is valid for both `decision -> decision` and `timeline_event -> timeline_event` endpoint pairs.
+- For Timeline rows, the authoritative replacement relation is one active `supersedes` link from the replacement Timeline row to the superseded Timeline row.
+- The implementation must be able to enforce at most one active incoming Timeline `supersedes` link for any one superseded Timeline row, while still allowing one replacement Timeline row to supersede multiple older Timeline rows.
+- Because the generic `record_links` table does not encode endpoint record types, that Timeline-specific cardinality constraint may require a trigger, helper columns, or an equivalent realization.
+- If the implementation materializes a convenience projection, `timeline_grid_projection` MAY add nullable `replacement_record_id uuid`, but that field remains read-only and derived from the authoritative `record_links` relation.
+- The current profile does not require a default visible grid column, filter key, grouping key, or default index for `timeline.replacement_record_id`.
 
 ### Additional schema requirements for canonical indicators
 
@@ -105,6 +162,8 @@ A conformant history schema needs a mutation log in addition to row-snapshot rev
 - Stable mutation target identities MUST use a canonical target-kind-specific serialization. Composite targets MUST serialize deterministically, for example `record_tag:<record_id>:<tag_id>`.
 - `record_revisions` MAY retain `before_json` / `after_json` row snapshots for audit and whole-row restore, but they MUST NOT be the sole rollback substrate.
 
+One conformant realization of the base-profile destructive-operation concurrency contract is an internal lock service or transaction-scoped database locking keyed to the protected first-class `record_id` set computed by Core 01 §3.3.5.0. Advisory locks, row-level locks, or an equivalent internal coordinator are all acceptable if they preserve the owner-defined public behavior. In all such patterns, lock acquisition proceeds in canonical ascending `record_id` order, fails fast rather than queueing, remains deployment-local runtime state rather than portable incident data, and releases on commit, rollback, or request termination.
+
 ### Additional contract requirements for same-field conflict resolution
 
 The same-field conflict path needs one explicit contract hook beyond base row-versioning:
@@ -126,6 +185,16 @@ The schema sketch now needs one explicit contract hook for writable temporal sca
 - `timestamp_instant_v1` admits only RFC 3339 timestamp strings with an explicit timezone designator, compares canonical equality in UTC `Z` form, and uses explicit JSON `null` as the only authoritative clear representation when the bound field declares `clearable=true`.
 - Original timestamp text, original offset, and precision caveats remain source-preserving text or metadata rather than part of the canonical scalar column.
 
+### Additional schema requirements for direct-reference scalar contracts
+
+The schema sketch now needs one explicit contract hook for writable direct-reference scalars:
+
+- Writable direct-reference scalar fields MUST declare `direct_reference_contract_id` and `clearable`.
+- The base profile currently closes exactly two such contracts, `same_incident_party_ref_v1` and `same_incident_decision_ref_v1`.
+- `same_incident_party_ref_v1` admits only exact `party_id` strings as non-null input and uses explicit JSON `null` as the only authoritative clear representation when the bound field declares `clearable=true`.
+- `same_incident_decision_ref_v1` admits only exact `record_id` strings that resolve to same-incident active `decision` records and uses explicit JSON `null` as the only authoritative clear representation when the bound field declares `clearable=true`.
+- If `task.decision_record_id` is realized as a denormalized convenience scalar, set and clear operations MUST remain atomically consistent with the authoritative `record_links` representation rather than creating dual authority.
+
 ### Additional schema requirements for reference-pack lifecycle
 
 The schema sketch models reference-pack lifecycle through two linked table sets:
@@ -133,18 +202,19 @@ The schema sketch models reference-pack lifecycle through two linked table sets:
 - `reference_packs` for version-scoped verification and availability state,
 - `reference_pack_activation_state` and `reference_pack_attestations` for the active-version pointer and import or activation events.
 
-The version-scoped conditions are `staged`, `verified_available`, `disabled`, `failed`, and `missing`. `active` is derived by joining a verified available version to the current `reference_pack_activation_state.active_version` for the same `pack_key`.
+The version-scoped public durable conditions are `staged`, `verified_available`, `disabled`, `failed`, and `missing`. `active` is not a stored version-state token; it is derived when `reference_packs.status='available'`, `verification_result='passed'`, and `reference_pack_activation_state.active_version` for the same `pack_key` equals that `pack_version`. The public durable condition `verified_available` is derived when `reference_packs.status='available'`, `verification_result='passed'`, and the version is not currently active for its `pack_key`. Activation is legal only from public durable condition `verified_available`. A disabled, failed, or missing version MUST NOT remain the active pointer for its `pack_key`.
 
-A candidate version MUST NOT be activatable unless `reference_packs.status='available'` and `verification_result='passed'`. A disabled, failed, or missing version MUST NOT remain the active pointer for its `pack_key`.
+Core 01 §17.4 owns the public `reference_pack_version resource`; this appendix describes one storage realization only and does not own the public JSON shape. Public `pack_version_state` is derived from storage `status`, `verification_result`, and the activation pointer. Public `active` is the derived activation-pointer boolean rather than a stored version token. Public `payload_sha256` is the canonical public digest field and MAY be reconstructed from one or more stored payload SHA-256 digests or an equivalent canonical aggregate digest.
 
 ### Additional schema requirements for snapshot artifact lifecycle
 
-The schema sketch needs artifact-scoped release metadata rather than template-scoped or row-scoped approvals.
+The schema sketch now needs three distinct storage surfaces so snapshot-boundary state, release-boundary state, and approval state do not collapse into one implied artifact row:
 
-- Each release record MUST bind to one immutable release tuple and one `output_sha256`.
-- Release records SHOULD persist `release_state` with states equivalent to `pending_approval`, `approved`, `invalidated`, and `published`, plus timestamps for approval, invalidation, and publication.
-- Approval records MUST bind to the release record. They MUST NOT bind to mutable incident rows.
-- A superseding render for the same logical output slot or a byte change MUST create a new `pending_approval` candidate and MUST NOT inherit prior approval state.
+- snapshot descriptor rows SHOULD persist only the snapshot-boundary fields from revised REQ-02-140: `snapshot_id`, `incident_id`, `created_by_user_id`, `created_at`, `snapshot_at`, `source_change_set_high_watermark`, `derivation_version`, and `export_model_sha256`; they SHOULD NOT carry template selectors, redaction-profile selectors, release-state metadata, or rendered-output hashes.
+- release rows SHOULD persist the release-owned fields from revised REQ-02-145: `release_id`, `incident_id`, `snapshot_id`, template selectors, redaction-profile selectors, `output_kind`, `release_scope`, `output_sha256`, `release_state`, creator attribution, lifecycle timestamps, and optional `invalidation_reason`.
+- approval rows MUST bind to `release_id` and MUST NOT bind to mutable incident rows.
+
+A public release resource MAY expose snapshot-boundary fields such as `snapshot_at`, `source_change_set_high_watermark`, `derivation_version`, and `export_model_sha256` by deterministic join to the bound snapshot descriptor rather than by forcing redundant release-row storage. A superseding render for the same logical output slot or a byte change MUST create a new `pending_approval` candidate and MUST NOT inherit prior approval state.
 
 ### Additional schema requirements for blob-upload and evidence lifecycle
 
@@ -161,6 +231,8 @@ The core now also requires `object_blobs` to persist the incident anchor, the ro
 Timeout, retry exhaustion, and terminal contract mismatch remain instances of `upload_state='failed'`; the sketch does not need a separate expired state. The base-profile blob slot behaves as a single-upload lease with a short-lived upload target and a longer pending-slot timeout.
 
 A blob slot left in `pending` without successful finalization MUST NOT be treated as attached evidence. A declared-size or expected-hash mismatch MUST fail finalization and leave no attached evidence. An evidence row MUST NOT surface as available, previewable, or released while its linked blob is `pending`, `failed`, or missing. If structured state becomes inconsistent, the application MUST fail closed for preview and download until repaired.
+
+The deployment-level resource ceilings closed by the current core are configuration keys, not new authoritative schema columns. Core 04 §12.3.1 owns the numeric registry for blob-create ceilings, structured-import ceilings, archive extraction and compression limits, reference-pack and incident-bundle extracted-byte overrides, and preview ceilings. The schema remains responsible for accepted upload contract, observed object metadata, timeout and cleanup state, terminal reasons, and evidence or blob lifecycle state only.
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -188,8 +260,8 @@ CREATE TABLE users (
 -- as `true`, omitted `is_deployment_admin` as `false`, and always
 -- initializes `is_active` to `true`. The public create contract does not
 -- accept client-supplied `is_active`, and the first deployment admin is
--- provisioned out of band rather than through an unauthenticated public
--- bootstrap route.
+-- realized through the deployment-local bootstrap-admin manifest contract
+-- rather than through an unauthenticated public bootstrap route.
 -- The illustrative `char_length(...)` checks above capture the bounded-size
 -- part of the writable-string contract. Unicode NFC normalization,
 -- leading/trailing Unicode-whitespace trimming, control-character rejection,
@@ -199,6 +271,36 @@ CREATE TABLE users (
 -- identifier. `POST /api/v1/auth/login` retains the wire member name
 -- `username` for v1 compatibility only and does not imply a second
 -- persisted local username namespace.
+
+### Informative note on deployment-local credential lifecycle realization
+
+One conformant realization is to keep credential lifecycle state in deployment-local
+administrative tables or columns such as `users.password_changed_at`,
+`users.totp_enrolled_at`, wrapped or encrypted-at-rest active TOTP secret
+material, one pending-enrollment row keyed by `enrollment_id`, and one
+non-reversible bootstrap-token lookup substrate such as `bootstrap_token_hash`.
+Those rows remain deployment-local auth state. They do not participate in the
+record-envelope model, workbook mutation routes, or incident-portability
+bundles.
+
+One conformant realization of the one-time bootstrap marker is a dedicated
+deployment-local table written in the same transaction as the first created
+admin user:
+
+```sql
+CREATE TABLE deployment_bootstrap_state (
+    slot text PRIMARY KEY CHECK (slot = 'first_deployment_admin'),
+    bootstrap_schema_id text NOT NULL CHECK (bootstrap_schema_id = 'cartulary.bootstrap_admin.v1'),
+    bootstrap_artifact_id uuid NOT NULL UNIQUE,
+    artifact_sha256 bytea NOT NULL,
+    created_user_id uuid NOT NULL REFERENCES users(id),
+    consumed_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+In that realization, `artifact_sha256` is computed from the exact raw manifest
+bytes consumed, and the same commit would also append one deployment-local
+administrative audit event for bootstrap consumption.
 
 CREATE TABLE auth_providers (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -215,22 +317,43 @@ CREATE TABLE auth_identities (
     provider_id uuid NOT NULL REFERENCES auth_providers(id),
     provider_subject text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
+    created_by_user_id uuid NOT NULL REFERENCES users(id),
     last_auth_at timestamptz,
-    UNIQUE (provider_id, provider_subject)
+    retired_at timestamptz,
+    retired_by_user_id uuid REFERENCES users(id),
+    retire_reason text,
+    replaced_by_auth_binding_id uuid REFERENCES auth_identities(id),
+    CHECK ((retired_at IS NULL) = (retired_by_user_id IS NULL))
 );
+
+CREATE UNIQUE INDEX auth_identities_active_provider_subject_uniq
+    ON auth_identities (provider_id, provider_subject)
+    WHERE retired_at IS NULL;
+
+CREATE UNIQUE INDEX auth_identities_active_user_provider_uniq
+    ON auth_identities (user_id, provider_id)
+    WHERE retired_at IS NULL;
 
 -- Informative: `auth_providers.config_json` is the natural home for protocol
 -- type and subject-mapping configuration sufficient to declare one stable
 -- authoritative SAML subject source and browser-interactive provider behavior.
 -- `auth_identities.provider_subject` is the authoritative external bind key.
--- For `provider_type='local'`, this sketch relies on `users.email` as the
--- only local login identifier and therefore does not model an independent
--- local `username` column. Any emitted local binding summary `username` would
--- be derived presentation equal to `users.email`, not an authoritative stored
--- namespace. In this sketch, `auth_identities.created_at` is the link
--- timestamp and `last_auth_at` is the last successful provider-auth
--- timestamp. Any persisted in-flight enterprise-auth transaction state
--- remains deployment-local ephemeral auth state and is excluded from incident
+-- Public `auth_binding_id` can be the safe stable exposure of
+-- `auth_identities.id`. Rotation is realized as retire-plus-create in one
+-- transaction, with the old row retained for lineage through
+-- `replaced_by_auth_binding_id`. `last_auth_at` is updated only on a
+-- successful provider-auth callback resolved through an active binding.
+-- For `provider_type='local'`, this sketch relies on `users.email` and
+-- `users.created_at` to materialize exactly one local safe-user binding
+-- summary with `provider_key='local'`, derived `username` equal to
+-- `users.email`, and derived `created_at` equal to `users.created_at`.
+-- That local summary is not backed by an `auth_identities` row and does not
+-- carry local `auth_binding_id`, `provider_subject`, or `last_auth_at`
+-- state. Enterprise binding summaries arise only from active
+-- provider-backed `auth_identities` rows. Omitting the derived local summary
+-- from the safe user resource is non-conformant in the current profile. Any
+-- persisted in-flight enterprise-auth transaction state remains
+-- deployment-local ephemeral auth state and is excluded from incident
 -- portability.
 
 CREATE TABLE incidents (
@@ -292,12 +415,14 @@ CREATE TABLE incident_memberships (
 CREATE TABLE reference_packs (
     pack_key text NOT NULL,
     version text NOT NULL,
-    pack_kind text NOT NULL CHECK (
-        pack_kind IN ('framework','type_registry','enrichment','view_contract')
-    ),
+    -- Illustrative local deployments MAY constrain pack_kind to a smaller subset.
+    -- The public read contract keeps `pack_kind` as an open metadata string.
+    pack_kind text NOT NULL,
     source_identifier text,
     manifest_sha256 text NOT NULL,
-    payload_sha256 text[] NOT NULL DEFAULT '{}'::text[],
+    -- Storage may retain multiple payload digests even though the public read
+    -- contract exposes one canonical `payload_sha256` value.
+    payload_sha256_list text[] NOT NULL DEFAULT '{}'::text[],
     pack_contract_version text,
     verification_method text,
     signer_key_id text,
@@ -337,14 +462,16 @@ CREATE TABLE reference_pack_attestations (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     pack_key text NOT NULL,
     pack_version text NOT NULL,
-    pack_kind text NOT NULL CHECK (
-        pack_kind IN ('framework','type_registry','enrichment','view_contract')
-    ),
+    -- Illustrative local deployments MAY constrain pack_kind to a smaller subset.
+    -- The public read contract keeps `pack_kind` as an open metadata string.
+    pack_kind text NOT NULL,
     event_kind text NOT NULL CHECK (
         event_kind IN ('import','activate')
     ),
     manifest_sha256 text NOT NULL,
-    payload_sha256 text[] NOT NULL DEFAULT '{}'::text[],
+    -- Storage may retain multiple payload digests even though the public read
+    -- contract exposes one canonical `payload_sha256` value.
+    payload_sha256_list text[] NOT NULL DEFAULT '{}'::text[],
     source_identifier text,
     verification_method text,
     signer_key_id text,
@@ -385,12 +512,12 @@ CREATE TABLE view_schemas (
     sheet_type text NOT NULL,
     source_record_types text[] NOT NULL,
     base_projection text NOT NULL,
+    field_registry_json jsonb NOT NULL DEFAULT '[]'::jsonb,
     computed_columns jsonb NOT NULL DEFAULT '[]'::jsonb,
     required_reference_pack_keys text[] NOT NULL DEFAULT '{}'::text[],
-    default_sort_key text NOT NULL,
-    default_sort_direction text NOT NULL DEFAULT 'asc' CHECK (
-        default_sort_direction IN ('asc','desc')
-    ),
+    default_sort_json jsonb NOT NULL DEFAULT '[]'::jsonb,
+    sort_fields_json jsonb NOT NULL DEFAULT '[]'::jsonb,
+    grouping_fields_json jsonb NOT NULL DEFAULT '[]'::jsonb,
     filter_contract jsonb NOT NULL DEFAULT '{}'::jsonb,
     writeback_contract jsonb NOT NULL DEFAULT '{}'::jsonb,
     metadata jsonb NOT NULL DEFAULT '{}'::jsonb
@@ -954,6 +1081,13 @@ CREATE TABLE incident_workbook_preferences (
 -- `{ "default_sheet_ref": <sheet_ref|null> }`. Both routes create the
 -- preference object if absent, replace only the named pointer if present,
 -- and leave `updated_at` unchanged on no-op updates.
+--
+-- Informative: for required base coordination surfaces
+-- `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`,
+-- `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`, any
+-- saved-view-shaped helper row used for defaults, layout, or query state is
+-- implementation detail or a distinct saved-view object. It is not the
+-- authoritative public identity of the required base surface.
 ```
 
 ```sql
