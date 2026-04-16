@@ -85,6 +85,171 @@ sequenceDiagram
 
 The handle returned to the browser is same-origin and opaque. The browser redeems it through the application, not by constructing raw object-store URLs, and blocked preview states surface explicitly instead of silently collapsing into download. Handle issuance intentionally uses `{}` only, does not take `client_txn_id`, and mints a fresh handle on each success rather than using issuance idempotency.
 
+### 2b. Canonical full-row and sparse patch examples
+
+The examples below are illustrative only. The authoritative wire contract remains Core 01 §3.3.4, §3.3.5, §3.3.10, and §7.4.
+
+#### Example: Evidence query row as `view_row_v1`
+
+```json
+{
+  "record_id": "rec_evidence_01",
+  "row_version": 12,
+  "cells": {
+    "evidence.title": { "value": "EDR package for WS-023" },
+    "evidence.collector_party_text": { "value": "IR Vendor" },
+    "evidence.collector_party_id": { "value": null },
+    "evidence.source_party_text": { "value": "Endpoint team" },
+    "evidence.source_party_id": { "value": "pty_22" },
+    "evidence.upload_state": { "value": "available" }
+  }
+}
+```
+
+#### Example: Row-refreshing create or patch success
+
+```json
+{
+  "data": {
+    "view_schema_id": "cartulary.view.evidence.v1",
+    "change_set_id": "chg_01",
+    "row": {
+      "record_id": "rec_evidence_01",
+      "row_version": 13,
+      "cells": {
+        "evidence.title": { "value": "EDR package for WS-023" },
+        "evidence.collector_party_text": { "value": "IR Vendor" },
+        "evidence.collector_party_id": { "value": null },
+        "evidence.source_party_text": { "value": "Endpoint team" },
+        "evidence.source_party_id": { "value": "pty_22" },
+        "evidence.upload_state": { "value": "available" }
+      }
+    }
+  }
+}
+```
+
+#### Example: Replayable sparse collaboration patch as `view_row_patch_v1`
+
+```json
+{
+  "view_schema_id": "cartulary.view.evidence.v1",
+  "change_kind": "patch",
+  "patch_cells": {
+    "record_id": "rec_evidence_01",
+    "row_version": 14,
+    "cells": {
+      "evidence.collector_party_id": { "value": null },
+      "evidence.edited_at": { "value": "2026-04-06T11:57:00Z" }
+    }
+  }
+}
+```
+
+#### Example: Canonical `presence_snapshot`
+
+```json
+{
+  "type": "presence_snapshot",
+  "incident_id": "inc_01",
+  "event_id": "evt_01",
+  "emitted_at": "2026-04-06T12:00:00Z",
+  "payload": {
+    "presences": [
+      {
+        "connection_id": "conn_01",
+        "user_id": "usr_01",
+        "display_name": "Analyst A",
+        "sheet_ref": {
+          "kind": "view_schema",
+          "id": "cartulary.view.timeline.v1"
+        },
+        "mode": "editing",
+        "record_id": "rec_timeline_01",
+        "field_key": "timeline.summary",
+        "observed_at": "2026-04-06T12:00:00Z",
+        "expires_at": "2026-04-06T12:00:45Z"
+      },
+      {
+        "connection_id": "conn_02",
+        "user_id": "usr_02",
+        "display_name": "Analyst B",
+        "sheet_ref": {
+          "kind": "view_schema",
+          "id": "cartulary.view.timeline.v1"
+        },
+        "mode": "viewing",
+        "observed_at": "2026-04-06T12:00:01Z",
+        "expires_at": "2026-04-06T12:00:46Z"
+      }
+    ]
+  }
+}
+```
+
+#### Example: Canonical `record_changed` patch envelope
+
+```json
+{
+  "type": "record_changed",
+  "incident_id": "inc_01",
+  "event_id": "evt_02",
+  "emitted_at": "2026-04-06T12:00:02Z",
+  "stream_seq": 1842,
+  "payload": {
+    "record_id": "rec_evidence_01",
+    "row_version": 14,
+    "change_set_id": "chg_02",
+    "actor_user_id": "usr_01",
+    "changed_field_keys": [
+      "evidence.collector_party_id",
+      "evidence.edited_at"
+    ],
+    "affected_views": [
+      {
+        "view_schema_id": "cartulary.view.evidence.v1",
+        "change_kind": "patch",
+        "patch_cells": {
+          "record_id": "rec_evidence_01",
+          "row_version": 14,
+          "cells": {
+            "evidence.collector_party_id": { "value": null },
+            "evidence.edited_at": { "value": "2026-04-06T11:57:00Z" }
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+#### Example: Lifecycle-only `record_changed` with empty `changed_field_keys[]`
+
+```json
+{
+  "type": "record_changed",
+  "incident_id": "inc_01",
+  "event_id": "evt_03",
+  "emitted_at": "2026-04-06T12:00:03Z",
+  "stream_seq": 1843,
+  "payload": {
+    "record_id": "rec_evidence_01",
+    "row_version": 15,
+    "change_set_id": "chg_03",
+    "actor_user_id": "usr_02",
+    "changed_field_keys": [],
+    "affected_views": [
+      {
+        "view_schema_id": "cartulary.view.evidence.v1",
+        "change_kind": "invalidate"
+      }
+    ]
+  }
+}
+```
+
+Default-hidden party-reference fields such as `evidence.collector_party_id`, `evidence.source_party_id`, and `task.requester_party_id` supplement preserved text fields. They still travel on full row payloads even when not shown in the default grid, and sparse patch rows omit them only when unchanged rather than because they are hidden.
+
 ### 3. Later linkage of the event to canonical host and identity records
 
 ```mermaid
@@ -109,6 +274,88 @@ sequenceDiagram
 ```
 
 This is the core progressive-structuring workflow. The timeline row stays fast to create, but later becomes relationally useful.
+
+#### Example: Manual Timeline resolution persists `confidence: null`
+
+The example below is illustrative only. The authoritative contract remains Core 01 §3.3.5, Core 01 §7.4.1, and Core 02 §12.3.
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.timeline.v1",
+  "base_row_version": 42,
+  "client_txn_id": "txn_timeline_manual_host_link_01",
+  "changes": [
+    {
+      "field_key": "timeline.host_refs",
+      "action_payload": {
+        "kind": "collection_actions_v1",
+        "actions": [
+          {
+            "op": "resolve_item",
+            "item_ref": "entity_mention:em_01",
+            "resolved_record_id": "rec_host_01"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+Illustrative resulting persisted link metadata:
+
+```json
+{
+  "record_link_id": "lnk_01",
+  "link_type": "observed_on_host",
+  "provenance": "manual",
+  "confidence": null
+}
+```
+
+#### Example: Relationship mutation that illegally includes `confidence`
+
+The example below is illustrative only. The authoritative contract remains Core 01 §3.3.5 and Core 01 §7.4.
+
+```http
+PATCH /api/v1/records/{record_id}
+```
+
+```json
+{
+  "view_schema_id": "cartulary.view.timeline.v1",
+  "base_row_version": 42,
+  "client_txn_id": "txn_timeline_manual_host_link_bad_01",
+  "changes": [
+    {
+      "field_key": "timeline.host_refs",
+      "action_payload": {
+        "kind": "collection_actions_v1",
+        "actions": [
+          {
+            "op": "resolve_item",
+            "item_ref": "entity_mention:em_01",
+            "resolved_record_id": "rec_host_01",
+            "confidence": 88
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+```json
+{
+  "error": {
+    "code": "invalid_mutation_payload"
+  }
+}
+```
 
 ### 3.0 Bootstrap first deployment admin during startup
 
@@ -544,9 +791,9 @@ sequenceDiagram
 
 #### Reviewer UI rollback granularity
 
-The reviewer UI MUST remain row-centric, but it MUST NOT be limited to whole-row restore. In MVP, the history panel MUST show actor, timestamp, operation, and a diff summary expanded to changed field/link/mention/tag/evidence-entry units.
+Core 03 §10 defines reviewer rollback granularity. This mockup shows one conformant row-centric history presentation with actor, timestamp, operation, and a diff summary expanded to changed field, link, mention, tag, and evidence-entry units.
 
-The reviewer UI MUST allow rollback of a single logical history entry when that entry maps to one reversible mutation target, including one scalar field edit, one link add/remove, one tag add/remove, one mention resolve/dismiss/restore, one auto-resolution or auto-match, or one evidence attach/detach association. The UI MUST also expose whole-row restore and whole-change-set rollback as secondary actions for multi-target or destructive changes.
+Core 03 §10 also defines when a reviewer can reverse one logical history entry versus invoke whole-row restore or whole-change-set rollback. The illustration below shows one conformant presentation of those owner-defined actions for scalar field edits, link changes, tag changes, mention lifecycle changes, auto-resolution or auto-match results, and evidence attach or detach associations.
 
 Arbitrary user-selected subsets of fields from historical snapshots are not required in MVP. Rollback remains a new attributed action by the reviewer, not a hidden database revert.
 
@@ -581,6 +828,81 @@ sequenceDiagram
 
 This sequence is explanatory only. The owner contract makes `record_locked` the fail-fast outcome while overlapping destructive work is still in flight on the same protected set. After those locks are released, the same request falls through to the ordinary stale-version or route-precondition path.
 
+### 3c. Entity merge with deterministic identifier carry-forward
+
+Worked success example:
+
+- survivor `rec_host_01` keeps canonical `host.hostname='ws-023'` and has no canonical `host.fqdn`,
+- loser `rec_host_02` contributes canonical `host.fqdn='ws-023.corp.example'` plus one `suggestion_only` alias,
+- the merge promotes `fqdn` onto the survivor, copies the ordinary alias, preserves loser provenance on the historical loser row, and makes later exact-match reuse on either `hostname='ws-023'` or `fqdn='ws-023.corp.example'` resolve to `rec_host_01`.
+
+Illustrative success payload:
+
+```json
+{
+  "data": {
+    "incident_id": "inc_01",
+    "record_type": "host",
+    "survivor_record_id": "rec_host_01",
+    "loser_record_id": "rec_host_02",
+    "survivor_row_version": 43,
+    "loser_row_version": 8,
+    "change_set_id": "chg_merge_01",
+    "merged_into_record_id": "rec_host_01",
+    "merge_summary": {
+      "exact_match_classes": [
+        {
+          "identifier_class": "aad_device_id",
+          "promoted_count": 0,
+          "carried_count": 0,
+          "duplicate_noop_count": 0
+        },
+        {
+          "identifier_class": "fqdn",
+          "promoted_count": 1,
+          "carried_count": 0,
+          "duplicate_noop_count": 0
+        },
+        {
+          "identifier_class": "hostname",
+          "promoted_count": 0,
+          "carried_count": 0,
+          "duplicate_noop_count": 0
+        }
+      ],
+      "suggestion_aliases_copied_count": 1,
+      "suggestion_alias_duplicate_noop_count": 0,
+      "provenance_only_retained_count": 2
+    }
+  }
+}
+```
+
+If the survivor already held a different canonical `fqdn`, the same carried-forward rule would surface `carried_count: 1` for that class instead of `promoted_count: 1`.
+
+Worked collision example:
+
+- survivor `rec_host_01` and loser `rec_host_02` are otherwise mergeable,
+- loser carries `host.hostname='db-17'`,
+- another active same-incident host `rec_host_03` already owns that active exact-match value,
+- the merge fails closed rather than dropping or downgrading the loser-side reusable identifier.
+
+Illustrative failure payload:
+
+```json
+{
+  "error": {
+    "code": "merge_precondition_failed",
+    "details": {
+      "reason_code": "carry_forward_identifier_collision",
+      "identifier_class": "hostname",
+      "normalized_value": "db-17",
+      "blocking_record_id": "rec_host_03"
+    }
+  }
+}
+```
+
 ### 4a. Timeline supersede with a direct replacement relation
 
 ```mermaid
@@ -606,10 +928,217 @@ sequenceDiagram
 
 This illustration keeps the UI obligation lightweight: the reviewer invokes supersede from the inspector, history surface, or another reviewer-only non-grid surface; an optional replacement row can be selected there; and when the action succeeds the selected replacement remains recoverable nearby without adding a default visible Timeline column. Correction is rollback and re-supersede rather than direct editing of the hidden replacement field on a superseded row.
 
+### 4b. Pending queue replay after auth expiry or revocation
+
+```mermaid
+sequenceDiagram
+    participant A as Analyst
+    participant UI as Browser grid
+    participant App as App API / collaboration
+    participant PG as Postgres
+
+    A->>UI: Edit row while transport or auth is unavailable
+    UI->>UI: Enqueue replay unit; Status = Syncing
+    App-->>UI: queued write fails auth or stream sends session_revoked
+    UI->>UI: Preserve local pending queue and same-field drafts
+    UI->>App: re-authenticate
+    UI->>App: re-query active view if required
+    UI->>App: replay queued writes in FIFO order
+    alt replay succeeds
+        App->>PG: commit replayed writes
+        PG-->>App: authoritative rows
+        App-->>UI: echoed record_changed clears matching queue units
+        UI->>UI: Status = Saved
+    else replay hits same-field conflict or terminal failure
+        App-->>UI: same_field_conflict or terminal failure
+        UI->>UI: blocked unit moves to conflict queue or stays halted; later units remain queued; Status = Conflict
+    end
+```
+
+This sequence is explanatory only. The normative owner text now fixes same-runtime preservation, FIFO replay after any required re-authentication and HTTP re-query, and stop-on-first-terminal-failure behavior.
+
+### 4c. Pending queue overflow on the 65th replay unit
+
+```mermaid
+sequenceDiagram
+    participant A as Analyst
+    participant UI as Browser grid
+
+    A->>UI: Keep editing while 64 replay units are already queued
+    UI->>UI: Queue remains full
+    A->>UI: Commit one more non-coalescible edit
+    UI->>UI: Refuse admission of the 65th replay unit
+    UI->>UI: Preserve the first 64 queued units unchanged
+    UI->>UI: Preserve the current visible edit as unsaved local work
+    UI->>UI: Show same-surface non-modal overflow notice
+    UI->>UI: Status = Conflict
+```
+
+Suggested same-surface overflow copy belongs in the explanatory UI layer rather than the normative core, for example: `Pending local edits are full. Keep this tab open, resolve conflicts, or wait for sync before adding more queued edits.`
+
+### 4d. Folding edits into one queued create for an uncommitted local row
+
+```mermaid
+sequenceDiagram
+    participant A as Analyst
+    participant UI as Browser grid
+    participant App as App API
+    participant PG as Postgres
+
+    A->>UI: Type into a blank row while transport or auth is blocked
+    UI->>UI: Create one local row token and enqueue one create unit
+    A->>UI: Keep editing the same unsaved row
+    UI->>UI: Fold later edits into that queued create unit
+    UI->>App: replay queued create after reconnect or re-auth
+    App->>PG: commit one authoritative create carrying final values
+    PG-->>App: committed row
+    App-->>UI: clear local token and pending create unit
+```
+
+This illustration is explanatory only. The normative owner text closes create folding for still-uncommitted local rows while keeping coalescing for existing rows bounded to one contiguous same-record run.
+
 ### Bulk paste/import from existing spreadsheet or clipboard
 
+#### Canonical upload-envelope examples for upload-style extension routes
+
+The examples below illustrate the shared multipart upload-envelope contract now owned by Core 01 §17.1.1. They are non-normative examples of a conformant wire shape, not alternate APIs.
+
+##### `POST /api/v1/import-sessions`
+
+```bash
+curl -X POST /api/v1/import-sessions \
+  -H 'Accept: application/json' \
+  -F 'metadata={"incident_id":"inc_2026_017","client_txn_id":"txn_import_01","assistant_profile":"phase2_workbook_import_v1"};type=application/json' \
+  -F 'file=@timeline.csv;type=text/csv'
+```
+
+```js
+const formData = new FormData();
+const metadata = {
+  incident_id: "inc_2026_017",
+  client_txn_id: "txn_import_01",
+  assistant_profile: "phase2_workbook_import_v1"
+};
+const sourceFile = new File([csvText], "timeline.csv", { type: "text/csv" });
+formData.append(
+  "metadata",
+  new Blob([JSON.stringify(metadata)], { type: "application/json" })
+);
+formData.append("file", sourceFile);
+await fetch("/api/v1/import-sessions", {
+  method: "POST",
+  body: formData,
+  credentials: "include"
+});
+```
+
+##### `POST /api/v1/reference-packs/import`
+
+```bash
+curl -X POST /api/v1/reference-packs/import \
+  -H 'Accept: application/json' \
+  -F 'metadata={"client_txn_id":"txn_pack_import_01","activation_policy":"staged_only"};type=application/json' \
+  -F 'file=@reference-pack.zip;type=application/zip'
+```
+
+```js
+const packFormData = new FormData();
+const packMetadata = {
+  client_txn_id: "txn_pack_import_01",
+  activation_policy: "staged_only"
+};
+const packFile = new File([packBytes], "reference-pack.zip", { type: "application/zip" });
+packFormData.append(
+  "metadata",
+  new Blob([JSON.stringify(packMetadata)], { type: "application/json" })
+);
+packFormData.append("file", packFile);
+await fetch("/api/v1/reference-packs/import", {
+  method: "POST",
+  body: packFormData,
+  credentials: "include"
+});
+```
+
+##### `POST /api/v1/incident-bundles/import`
+
+```bash
+curl -X POST /api/v1/incident-bundles/import \
+  -H 'Accept: application/json' \
+  -F 'metadata={"client_txn_id":"txn_bundle_import_01"};type=application/json' \
+  -F 'file=@incident-bundle.tar.gz;type=application/gzip'
+```
+
+```js
+const bundleFormData = new FormData();
+const bundleMetadata = {
+  client_txn_id: "txn_bundle_import_01"
+};
+const bundleFile = new File([bundleBytes], "incident-bundle.tar.gz", { type: "application/gzip" });
+bundleFormData.append(
+  "metadata",
+  new Blob([JSON.stringify(bundleMetadata)], { type: "application/json" })
+);
+bundleFormData.append("file", bundleFile);
+await fetch("/api/v1/incident-bundles/import", {
+  method: "POST",
+  body: bundleFormData,
+  credentials: "include"
+});
+```
+
+##### Shared worked error examples
+
+Missing `file` part on `POST /api/v1/import-sessions`:
+
+```json
+{
+  "error": {
+    "code": "invalid_import_request",
+    "details": {
+      "reason_code": "missing_required_part",
+      "part_name": "file"
+    }
+  }
+}
+```
+
+Wrong `metadata` part content type on `POST /api/v1/reference-packs/import`:
+
+```json
+{
+  "error": {
+    "code": "invalid_reference_pack_request",
+    "details": {
+      "reason_code": "invalid_part_content_type",
+      "part_name": "metadata",
+      "received_content_type": "text/plain",
+      "allowed_content_types": [
+        "application/json",
+        "application/json; charset=utf-8"
+      ]
+    }
+  }
+}
+```
+
+Unexpected extra part on `POST /api/v1/incident-bundles/import`:
+
+```json
+{
+  "error": {
+    "code": "invalid_incident_bundle_request",
+    "details": {
+      "reason_code": "unexpected_part",
+      "part_name": "notes"
+    }
+  }
+}
+```
+
+
 - **Clipboard paste is day-one functionality.**\
-  Pasting TSV/CSV into the timeline sheet should create/update multiple rows starting from the selected cell.
+  In this illustration, pasting TSV/CSV into the timeline sheet creates or updates multiple rows starting from the selected cell.
 - Known columns map directly.
 - Unknown columns are stored into `raw_capture.import_columns`.
 - Host/identity text from pasted cells follows the same `entity_binding_mode` contract as interactive edits: `mention_origin` fields create unresolved `entity_mentions`; `entity_origin` fields create or upsert host/identity records.
@@ -618,11 +1147,11 @@ This illustration keeps the UI obligation lightweight: the reviewer invokes supe
 
 Clipboard paste validates the hot-path grid experience. By itself it does not prove brownfield workbook migration readiness.
 
-For file-based onboarding, keep workbook interaction on the grid surface and isolate workbook parsing inside a dedicated imports module. Clipboard-driven ingest and file-based import should still share the same mapping engine and a canonical tabular source model so behavior does not drift across intake paths.
+For file-based onboarding, this illustration keeps workbook interaction on the grid surface and isolates workbook parsing inside a dedicated imports module. Clipboard-driven ingest and file-based import use the same mapping engine and canonical tabular source model so behavior does not drift across intake paths.
 
-For file-based import, start with a bounded contract rather than promising full spreadsheet fidelity. The first assistant should support CSV file import plus selected-sheet or selected-region XLSX import, with preview, header mapping, provenance capture, and unknown-column preservation. It should prioritize sheets or regions that map to timeline, systems/hosts, accounts/identities, indicators, evidence tracker, and VERIS-like summaries when present. Mapping contracts, not sheet labels alone, should decide whether a source column is `mention_origin` or `entity_origin`.
+For file-based import, the bounded first assistant shown here supports CSV file import plus selected-sheet or selected-region XLSX import, with preview, header mapping, provenance capture, and unknown-column preservation. It prioritizes sheets or regions that map to timeline, systems/hosts, accounts/identities, indicators, evidence tracker, and VERIS-like summaries when present. Mapping contracts, not sheet labels alone, determine whether a source column is `mention_origin` or `entity_origin`.
 
-Formulas, macros, workbook automation, external links, comments, pivot tables, charts, workbook protection, and merged-cell layout semantics should not be treated as live workbook logic. Formula cells should be imported as inert values or raw source metadata only, with visible warnings or explicit rejection when a feature is unsupported. File-based import should not auto-resolve host/account aliases; imported tokens should remain unresolved mentions until an analyst resolves them explicitly.
+Formulas, macros, workbook automation, external links, comments, pivot tables, charts, workbook protection, and merged-cell layout semantics are treated here as non-live workbook logic. Formula cells enter as inert values or raw source metadata only, with visible warnings or explicit rejection when a feature is unsupported. File-based import leaves host/account aliases as unresolved mentions until an analyst resolves them explicitly.
 
 #### Example preview payload
 
@@ -896,60 +1425,41 @@ UI note: on receipt of a terminal result, the client keeps the current workbook 
 
 ### Non-Timeline create-policy examples
 
-- **Linked note from context.** Selecting a Timeline, Host, Identity, or Evidence row may preseed a linked-record reference for `add linked note`, but the note does not commit until `note.title` or `note.body` is non-empty after the bound `single_line_title_v1` or `multiline_body_v1` normalization. A linked but otherwise empty note remains an unsaved draft, not a saved record.
-- **Evidence request without a blob.** A blank-row Evidence create with no explicit lifecycle choice commits only when at least one writable evidence field remains present after its bound contract normalization. In the current profile, `evidence.title` uses `single_line_title_v1`, `evidence.storage_ref` uses `locator_text_v1`, and `evidence.collector_party_text` plus `evidence.source_party_text` use `party_text_v1`. Optional hidden `evidence.collector_party_id` and `evidence.source_party_id` links may supplement that text through same-surface enrichment, but they do not by themselves satisfy the minimum create signal and they do not rewrite the preserved text. The committed row defaults `evidence.lifecycle_state` to `requested`, and omitted `requested_at` defaults to the commit timestamp. A create lacking both a qualifying field signal and a finalized blob leaves no evidence row.
-- **Canonical indicator create gate.** A blank-row Indicators create is refused until canonical identity is determinable from `indicator.indicator_type`, `indicator.value_kind`, `indicator.display_value`, and `indicator.normalized_value` when required. `indicator.hash_algorithm` and `indicator.hash_value` are pairwise; `defanged_value` and `stix_pattern` may be present but do not satisfy the identity gate.
-- **Assessment from selected subject.** Creating an assessment from a selected Host or Identity row may preseed `assessment.subject_ref` and `assessment.subject_type`, but the row commits only when `assessment.assessment_state` and non-empty `assessment.rationale` are also present. Omitted `assessed_at` and `assessor` default at commit time.
-- **Task request from selected records.** A task-request create flow may preseed `task.linked_record_ids` or `task.decision_record_id`, but the row commits only when `task.title` remains present after `single_line_title_v1` normalization and `task.task_kind` is present. `task.requester_party_text`, `task.blocked_reason`, `task.external_ticket_ref`, and `task.closure_summary` follow `party_text_v1`, `reason_note_v1`, `locator_text_v1`, and `multiline_body_v1` when written. An optional hidden `task.requester_party_id` may supplement `task.requester_party_text`, but it does not by itself satisfy the minimum create signal and it does not rewrite the preserved text.
-- **Decision from selected support.** A decision create flow may preseed `decision.support_refs`, but the row commits only when `decision.decision_type`, `decision.summary`, and `decision.rationale` remain present after the bound `single_line_title_v1` and `multiline_body_v1` normalization. Omitted `decision.status`, `decision.owner_user_id`, and `decision.decided_at` default to `proposed`, the current actor, and the commit timestamp.
+The examples below illustrate create affordances and minimum-create-signal consequences only. Exact create-time defaults, omitted-versus-`null` behavior, and server-generated initial values remain owned by the corresponding Core 01 surface contract.
+
+- **Example create outcome: linked note from context.** Selecting a Timeline, Host, Identity, or Evidence row can preseed a linked-record reference for `add linked note`, but the note does not commit until `note.title` or `note.body` is non-empty after the bound `single_line_title_v1` or `multiline_body_v1` normalization. A linked but otherwise empty note remains an unsaved draft, not a saved record.
+- **Example create outcome: evidence request without a blob.** A blank-row Evidence create with no explicit lifecycle choice commits only when at least one writable evidence field remains present after its bound contract normalization. In the current profile, `evidence.title` uses `single_line_title_v1`, `evidence.storage_ref` uses `locator_text_v1`, and `evidence.collector_party_text` plus `evidence.source_party_text` use `party_text_v1`. Optional hidden `evidence.collector_party_id` and `evidence.source_party_id` links can supplement that text through same-surface enrichment, but they do not by themselves satisfy the minimum create signal and they do not rewrite the preserved text. On a full row query or row-refresh payload, those hidden direct-reference fields still appear inside `cells` even when the default grid keeps them hidden. A create lacking both a qualifying field signal and a finalized blob leaves no evidence row. Exact create-time defaults remain owned by Core 01 §7.4.4.
+- **Example create outcome: canonical indicator create gate.** A blank-row Indicators create is refused until canonical identity is determinable from `indicator.indicator_type`, `indicator.value_kind`, `indicator.display_value`, and `indicator.normalized_value` when required. `indicator.hash_algorithm` and `indicator.hash_value` are pairwise; `defanged_value` and `stix_pattern` can be present but do not satisfy the identity gate.
+- **Example create outcome: assessment from selected subject.** Creating an assessment from a selected Host or Identity row can preseed `assessment.subject_ref` and `assessment.subject_type`, but the row commits only when `assessment.assessment_state` and non-empty `assessment.rationale` are also present. Exact create-time defaults remain owned by Core 01 §7.4.7.
+- **Example create outcome: task request from selected records.** A task-request create flow can preseed `task.linked_record_ids` or `task.decision_record_id`, but the row commits only when `task.title` remains present after `single_line_title_v1` normalization and `task.task_kind` is present. `task.requester_party_text`, `task.blocked_reason`, `task.external_ticket_ref`, and `task.closure_summary` follow `party_text_v1`, `reason_note_v1`, `locator_text_v1`, and `multiline_body_v1` when written. An optional hidden `task.requester_party_id` can supplement `task.requester_party_text`, but it does not by itself satisfy the minimum create signal and it does not rewrite the preserved text. On a full row query or row-refresh payload, `task.requester_party_id` still appears inside `cells` even when the default grid keeps it hidden.
+- **Example create outcome: decision from selected support.** A decision create flow can preseed `decision.support_refs`, but the row commits only when `decision.decision_type`, `decision.summary`, and `decision.rationale` remain present after the bound `single_line_title_v1` and `multiline_body_v1` normalization. Exact create-time defaults remain owned by Core 01 §7.4.9.
 
 ### Auto-resolution policy for typed host/account strings
 
-This revision resolves the MVP policy for alias auto-resolution.
+Core 03 §12 is the authoritative owner of current-profile auto-resolution eligibility, suppressor grammar, forbidden rewrites, write effects, and workflow scope. This subsection is illustrative only.
 
-The system MAY auto-resolve a typed host or identity token to an existing alias only in interactive mention-capture flows, and only when `auto_resolution_confidence = 100`.
+| Submitted token | Contract-normalized token | Suppressor matched | Exact alias equality | Eligible workflow | Final outcome |
+| --- | --- | --- | --- | --- | --- |
+| `WS-023` | `WS-023` | no | yes, alias `WS-023` | yes | Auto-resolve only on an eligible interactive Timeline `Hosts` or `Identities` write. |
+| ` vpn   gateway ` | `vpn gateway` | no | yes, alias `VPN Gateway` after the same contract normalization plus case fold | yes | Auto-resolve only on an eligible interactive Timeline `Hosts` or `Identities` write. |
+| `WS-023?` | `WS-023?` | yes, ASCII `?` | no; punctuation is preserved | yes | Example outcome under Core 03 §12: remains unresolved. |
+| `WS-023??` | `WS-023??` | yes, ASCII `?` | no; punctuation is preserved | yes | Example outcome under Core 03 §12: remains unresolved. |
+| `WS-023 ~` | `WS-023 ~` | yes, ASCII `~` | no; punctuation is preserved | yes | Example outcome under Core 03 §12: remains unresolved. |
+| `WS-023 approx` | `WS-023 approx` | yes, lexical token `approx` | no; extra token is preserved | yes | Example outcome under Core 03 §12: remains unresolved. |
+| `WS-023 likely` | `WS-023 likely` | no | no; matching would require extra-word stripping | yes | Example outcome under Core 03 §12: remains unresolved. |
+| `(WS-023)` | `(WS-023)` | no | no; matching would require parenthetical stripping | yes | Example outcome under Core 03 §12: remains unresolved. |
 
-`auto_resolution_confidence = 100` applies only when all of the following are true:
-
-- the edited cell determines the expected entity type (`Hosts` => `host`, `Identities` => `identity`) and candidate matching is limited to that type within the same incident;
-- the token matches exactly one existing alias after deterministic normalization limited to case-folding plus whitespace collapse;
-- the raw token contains no explicit uncertainty marker such as `?`, `~`, `maybe`, or `prob`;
-- the target record is not soft-deleted, merged, retired, or disabled;
-- no competing candidate record remains after normalization.
-
-Anything below `100` MAY drive ranking or suggestions, but MUST NOT create or update `record_links`, set `entity_mentions.resolved_record_id`, or otherwise mutate resolution state without explicit analyst selection.
-
-To preserve raw analyst input, auto-resolution MUST still insert an `entity_mentions` row for the typed token with `resolution_status='resolved'` and `resolved_record_id` set to the chosen record. The corresponding `record_links` row MUST use `provenance='auto_match'` and `confidence=100`.
-
-Auto-resolution MAY occur only in:
-
-- inline commit of a Timeline `Hosts` or `Identities` cell;
-- interactive clipboard paste into those same relationship cells, where the resulting auto-resolutions are part of the same visible `change_set`.
-
-Auto-resolution MUST NOT occur in:
-
-- the inspector's explicit resolve flow;
-- Hosts/Identities alias-edit cells;
-- merge/dedupe workflows;
-- file-based import through the Import Extension Profile;
-- background jobs or async enrichment/cleanup;
-- any workflow that would create a new canonical host/identity or edit alias rows without explicit analyst confirmation.
-
-The UI MUST NOT silently auto-resolve. When auto-resolution occurs, the current sheet MUST show an immediate non-modal disclosure on the same surface that includes the raw token, the canonical target, the matched alias text, and direct `Undo` and `Review` actions. For batch paste, the disclosure MUST also include the number of tokens auto-resolved in that visible change set. The resolved chip or cell MUST remain inspectably marked as auto-resolved, and row history MUST preserve the raw token, matched alias text, `confidence=100`, and mutation source.
-
-`Undo` from the immediate disclosure MUST restore the raw unresolved token, remove the auto-created link, and preserve focus and scroll position. After the immediate disclosure expires, the user MUST still be able to choose `Revert to unresolved` from the chip context or row history in no more than two actions. That later correction is a new attributed revision; it MUST NOT rewrite history.
+Localized or language-specific uncertainty lexicons remain future-only. In the current profile, the implementation does not translate, strip, or otherwise reinterpret such words; a token auto-resolves only when the full normalized token exactly equals an alias under the Core 03 §12 contract.
 
 ### Unknown or ambiguous fields
 
-Unknown values must remain valid:
+Examples of rough input that remain valid under the core contract:
 
-- `occurred_at` may be null.
-- summary may be null if another field or attachment exists.
-- host/account text may remain unresolved.
+- `occurred_at` can remain null.
+- summary can remain null if another field or attachment exists.
+- host/account text can remain unresolved.
 - confidence can be left unset.
-- details may be plain text without structure.
-
-- Timestamp entry should also preserve visible interpretation state: invalid timestamp text remains unsaved local state until corrected or discarded, and clearing a timestamp cell serializes as explicit JSON `null` only when the bound field declares `clearable=true`. When the bound field is not clearable, the attempted save fails closed and the visible local state remains unsaved rather than being silently coerced.
+- details can remain plain text without structure.
 
 ### End-to-end attribution
 
@@ -1122,7 +1632,7 @@ flowchart LR
 
 ### Benchmark timing-state illustrations
 
-This subsection is illustrative only. Core 04 §9 remains the normative owner of the claim-bearing benchmark profile, measurement-predicate registry, and timed or fixture-sensitive pass/fail semantics.
+This subsection is illustrative only. Core 04 remains the normative owner of implementation pass/fail semantics, and Core 05 remains the normative owner of claim-bearing benchmark profile and measurement-predicate publication policy.
 
 #### Blank-row creation timing boundary
 
@@ -1173,6 +1683,35 @@ Illustrative first-useful predicate: the first visible row window for the reques
 
 Illustrative stable predicate: the visible row window and result ordering now match the final deterministic order, and no further reorder occurs without new user or server input.
 
+#### Snapshot-stable cursor continuation under live change
+
+```mermaid
+sequenceDiagram
+    participant A as Analyst A
+    participant UI as Workbook surface
+    participant App as App API
+    participant B as Analyst B
+
+    A->>UI: Load page 1
+    UI->>App: query {limit, sort, filters}
+    App-->>UI: rows + next_cursor bound to snapshot S1
+
+    B->>App: Commit insert or re-sort that changes live order
+    App-->>UI: live `record_changed` event
+    UI->>UI: Keep the current viewport stable
+    UI->>UI: Optional notice: "Results changed. Refresh to see current order."
+
+    A->>UI: Continue the current chain
+    UI->>App: query {cursor_token: next_cursor}
+    App-->>UI: next page from snapshot S1
+
+    A->>UI: Click Refresh
+    UI->>App: query without `cursor_token`
+    App-->>UI: page 1 of current live order
+```
+
+The important UI consequence is that live collaboration can still update currently visible rows, but continuation does not silently splice new live rows into an existing page chain. Refresh restarts from page 1 without `cursor_token`; continuation keeps the existing chain's snapshot order.
+
 #### Evidence-inspector metadata-shell boundary
 
 ```mermaid
@@ -1195,7 +1734,7 @@ Illustrative metadata-shell predicate: the selected-row summary, total linked-ev
 
 ## 9. UI concepts focused on preserving the spreadsheet feel
 
-The UI should feel like a **workbook**, but the sheets are **saved views over projections**, not separate storage silos. The built-in tabs are intentionally few: Timeline, Hosts, Identities, Evidence, and Notes. Indicators and Assessments should remain contract-backed system views over related projections even when canonical indicators or assessments are first-class records underneath. Framework overlays such as ATT&CK or VERIS should start as contract-backed system views and only become dedicated tabs if usage justifies it. Required base coordination surfaces `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1` are opened and addressed by their standardized `view_schema_id`; a saved view over one of those schemas is a separate preset or layout surface rather than the required base surface itself.
+In the current profile, the UI is workbook-like, but the sheets are contract-backed workbook surfaces and saved views over projections rather than separate storage silos. The built-in tabs remain intentionally few: Timeline, Hosts, Identities, Evidence, and Notes. Indicators and Assessments are exposed as contract-backed system views over related projections even when canonical indicators or assessments are first-class records underneath. Framework overlays such as ATT&CK or VERIS begin as contract-backed system views and become dedicated tabs only if a later profile justifies that promotion. Required pack-independent base-profile registry surfaces, including `cartulary.view.task_requests.v1`, `cartulary.view.decisions.v1`, `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`, are opened and addressed by their standardized `view_schema_id`; a saved view over one of those schemas remains a separate preset or layout surface rather than the required base surface itself.
 
 ### UI concept 1: Primary workbook-style timeline view
 
@@ -1214,6 +1753,12 @@ The UI should feel like a **workbook**, but the sheets are **saved views over pr
 | Status: Saved | Analyst B is on row 81 | Enter=new row | Tab=next cell | Ctrl+V=paste | Space=preview |
 +------------------------------------------------------------------------------------------------------------------+
 ```
+
+The status bar interpretation shown here is explanatory only:
+
+- `Syncing` includes queued local work waiting for transport or re-authentication.
+- `Conflict` includes unresolved same-field conflicts, pending-queue overflow, and replay halted on a terminal failure.
+- Suggested overflow banner copy belongs here, not in the normative core.
 
 #### Screen regions
 
@@ -1250,26 +1795,27 @@ The UI should feel like a **workbook**, but the sheets are **saved views over pr
 
 - Column header click sorts.
 - Filter chips apply without leaving the sheet.
-- Timeline grouping is a presentation-only transform over the current filtered result set. It MUST NOT create, delete, or mutate source records, projection rows, links, or tags.
-- Timeline sheets MUST support `Group: None` plus exactly one active grouping key in MVP. The active key MUST be stored as a stable contract value in `saved_views.query_json.group_by`, not as a visible label, and `Group: None` is represented by omission rather than by `null`.
-- Allowed grouping keys for timeline sheets are:
+- Core 03 §14 defines timeline grouping as a presentation-only transform over the current filtered result set; this illustration does not create, delete, or mutate source records, projection rows, links, or tags.
+- Core 03 §14 defines `Group: None` plus exactly one active grouping key in the current profile. This mockup stores the active key as `saved_views.query_json.group_by`, and represents `Group: None` by omission rather than by `null`.
+- The current profile's allowed timeline grouping keys are:
   - `timeline.occurred_day` derived from `occurred_at` at day granularity
   - `timeline.recorded_day` derived from `recorded_at` at day granularity
   - `timeline.capture_state`
   - `timeline.has_evidence` where `evidence_count > 0`
   - `timeline.has_unresolved_mentions` where at least one `entity_mentions` row for the source record has `resolution_status='unresolved'`
 - dismissed mentions do not contribute to this derived flag, and a row whose remaining mentions are all dismissed groups under `false`
-- Grouping keys MUST be scalar, contract-backed values. Free-text columns and multi-valued relationship cells such as Hosts, Identities, and Tags are not eligible grouping keys in timeline sheets.
-- Group order MUST be deterministic:
+- Grouping keys in this illustration are scalar, contract-backed values. Free-text columns and multi-valued relationship cells such as Hosts, Identities, and Tags are not used as grouping keys.
+- Group order in this illustration is deterministic:
   - `timeline.occurred_day` and `timeline.recorded_day` sort by bucket value descending, with null buckets last
   - `timeline.capture_state` sorts `rough`, `enriched`, `reviewed`, `superseded`
   - `timeline.has_evidence` and `timeline.has_unresolved_mentions` sort `true` then `false`
   - the current row sort applies unchanged within each group
 - The outline affordance for grouped timeline sheets is limited to one derived group-header level with these operations: `expand group`, `collapse group`, `expand all`, `collapse all`, and `ungroup` via `Group: None`.
-- Group headers are derived UI rows only. They MUST NOT have a `record_id`, MUST NOT accept inline edits or paste targets, MUST NOT appear in exports or revision history, and MUST NOT become mutation targets.
+- In the current profile, group headers are illustrative derived UI rows only and are not mutation targets, export rows, or revision-history rows.
 - Sorting and filtering apply to underlying rows first; grouping is computed second. Edits, conflicts, autosave, and rollback remain row-based and target only underlying records by `record_id` and `base_row_version`.
-- A row MAY move between visible groups only when an edit changes the grouped field value. Dragging a row between groups MUST NOT be a write path.
-- Transient expand/collapse state SHOULD remain client-local and MUST NOT be broadcast as collaborative state. Saved views MAY persist the default grouping key, but not another user’s live open/closed state.
+- In this illustration, a row moves between visible groups only when an edit changes the grouped field value. Dragging a row between groups is not a write path.
+- This illustration keeps transient expand/collapse state client-local and not collaborative state. Saved views can persist the default grouping key, but not another user’s live open/closed state.
+- Other workbook surfaces whose active `view_schema` declares `grouping_fields` use the same generic grouping boundary, omission-only `Group: None` semantics, derived-header rule, one-outline-level limit, and client-local expand/collapse behavior; Timeline alone adds the current explicit grouping whitelist and group-order override.
 - Timeline grouping non-goals:
   - manual row-range grouping or ungrouping
   - nested outline depth greater than `1`
@@ -1307,6 +1853,78 @@ Non-normative response fragment showing the effective applied sort in `meta.quer
   }
 }
 ```
+
+Non-normative normalization examples:
+
+1. Set-like `values[]` collapse by meaning rather than caller order.
+
+Request fragment:
+
+```json
+{
+  "filters": [
+    {
+      "field_key": "timeline.capture_state",
+      "op": "eq",
+      "arg": { "values": ["reviewed", "rough", "reviewed"] }
+    }
+  ]
+}
+```
+
+Canonical `meta.query` fragment:
+
+```json
+{
+  "filters": [
+    {
+      "field_key": "timeline.capture_state",
+      "op": "eq",
+      "arg": { "values": ["rough", "reviewed"] }
+    }
+  ]
+}
+```
+
+2. `prefix.value` persists in comparison-normalized form.
+
+Request fragment:
+
+```json
+{
+  "filters": [
+    {
+      "field_key": "identity.upn",
+      "op": "prefix",
+      "arg": { "value": "JOHN." }
+    }
+  ]
+}
+```
+
+Canonical `meta.query` fragment:
+
+```json
+{
+  "filters": [
+    {
+      "field_key": "identity.upn",
+      "op": "prefix",
+      "arg": { "value": "john." }
+    }
+  ]
+}
+```
+
+3. `note.full_text` tokenization examples.
+
+- `svc_account` -> tokens `svc`, `account`
+- `john.doe@example.com` -> tokens `john`, `doe`, `example`, `com`
+- `WS-023` -> tokens `ws`, `023`
+- `café` -> token `café`
+- `---___...` -> zero tokens; reject with `400 error.code='invalid_view_query'` and `error.details.reason_code='empty_full_text_after_tokenization'`
+
+Duplicate query tokens coalesce, query-token order is non-semantic, and the canonical persisted `arg.query` is the sorted unique token list joined by one ASCII space.
 
 Column-header note: clicking the visible `Time` header emits the stable sort key `timeline.sort_ts`, not `timeline.occurred_at`.
 
@@ -1349,9 +1967,9 @@ Presence is ambient:
 
 No locking banners for normal work.
 
-#### What should feel like Excel vs intentionally differ
+#### Excel-like qualities and deliberate differences
 
-**Should feel like Excel:**
+**Excel-like qualities:**
 
 - tabular grid
 - direct typing
@@ -1360,7 +1978,7 @@ No locking banners for normal work.
 - keyboard navigation
 - flexible sorting/filtering
 
-**Should intentionally differ:**
+**Deliberate differences:**
 
 - relationship cells render chips, not raw comma-separated strings forever
 - evidence is attached objects, not file paths in cells
@@ -1380,9 +1998,9 @@ The timeline sheet reads from `timeline_grid_projection`. The grid does not quer
 | Evidence        | `evidence_count`                               | create `object_blob` + `evidence_record` + `record_link`                                                                                                                                                 |
 | Tags            | `tag_names`                                    | upsert `tags` + `record_tags`                                                                                                                                                                            |
 
-That is the critical design mechanism: **denormalized reads, intent-aware writes**. The same rule applies to every system view and export surface: reads may be denormalized, but write-back and derivation semantics come from explicit contracts, not visible labels.
+That is the critical design mechanism: **denormalized reads, intent-aware writes**. The same rule applies to every system view and export surface: reads can be denormalized, but write-back and derivation semantics come from explicit contracts, not visible labels.
 
-Each visible grid row must stay bound to `record_id` and `row_version` from the projection even when the user sorts, filters, or groups the sheet. The visible row number is presentation only; it is never a mutation target.
+This illustration assumes the Core 01/Core 03 row-binding contract, under which each visible grid row stays bound to `record_id` and `row_version` from the projection even when the user sorts, filters, or groups the sheet. The visible row number remains presentation only; it is never a mutation target.
 
 ### UI concept 2: Entity/evidence workbook view
 
@@ -1447,7 +2065,7 @@ Same model as Timeline: last editor column, history in inspector, row presence i
 
 #### Excel-like vs deliberate differences
 
-This should feel like a workbook tab with sortable rows. It should **not** feel like a CMDB or identity management tool. The deliberate difference from Excel is that a host row is a canonical record with aliases and links, not just a text string on a tab.
+This illustration keeps the surface workbook-like and sortable rather than CMDB-like or identity-management-like. The deliberate difference from Excel is that a host row is a canonical record with aliases and links, not just a text string on a tab.
 
 #### How denormalized entity/evidence views are composed
 
@@ -1459,7 +2077,7 @@ This should feel like a workbook tab with sortable rows. It should **not** feel 
 - evidence counts from `record_links` to evidence records
 - tag names and last editor from `records` / `record_tags`
 
-The grid remains denormalized; writes still go back to source tables. Type chips, icons, and evidence labels should resolve through registry keys such as `host_type_key` and `evidence_type_key`, not hard-coded display strings.
+The grid remains denormalized; writes still go back to source tables. In this realization, type chips, icons, and evidence labels resolve through registry keys such as `host_type_key` and `evidence_type_key`, not hard-coded display strings.
 
 ### UI concept 3: Detail / relationship inspector
 
@@ -1521,7 +2139,7 @@ This is enrichment, not primary capture.
 
 #### Copy/paste and bulk actions
 
-The inspector is not the main paste target, but it should support copying hashes, filenames, aliases, and structured details. Bulk resolution actions can be launched from selected rows but executed here.
+The inspector is not the main paste target, but it supports copying hashes, filenames, aliases, and structured details. Bulk resolution actions can be launched from selected rows but executed here.
 
 #### How links are created and surfaced
 
@@ -1532,7 +2150,7 @@ The inspector shows both:
 - **raw indicator observation lineage** when a source value or span has been linked to an indicator, and
 - **current canonical links**.
 
-Active relationship lists and default unresolved queues exclude dismissed mentions, but dismissal must preserve inspectable lineage rather than erase it. That distinction is important. It prevents later cleanup from erasing what was actually observed during the incident.
+Active relationship lists and default unresolved queues exclude dismissed mentions, but this illustration keeps dismissal as inspectable lineage rather than erased state. That distinction is important. It prevents later cleanup from erasing what was actually observed during the incident.
 
 #### Authorship, version history, rollback
 
@@ -1544,11 +2162,11 @@ The history tab is the reviewer’s primary tool. It shows:
 - diff summary expanded to changed field/link/mention/tag/evidence-entry units,
 - rollback actions for a single logical history entry, whole-row restore, and whole-change-set rollback.
 
-Arbitrary user-selected subsets of fields from historical snapshots are not required in MVP. Rollback should create a new revision; history remains intact.
+Arbitrary user-selected subsets of fields from historical snapshots are not required in MVP. Core 03 §10 and Core 02 history rules require rollback to append a new revision; this view illustrates that outcome while keeping history intact.
 
 #### Multi-user presence and modal avoidance
 
-If another analyst is editing the same record, the inspector shows that inline, but does not lock them out. This panel should be a drawer, not a blocking modal.
+If another analyst is editing the same record, the inspector shows that inline, but does not lock them out. This mockup uses a drawer rather than a blocking modal.
 
 #### Why this does not become a rigid case-management app
 

@@ -6,74 +6,84 @@ It records where the content of the exploratory source artifact was carried into
 
 ## F.1 Level-2 source section coverage
 
-| Source section | Derived target(s) | Coverage note |
-| --- | --- | --- |
-| `1. Executive summary` | Core 00, Appendix A, Appendix G | Vision and design thesis preserved as rationale; closed requirements extracted into core invariants. |
-| `2. Problem framing` | Appendix A, Appendix G | Problem statement, user roles, and adoption rationale preserved as informative context. |
-| `3. Design principles and assumptions` | Core 00, Core 01, Core 03, Appendix A, Appendix G | Operating envelope and load-bearing principles promoted; rationale retained in Appendix A. |
-| `4. Recommended architecture` | Core 01, Appendix B, Appendix G | Topology, storage, projection, portability, snapshot, and background-job contracts promoted; diagrams and explanatory notes retained. |
-| `5. Collaboration and consistency model` | Core 03, Appendix G | Optimistic concurrency, autosave, presence, and same-surface same-field conflict semantics promoted. |
-| `6. Domain model and schema strategy` | Core 02, Appendix G | Record types, mention/entity contract, indicator records and observations, provenance, dedupe, merge, notes, analyst-work objects, assessments, and JSONB discipline promoted. |
-| `7. Postgres schema proposal` | Core 02, Appendix C, Appendix G | Schema invariants and history rules promoted; ER diagram and DDL retained as informative reference. |
-| `8. Record lifecycle and IR workflow model` | Core 03, Appendix D, Appendix G | Lifecycle, including explicit Timeline `capture_state` transition triggers and system-managed workflow semantics, timeline create flow, evidence attach flow, pending-blob timeout and cleanup defaults, resolution flow, rollback flow, paste/import behavior, and auto-resolution policy promoted. |
-| `9. UI concepts focused on preserving the spreadsheet feel` | Core 01, Core 03, Appendix D, Appendix G | Workbook interaction contract and authoritative base-profile view-schema registry, including canonical `view_schema_id` public identity for the required base coordination surfaces, promoted; mockups and explanatory notes retained. |
-| `10. UX acceptance criteria` | Core 04, Appendix G | Rewritten as conformance criteria with base and extension profiles; performance reproducibility is now closed by Core 04's benchmark-profile registry, required benchmark manifest, and exact measurement-predicate registry rather than by fixtures alone. |
-| `11. Security, auth, and access control` | Core 01, Core 04, Appendix G | Authentication, authorization, attribution, and trust boundaries promoted, with the Enterprise Authentication route family and enterprise binding-management surface now owned in Core 01 and the security invariants remaining in Core 04. |
-| `12. Deployment model` | Core 01, Core 04, Appendix G | Topology, runtime roots, deployment-configuration contract, and deployment variants promoted. |
-| `13. Trade-offs, risks, and rejected alternatives` | Appendix A, Appendix G | Preserved as informative rationale and risk context. |
-| `14. Comparison table` | Appendix A, Appendix G | Preserved as informative comparison context. |
-| `15. Recommended MVP and phased roadmap` | Appendix E, Appendix G | Preserved as roadmap context; mixed-status features normalized into extension profiles in core. |
-| `16. Open questions` | Core 00, Core 01, Core 02, Core 03, Core 04, Appendix E, Appendix G | Preserved as historical source-question context and editorial decision backlog; questions closed by later normative decisions were promoted into the normative core, and Appendix E now marks current-profile questions resolved while retaining roadmap and future-evolution material. |
-| `Design sanity check` | Appendix A, Appendix G | Preserved as informative validation summary. |
-
+| Source section or topic | Current owner section(s) | Non-normative preservation target(s) | Supporting guidance | Preservation note |
+| --- | --- | --- | --- | --- |
+| `1. Executive summary` | Core 00 | Appendix A, Appendix G | — | rationale only |
+| `2. Problem framing` | — | Appendix A, Appendix G | — | rationale only |
+| `3. Design principles and assumptions` | Core 00, Core 01, Core 03 | Appendix A, Appendix G | — | rationale only |
+| `4. Recommended architecture` | Core 01, Core 04 | Appendix B, Appendix G | — | illustration only |
+| `5. Collaboration and consistency model` | Core 03 | Appendix G | Appendix H | history only |
+| `6. Domain model and schema strategy` | Core 02 | Appendix G | — | history only |
+| `7. Postgres schema proposal` | Core 02 | Appendix C, Appendix G | — | illustration only |
+| `8. Record lifecycle and IR workflow model` | Core 02, Core 03 | Appendix D, Appendix G | — | illustration only |
+| `9. UI concepts focused on preserving the spreadsheet feel` | Core 01, Core 03 | Appendix D, Appendix G | — | illustration only |
+| `10. UX acceptance criteria` | Core 04, Core 05 | Appendix G | — | history only |
+| `11. Security, auth, and access control` | Core 01, Core 04 | Appendix G | — | history only |
+| `12. Deployment model` | Core 01, Core 04 | Appendix G | — | history only |
+| `13. Trade-offs, risks, and rejected alternatives` | — | Appendix A, Appendix G | — | rationale only |
+| `14. Comparison table` | — | Appendix A, Appendix G | — | rationale only |
+| `15. Recommended MVP and phased roadmap` | — | Appendix E, Appendix G | — | future-only backlog |
+| `16. Open questions` | Core 00, Core 01, Core 02, Core 03, Core 04 | Appendix E, Appendix G | Appendix H | history only |
+| `Design sanity check` | — | Appendix A, Appendix G | — | rationale only |
 
 ## F.2 Critical subsection coverage
 
-| Source subsection or topic | Derived target(s) | Coverage note |
-| --- | --- | --- |
-| `6. Mention, stub, and entity-origin contract` | Core 02 §6, Appendix G | Promoted as an authoritative contract. |
-| `6. Required provenance` | Core 02 §7, Appendix G | Promoted as an authoritative provenance contract. |
-| `6. Deduplication and auto-upsert rules` | Core 02 §8, Appendix G | Promoted as deterministic matching rules. |
-| `6. Merge behavior` | Core 01 §3.3.3 and §3.3.5.4, Core 02 §9 and §15.4, Core 03 §5 and §16.2, Core 04 §9.10, Appendix G | Promoted as authoritative merge semantics plus an explicit record-scoped merge route, inspector-only initiation in the base UI, collaboration and rollback hooks, and conformance checks. |
-| `7. Additional schema requirements for rollback granularity` | Core 00 §8.1, Core 02 §14-15, Appendix C, Appendix G | Promoted as authoritative rollback substrate, including row-backed whole-row restore boundaries and stable opaque `history_entry_ref` support for single-target reversal without exposing storage-primary-key mutation identifiers. |
-| Destructive-operation concurrency and public contention failure for restore, rollback, and merge | Core 00 §5.1, Core 01 §3.3.5.0, Core 03 §5, Core 04 §9.1, Appendix C, Appendix D, and Appendix E | Closed as one mandatory fail-fast internal locking model with protected-set definitions, canonical ascending `record_id` acquisition order, required `record_locked` contention failure, deterministic precedence over stale-version and route-precondition evaluation, and no public lock-holder, manual unlock, or queueing surface. |
-| Timeline supersede replacement relation | Core 00 §5.1, Core 01 §3.3.5 and §7.4.1, Core 02 §12.1-§12.3, Core 03 §6, Core 04 §9.1 and §9.11, Appendix C, Appendix D, and Appendix E | Closed as an authoritative direct replacement relation for Timeline supersede, persisted through `record_links.link_type='supersedes'` with canonical `replacement timeline_event -> superseded timeline_event` direction, a hidden read-side `timeline.replacement_record_id` convenience projection, row-history visibility, rollback-and-resupersede correction, and portability/source-state preservation without a new default Timeline column or a new link type. |
-| `5. Same-field conflict resolution UX` | Core 03 §3.3, Core 04 §9.6, Appendix E | Promoted as an authoritative same-surface conflict-resolution contract, including plain-text line-based `text_compare_merge` semantics, optional `suggested_merged_value` only for deterministic clean text merges, typed `collection_value_v1` conflict transport for `collection_review` fields, and removal from the remaining MVP open questions. |
-| Performance benchmark environment and reproducibility | Core 00 §5.1, Core 04 §9 Performance benchmark environment and reproducibility, Appendix B, Appendix D, Appendix E, and Appendix F | Closed as one owner-level claim-bearing benchmark contract with `benchmark_profile_id`, exact browser, runner, storage, and network values, one required `benchmark_manifest`, fixed live-update trace and warm-state defaults, a closed `measurement_predicate_id` registry, and an explicit informative-versus-claim-bearing distinction. |
-| Cross-cutting client/server interface surface for workbook, evidence, and jobs | Core 01 §3.3 and §3.3.10.1, Core 03 §3.3.4, §4.3, §4.3.1, §4.4, §8, and §15, Core 04 §1, §2, §4.5, and §9.10, Appendix E | Closed as one versioned HTTP+JSON API plus the canonical incident-scoped WebSocket subscription route `GET /ws/v1/incidents/{incident_id}` and the bounded collaboration stream carried on that route using stable identifiers, session-based auth, explicit session-lifecycle boundaries and expiry fields, a concrete auth-centric session resource for `GET /api/v1/auth/session` with minimum fields `user_id`, `display_name`, `provider_type`, `mfa_state`, `is_deployment_admin`, `authenticated_at`, `idle_expires_at`, `absolute_expires_at`, `session_expires_at`, and always-present ordered `memberships[]` carrying `incident_id` and `role`, no current-incident-only alternate shape, and singleton-route pagination rejection, generic envelopes, a shared cursor-pagination transport contract across workbook query plus users, incidents, memberships, saved views, view schemas, and record history, explicit blob-slot and job routes, an authoritative incident-create request and response contract with a closed top-level request namespace, explicit create-only versus patchable incident fields, server-managed initial values, validation-before-idempotency normalized comparison, unknown-top-level-member rejection, and create-route error codes, a route-owned row-create contract for `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` with a closed top-level-member namespace, route-scoped idempotency keyed by `(actor_user_id, incident_id, view_schema_id, client_txn_id)`, normalized replay comparison over recognized create members after create-time normalization, first-success versus replay status, and original-result replay semantics, a record-scoped patch contract for `PATCH /api/v1/records/{record_id}` with idempotency keyed by `(actor_user_id, record_id, client_txn_id)`, normalized replay comparison over exact `view_schema_id`, exact `base_row_version`, and canonical `changes[]`, explicit rejection of duplicate `field_key` entries and `changes[]: []` as `invalid_mutation_payload`, non-semantic outer `changes[]` ordering canonicalized by `field_key asc`, preservation of declared order only for inherently ordered inner payloads such as `collection_actions_v1.actions[]`, replay precedence over stale `base_row_version` conflict, order-dependent outer-array ambiguity rejected as `invalid_mutation_payload`, and original-result replay semantics that create no second mutation, no second revision entry, and no second replayable collaboration event, a complete blob-slot create-request contract with required incident anchor, required `client_txn_id`, required declared size, optional advisory and integrity hints, `accepted_contract` echo, incident-scoped idempotency keyed by `(actor_user_id, incident_id, client_txn_id)`, same-expired-slot replay semantics, and fail-closed size or expected-hash mismatch handling, an explicit record-scoped `POST /api/v1/evidence-records/{record_id}/attach-blob` contract with required `object_blob_id`, `base_row_version`, and `client_txn_id`, normalized replay comparison, and fail-closed attach behavior, intentionally non-idempotent preview and download handle issuance that rejects `client_txn_id` and mints a fresh handle on each success, record-scoped soft-delete and restore routes with optimistic concurrency and role-gated restore, a record-history route that exposes legal rollback selectors and current tombstone version tokens, a typed rollback request contract for `history_entry`, `change_set`, and `row_restore`, field-key-based mutation that distinguishes direct `value` from versioned `action_payload`, typed `collection_actions_v1` and `collection_value_v1` contracts for `collection_review` fields with stable `item_ref` targets, and a concrete v1 collaboration protocol with a common envelope, typed handshake and presence messages, a replay-only `resume_token` bound to `{session, incident, client_instance}`, replayable-versus-ephemeral delivery classes, bounded resume and reset behavior, application-level heartbeats that do not renew idle session expiry, origin validation for cookie-authenticated browser sockets, preserved client-local unsaved work across auth expiry, per-incident ordering, lifecycle `record_changed` semantics that surface delete as `remove` and restore as `invalidate`, and a closed common job-resource shell with explicit `scope`, a six-token public `status` vocabulary, structured `progress`, cancel idempotency, terminal-summary exclusivity, registry-backed `result_summary.code` using common `job_canceled` plus family-owned success-code registries, a closed current-profile `result_summary.resource_refs.kind` allowlist with canonical `id` and same-origin `route` semantics, post-terminal retention semantics shared by HTTP polling and incident-scoped `job_progress`, parity-grade route-summary cancel semantics for `POST /api/v1/jobs/{job_id}/cancel`, and Core 03 same-surface terminal-result handling that renders known refs as non-modal chips or links, degrades unknown refs to message-only, and forbids automatic navigation from incoming job results. |
-| `8. Bulk paste/import from existing spreadsheet or clipboard` | Core 01 §17.2, Core 03 §11, Appendix D, Appendix G | Split into base clipboard workflow, bounded file-based import profile, and dedicated imports-module boundary; the file-based contract is now closed at the exact mapping payload, exact preview payload, exact durable `import_session` and `import_unit` read-resource schemas, the exact `approved_mapping` read object, and explicit per-unit select/skip semantics. |
-| `8. Auto-resolution policy for typed host/account strings` | Core 03 §12, Appendix D, Appendix G | Promoted as authoritative bounded auto-resolution behavior. |
-| `9. Sorting / filtering / grouping` | Core 01 §3.3.4 and §7.4, Core 03 §14, Appendix D, Appendix G | Promoted as authoritative sort, filter, and grouping behavior, including the exact `sort[]` wire shape, user-sort override persistence, omitted-versus-`null` grouping semantics, explicit per-schema `sort_fields`, `header_sort_field_key` where needed, the current-profile null-ordering policy, the extend-with-override default-tail algorithm, stable `field_key` addressing, canonical saved-view filter persistence, and a closed view-query `filters[]` wire shape with synthetic predicate keys for filter-only predicates such as full-text search. |
-| `9. How denormalized timeline views are composed` | Core 01 §7.4 and Core 03 §15, Appendix D, Appendix G | Promoted as the authoritative Timeline view-schema instance plus Timeline read/write contract. |
-| `9. How denormalized entity/evidence views are composed` | Core 01 §7.4, §18, and §19, Core 02 §8.2, §18, and §19, Core 03 §20, Core 04 §9.1, Appendix D, Appendix E, and Appendix G | Promoted as the authoritative Hosts, Identities, Evidence, Notes, Indicators, Assessments, Task Requests, Decisions, Parties, Communications Log, Handoff, Status Review, and Lesson view-schema instances in the base-profile registry, plus standardized optional artifact-backed workbook surface contracts for Findings, Investigative Queries, and Forensic Keywords when exposed. For the required base coordination surfaces, the standardized `view_schema_id` is now the canonical public identity rather than a realization-dependent saved-view identity. Hosts, Identities, Evidence, Notes, Indicators, Parties, and the coordination-artifact surfaces now have exhaustive per-field registries with stable `field_key`, explicit per-schema `sort_fields`, deterministic default sort, header-sort mapping where needed, explicit write targets or actions, `conflict_resolution_class`, and explicit `string_contract_id` bindings where applicable; Hosts and Identities additionally fix exact-match reuse precedence for create-or-upsert, Parties fix incident-scoped exact-match reuse on normalized `primary_email` then `external_ref`, Evidence fixes the explicit blob-action boundary plus hidden writable party-link fields, Indicators fix a create-only existing-row contract plus an explicit identity-defining immutable field set, and the coordination plus optional artifact-backed surfaces now close create-policy defaults, grouping or filter whitelists, omission-versus-`null` behavior, projection-backed keys, no-partial-row failure semantics, and the explicit coordination collection wire contract through the reused `record_ref` family plus new `party_ref` and `risk_ref` families. Appendix C now also makes the handoff-scoped `risk_ref` child-row realization explicit without promoting a base-profile `risk` record. The evidence-action boundary now also includes record-scoped `attach-blob` idempotency and replay semantics for blob attach or replacement, while task and evidence party-link fields remain supplemental to visible source-preserving text and no new built-in workbook tab is added. |
-| `11. Reference-pack and export trust boundaries` | Core 04 §4, Appendix G | Promoted as trust-boundary requirements. |
-| `11. Local users, incident roles, and admin surfaces` | Core 01 §3.3.2, §3.3.3, §3.3.5.1, and §18, Core 02 §3 and §14.1, Core 04 §1-§3 and §9.10, §9.12, and §12, Appendix C, Appendix E, and Appendix G | Closed as a split between deployment-local user-account administration and incident-scoped membership writes, with a narrow `deployment_admin` capability, stable internal `user_id` binding, base-profile local login fixed as `POST /api/v1/auth/login.username == users.email` under `email_address_v1`, a bounded public credential-lifecycle family for `credential-state`, password change, TOTP bootstrap begin/complete, deployment-admin password reset, TOTP reset, plus revoke-all actions, and an exact first-deployment-admin bootstrap contract built around the deployment-local manifest `cartulary.bootstrap_admin.v1`, deployment-config key `bootstrap.first_admin_manifest_path`, startup-time consumption before listeners start, a deployment-local bootstrap-completion marker, and fail-closed no-rebootstrap behavior after first successful consumption. The coverage also preserves the bootstrap-token boundary, `display_name` as the interface-facing label, `local_password_provision_v1`, normalized user-create idempotency comparison that includes `initial_password`, exact UTF-8-byte verification of the JSON-decoded login `password`, rejection of a second persisted local username namespace, explicit user-create defaults of omitted `mfa_required=true`, omitted `is_deployment_admin=false`, and server-managed initial `is_active=true`, rejection of client-supplied `is_active` plus unknown top-level create members, deployment-local credential persistence and bootstrap-completion persistence minima, administrative audit handling that MUST NOT retain cleartext secrets, versioned membership updates, last-admin guards, and continued exclusion of login-capable users, credential lifecycle state, bootstrap-completion state, and memberships from portability bundles. |
-| `4. Backup, restore, portability, failure modes` | Core 00 §4.2 and §6, Core 01 §12.3 and §13, Core 04 §4.2 and §9.11, Appendix E, and Appendix G | Closed as a separate Incident Portability Extension Profile with a deterministic logical bundle layout, authoritative-source-only export, checksum-verified import, portable actor descriptors, optional embedded snapshot/reference-pack sections, and no-partial-visibility failure semantics. |
-| Deployment configuration surface | Core 00 §5.1, Core 01 §14, Core 04 §6, §9.12, and §12, Appendix B, Appendix E, and Appendix F | Closed as one owner-level deployment control-plane contract covering the canonical config artifact, discovery and override precedence, stable root keys, typed binding objects, filesystem-root path validation, canonical disconnected-layout examples, structured validation failures, and fail-closed startup behavior. |
-| Resource-limit registry and numeric safety boundaries | Core 00 §5.1, Core 01 §3.3.8, §16, §17.2, §17.4, and §12.3.6, Core 04 §9.13 and §12.3.1, Appendix B, Appendix E, and Appendix F | Closed as one owner-level numeric registry for blob-create ceilings, preview ceilings, structured-import ceilings, archive extracted-byte, compression-ratio, and member-count ceilings, plus narrower and wider family overrides for reference packs and incident bundles. Core 01 now binds each affected route family to those keys without creating a second owner for the numeric defaults or computation rules. |
-| `16. Open question on minimum disconnected reference-pack bundle and update flow` | Core 01 §5 and §11, Core 02 §4.1, §14.1, and §17, Core 04 §4.1, §5.1, and §9.4, Appendix C, and Appendix E | Closed as a fixed smallest disconnected bundle of three type-registry packs with framework, enrichment, template, and separately distributed `view_contract` packs kept separate, plus offline staged import, explicit activation, retained prior active version, and structured attestation metadata. |
-| Reference-pack durable version conditions and verification/activation lifecycle owner boundary | Core 00 §5.1, Core 01 §11.3, §11.3.1, §11.4, and §11.4.1, Core 02 §14.1 and §17, Core 04 §9.4, Appendix C, and Appendix F | Closed as one owner-level lifecycle contract: Core 01 owns public durable conditions, the storage-to-public derivation boundary, activation preconditions, and verification/activation lifecycle semantics; Core 02 owns persistence minima only; Core 04 owns conformance only; Appendix C describes storage realization only. |
-| `16. Open questions on snapshot release controls and generated presentation depth` | Core 01 §10, Core 02 §10.5 and §14.5, Core 04 §2.1, §4.2, and §9.3, Appendix E | Promoted as bounded snapshot release controls, explicit content-class and release-scope contracts, fail-closed `working_material` classification for direct-source note and coordination-derived text at export-model derivation time, and an evidence-versus-generated-presentation boundary. |
-| `16. Open question on restricted evidence visibility` | Core 01 §10.5, Core 02 §10.5, §13, and §14.5, Core 04 §2, §4.2, and §9.3, Appendix E | Closed as export-scoped recipient withholding through snapshot redaction and release controls while keeping live workspace visibility incident-scoped; narrow live sensitive-evidence controls remain future-only. |
-| `16. Open question on clipboard paste versus XLSX adoption` | Core 01 §2, Core 03 §11, Core 04 §4.5 and §9.2, Appendix E | Closed as a split between base clipboard UX and bounded file-based import through a dedicated imports module. |
-| `16. Open question on dedicated Notes tab and note-capture shape` | Core 01 §7.1, §7.3, and §7.4, Core 02 §10.1 and §12, Core 04 §9.1 and §9.3, Appendix E | Closed as Notes remaining a built-in workbook sheet in the base profile, backed by the shared artifact model and generic `record_links`, with raw note working material excluded from `external_release` unless explicitly curated. |
-| `16. Open question on shared/private saved views and startup defaults` | Core 01 §3.3.3 and §3.3.5.2, Core 02 §11.1-§11.2 and §14.1, Core 03 §2.3-§2.4 and §14.3-§14.7, Core 04 §2, §9.1, and §9.10, Appendix E | Closed as a three-scope saved-view model (`private`, `shared`, `system`) plus separate per-user and incident-wide `sheet_ref` startup pointers, with required non-null `display_name` and `query_json` on ordinary create, omitted `layout_json => {}`, closed patch bodies keyed by `base_saved_view_version`, rejection of unknown or forbidden top-level members and explicit `null` for non-null mutable members, exact one-member workbook-preference `PUT` bodies, create-if-absent or replace-if-present semantics, and no-op update semantics that preserve `saved_view_version` and preference timestamps. For the required base coordination surfaces, startup and presence now use canonical `sheet_ref.kind='view_schema'` with the standardized `view_schema_id`; ordinary saved-view listing is authoritative only for saved-view objects, and a saved view over one of those schemas is a distinct object rather than the base surface itself. |
-| `16. Open question on incident-scoped party identity, dedupe, and coordination references` | Core 01 §7.2, §7.4, §18, and §19, Core 02 §2, §4.5, §8.2-§8.3, §10.4, §13, §14.1, §18, and §19, Core 03 §2.2, §16.2, §16.4, and §20, Core 04 §2, §9.0, and §9.1, Appendix C, Appendix D, and Appendix E | Closed as a first-class incident-scoped `party` model with `party_id` as the only stable base-profile party reference, explicit source-preserving text-plus-ref semantics for requester, collector, and source identity, conservative exact-match reuse on normalized `primary_email` then `external_ref`, same-incident ref and fail-closed delete behavior, workbook-native Parties system view support, and explicit no-auto-create/no-auto-link behavior on ordinary text entry. |
-| `16. Open question on analyst-work tracking beyond tags and notes` | Core 00 §4.3 and §6, Core 01 §2, §7.2, §7.4, §8.1, §8.5, and §10.3, Core 02 §2, §3, §10.1, §10.4, §12-§14, Core 03 §2.2, §16.4, and §19, Core 04 §2, §4.2, §9.1, and §9.3, Appendix E | Closed as a bounded analyst-work coordination model: first-class `task_request` and `decision` records, ownership as a field on coordination objects, artifact-backed communications, handoff, status-review, and lesson surfaces, canonical public identity by required `view_schema_id` rather than realization-dependent `saved_view_id` for those base coordination surfaces, no note overloading, no added built-in sheets, and current artifact-backed `hypothesis`. |
-| `16. Open question on indicator storage promotion` | Core 01 §7.2, §7.4, §8.1, and §8.5, Core 02 §2, §7.4, §10.2, §12, and §14, Core 03 §2.2, §7, §9.1, §15, and §16.2, Core 04 §9.1, Appendix B, Appendix C, Appendix D, and Appendix E | Closed as first-class canonical indicators plus source-bound observations and append-only lifecycle intervals, while keeping Indicators as a contract-backed system view over canonical records and preserving raw source text. |
-| `16. Open question on assessment vocabulary and confidence model` | Core 01 §7.2, §7.4, and §8.1-§8.5, Core 02 §10.3 and §14.1-§14.3, Core 03 §2.2 and §16.3, Core 04 §9.1, Appendix C, and Appendix E | Closed as a closed compromise-assessment vocabulary `unknown | suspected | confirmed | disproven | cleared`, append-only incident-scoped assessment history, nullable `confidence_score`, derived `confidence_band`, band-first interactive entry, and strict separation between evidentiary assessment state and operational response actions. |
-| `16. Open question on timeline grouping-key whitelist` | Core 03 §14.3, Core 04 §9.1, and Appendix E | Closed as the existing five-key timeline grouping whitelist being sufficient for GA, with no sixth base-profile grouping key, explicit exclusion of raw `timeline.event_type`, and future widening gated to scalar projection-backed contract values that preserve the interaction envelope. |
-| `16. Open question on incident-specific custom metadata promotion` | Core 01 §7.2, §8.5, and §19, Core 02 §4.1-§4.5, §10.4, §13, §14.1, §18, and §19, Core 03 §2.2, §16.1-§16.4, and §20, Core 04 §9.1 and §9.8, and Appendix E | Closed as a deterministic promotion rule: recurrent operational fields on incidents, task requests, parties, hosts, identities, canonical indicators, and evidence records become first-class structured state, while framework overlays, enrichment metadata, presentation flags, and low-frequency governance text remain flexible; multi-valued relationships stay in typed links or child rows; authoritative custody narrative moves to append-only custody events; and requester, collector, source, audience, and attendee identity now use explicit text-plus-`party_id` semantics rather than free-text-only promotion. |
-| `16. Open question on writable-string boundary completeness` | Core 01 §3.3.5, §7.4, and §18, Core 04 §9.1 and §9.10, Appendix C, Appendix D, and Appendix E | Closed as one owner-level writable-string contract registry plus explicit field and action-member bindings. Remaining display-name, note, evidence, task, decision, tag, alias, and action-reason surfaces now share deterministic NFC normalization, trim rules, control-character policy, scalar caps, and normalized-empty versus `null` semantics instead of route-local prose. |
-| `16. Open question on direct-scalar timestamp boundary completeness` | Core 00 §5.1, Core 01 §3.3.5, §7.4, §18A, and §19, Core 04 §9.0 and §9.1, Appendix C, Appendix D, and Appendix E | Closed as one owner-level writable direct-temporal-scalar contract registry plus explicit `direct_scalar_contract_id` and `clearable` bindings for the affected timestamp fields. Writable temporal surfaces now share RFC 3339-with-timezone acceptance, canonical UTC equality, and JSON-`null`-only clear semantics instead of route-local timestamp parsing and clear behavior. |
-| `16. Open question on nullable direct-reference scalar boundary completeness` | Core 00 §5.1, Core 01 §3.3.5, §7.4, §18B, and §19, Core 02 §10.4.1 and §19, Core 03 §16.2, §16.4, and §20, Core 04 §9.0 and §9.1, Appendix C, Appendix D, and Appendix E | Closed as one owner-level writable direct-reference-scalar contract registry plus explicit `direct_reference_contract_id` and `clearable` bindings for the affected party and decision reference fields. Writable direct-reference surfaces now share exact stable-identifier input, explicit-JSON-`null` clear semantics, omission-as-unchanged on patch, invalid alternate clear encoding rejection, and same-surface patch mapping instead of route-local or implementation-defined clear behavior. |
-| Define-once create-time defaults and initial-value ownership | Core 00 §2 and §5.1, Core 01 §7.4 and §19, Core 02 §10.4.1.1, §10.4.4, and §10.4.6, Appendix E, and Appendix F | Closed as owner-scoped create behavior: Core 00 removes the same-level fallback and expands `REQ-00-005`; Core 01 owns minimum create signal, zero-field-create eligibility, create-time writeability, omitted-member defaults, omitted-versus-`null` create semantics, and server-managed initial values; Core 02 retains lifecycle/state, field minima, immutability-after-first-commit, and server-managed post-commit rules; Appendix E records the editorial-hardening closure and sweep guidance. |
-| Extension route-family public-contract parity | Core 00 §5.1, Core 01 §3.3.3, §17, and §20, Core 04 §9.0, §9.2, §9.3, §9.4, §9.5, and §9.11, Appendix E, and Appendix F | Closed as a browser-facing parity pass for extension routes, including exact route inventories, request and response defaults, callback transport and correlation-state semantics where applicable, omitted-versus-`null` behavior, route-scoped idempotency or explicit non-idempotency exceptions, exact durable `import_session`, `import_unit`, `snapshot`, `release`, and `reference_pack_version` read-resource schemas, including the list and singleton reference-pack read shapes, the exact `approved_mapping` read object, route-local action contracts for release actions and reference-pack actions, explicit action success shapes or job outcomes, exact reuse of the durable `release resource` shape in release-action success responses, and exact reuse of the durable `reference_pack_version resource` shape in inline `activate` and `disable` success responses, family-specific error registries, provider-claim mapping for enterprise auth, and durable terminal-state representation across imports, reference packs, snapshots and releases, incident bundles, and enterprise authentication. For enterprise authentication, this now includes canonical normalization of omitted or explicit JSON `null` `return_to` to `/`, deterministic `/` resolution by visible-incident cardinality, and reuse of the Core 03 §2.4 workbook-open fallback whenever that resolution opens a workbook surface. |
-| Enterprise-auth identity-binding lifecycle and deployment-admin binding surface | Core 00 §5.1, Core 01 §3.3.3, §3.3.5.1, and §20, Core 02 §14.1, Core 04 §1.2, §2, §3, and §9.5, Appendix C, and Appendix E | Closed as one deployment-admin-only enterprise binding-management contract over existing local users, with exact route inventory, the safe `auth_bindings[]` tagged-union contract including the derived local summary and enterprise summary variants, exact current-profile cardinality and deterministic ordering, active-binding-only visibility, route-scoped idempotency, callback `last_auth_at` updates, exact subject-comparison rules, active-binding cardinality, retire-plus-create rotation lineage, authorization, audit, and session-revocation semantics. |
+| Source section or topic | Current owner section(s) | Non-normative preservation target(s) | Supporting guidance | Preservation note |
+| --- | --- | --- | --- | --- |
+| `6. Mention, stub, and entity-origin contract` | Core 02 §6 | Appendix G | — | history only |
+| `6. Required provenance` | Core 02 §7 | Appendix G | — | history only |
+| `6. Deduplication and auto-upsert rules` | Core 02 §7.3 and §8 | Appendix G | — | history only |
+| `6. Merge behavior` | Core 01 §3.3.3 and §3.3.5.4, Core 02 §7.3, §8, §9, and §15.4, Core 03 §5 and §16.2, Core 04 §9.1 and §9.10 | Appendix G | — | history only |
+| `7. Additional schema requirements for rollback granularity` | Core 00 §8.1, Core 02 §14-15 | Appendix C, Appendix G | — | history only |
+| History retention and rollback horizon | Core 01 §3.3.4.2 and §12.3, Core 02 §15.3.1, Core 04 §9.0.1, §9.0.6, §9.1, and §9.11 | Appendix E | — | history only |
+| Destructive-operation concurrency and public contention failure for restore, rollback, and merge | Core 00 §5.1, Core 01 §3.3.5.0, Core 03 §5, Core 04 §9.1 | Appendix C, Appendix D, Appendix E | — | history only |
+| Timeline supersede replacement relation | Core 00 §5.1, Core 01 §3.3.5 and §7.4.1, Core 02 §12.1-§12.3, Core 03 §6, Core 04 §9.1 and §9.11 | Appendix C, Appendix D, Appendix E | — | history only |
+| `5. Same-field conflict resolution UX` | Core 03 §3.3, Core 04 §9.6 | Appendix E | — | illustration only |
+| Performance benchmark environment and reproducibility | Core 00 §5.1, Core 05 | Appendix B, Appendix D, Appendix E | — | history only |
+| Cross-cutting client/server interface surface for workbook, evidence, and jobs | Core 01 §3.3.2, §3.3.4, §3.3.5, and §3.3.10.1, Core 03 §3.3.4, §4.3, §4.3.1, §4.4, §8, and §15, Core 04 §1, §2, §4.5, and §9.10 | Appendix E | — | owner-local contract tables now densify the boundary in Core 01; appendices remain navigation only |
+| `16. Open question on local pending queue behavior` | Core 03 §4.2 and §4.4, Core 04 §9.1 | Appendix B, Appendix D, Appendix E | — | history only |
+| `8. Bulk paste/import from existing spreadsheet or clipboard` | Core 01 §17.2, Core 03 §11 | Appendix D, Appendix G | — | history only |
+| `8. Auto-resolution policy for typed host/account strings` | Core 03 §12 | Appendix D, Appendix G | — | history only |
+| `9. Sorting / filtering / grouping` | Core 00 §5.1, Core 01 §3.3.4 and §7.4, Core 02 §16, Core 03 §14 | Appendix D, Appendix G | — | history only |
+| `9. How denormalized timeline views are composed` | Core 01 §7.4 and Core 03 §15 | Appendix D, Appendix G | — | illustration only |
+| `9. How denormalized entity/evidence views are composed` | Core 01 §7.4, §18, and §19, Core 02 §8.2, §18, and §19, Core 03 §20, Core 04 §9.1 | Appendix D, Appendix E, Appendix G | — | illustration only |
+| `11. Reference-pack and export trust boundaries` | Core 04 §4 | Appendix G | — | history only |
+| `11. Local users, incident roles, and admin surfaces` | Core 01 §3.3.2, §3.3.3, §3.3.5.1, and §18, Core 02 §3 and §14.1, Core 04 §1-§3 and §9.10, §9.12, and §12 | Appendix C, Appendix E, Appendix G | — | history only |
+| Deployment topology, application-unit boundary, and authoritative service separation | Core 00 §5.1, Core 01 §1, Core 04 §5.2-§8 | Appendix B | — | illustration only |
+| `4. Backup, restore, portability, failure modes` - operational backup and coherent restore | Core 00 §5.1, Core 01 §12.1-§12.2, Core 04 §2, §4.4, §4.5, §6, §9.0.1, §9.14, and §12 | Appendix B, Appendix E | — | illustration only |
+| `4. Backup, restore, portability, failure modes` - incident portability | Core 00 §4.2 and §6, Core 01 §12.3, Core 04 §4.2 and §9.11 | Appendix E, Appendix G | — | illustration only |
+| Deployment configuration surface | Core 00 §5.1, Core 01 §14, Core 04 §6, §9.12, and §12 | Appendix B, Appendix E | — | history only |
+| Resource-limit registry and numeric safety boundaries | Core 00 §5.1, Core 01 §3.3.8, §16, §17.2, §17.4, and §12.3.6, Core 04 §9.13 and §12.3.1 | Appendix B, Appendix E | — | history only |
+| `16. Open question on minimum disconnected reference-pack bundle and update flow` | Core 01 §5 and §11, Core 02 §4.1, §14.1, and §17, Core 04 §4.1, §5.1, and §9.4 | Appendix C, Appendix E | — | history only |
+| Reference-pack durable version conditions and verification/activation lifecycle owner boundary | Core 00 §5.1, Core 01 §11.3, §11.3.1, §11.4, and §11.4.1, Core 02 §14.1 and §17, Core 04 §9.4 | Appendix C | — | history only |
+| `16. Open questions on snapshot release controls and generated presentation depth` | Core 01 §10, Core 02 §10.5 and §14.5, Core 04 §2.1, §4.2, and §9.3 | Appendix E | — | history only |
+| `16. Open question on restricted evidence visibility` | Core 01 §10.5, Core 02 §10.5, §13, and §14.5, Core 04 §2, §4.2, and §9.3 | Appendix E | — | history only |
+| `16. Open question on clipboard paste versus XLSX adoption` | Core 01 §2, Core 03 §11, Core 04 §4.5 and §9.2 | Appendix E | — | history only |
+| `16. Open question on dedicated Notes tab and note-capture shape` | Core 01 §7.1, §7.3, and §7.4, Core 02 §10.1 and §12, Core 04 §9.1 and §9.3 | Appendix E | — | history only |
+| Artifact-backed note/coordination/finding tagged-variant registry | Core 02 §10.4.4A; Core 01 §7.4 and §19; Core 03 §2.1-§2.2; Core 04 §9.1 | Appendix E | — | history only |
+| `16. Open question on shared/private saved views and startup defaults` | Core 01 §3.3.3 and §3.3.5.2, Core 02 §11.1-§11.2 and §14.1, Core 03 §2.3-§2.4 and §14.3-§14.7, Core 04 §2, §9.1, and §9.10 | Appendix E | — | history only |
+| `Saved-view object grammar and public discovery-resource closure` | Core 01 §3.3.5.2, §6, and §7.4, Core 02 §4.3 and §11.1, Core 03 §2.3 and §14, Core 04 §9.1 and §9.10 | Appendix C, Appendix E | — | history only |
+| `16. Open question on incident-scoped party identity, dedupe, and coordination references` | Core 01 §7.2, §7.4, §18, and §19, Core 02 §2, §4.5, §8.2-§8.3, §10.4, §13, §14.1, §18, and §19, Core 03 §2.2, §16.2, §16.4, and §20, Core 04 §2, §9.0, and §9.1 | Appendix C, Appendix D, Appendix E | — | history only |
+| `16. Open question on analyst-work tracking beyond tags and notes` | Core 00 §4.3 and §6, Core 01 §2, §7.2, §7.4, §8.1, §8.5, and §10.3, Core 02 §2, §3, §10.1, §10.4, §12-§14, Core 03 §2.2, §16.4, and §19, Core 04 §2, §4.2, §9.1, and §9.3 | Appendix E | Appendix H | history only |
+| `16. Open question on indicator storage promotion` | Core 01 §7.2, §7.4, §8.1, and §8.5, Core 02 §2, §7.4, §10.2, §12, and §14, Core 03 §2.2, §7, §9.1, §15, and §16.2, Core 04 §9.1 | Appendix B, Appendix C, Appendix D, Appendix E | — | history only |
+| `16. Open question on assessment vocabulary and confidence model` | Core 01 §7.2, §7.4, and §8.1-§8.5, Core 02 §10.3 and §14.1-§14.3, Core 03 §2.2 and §16.3, Core 04 §9.1 | Appendix C, Appendix E | — | history only |
+| `16. Open question on timeline grouping-key whitelist` | Core 03 §14.3, Core 04 §9.1 | Appendix E | — | history only |
+| `16. Open question on incident-specific custom metadata promotion` | Core 01 §7.2, §8.5, and §19, Core 02 §4.1-§4.5, §10.4, §13, §14.1, §18, and §19, Core 03 §2.2, §16.1-§16.4, and §20, Core 04 §9.1 and §9.8 | Appendix E | — | history only |
+| `16. Open question on writable-string boundary completeness` | Core 01 §3.3.5, §7.4, and §18, Core 04 §9.1 and §9.10 | Appendix C, Appendix D, Appendix E | — | history only |
+| `16. Open question on direct-scalar timestamp boundary completeness` | Core 00 §5.1, Core 01 §3.3.5, §7.4, §18A, and §19, Core 03 §13.1, Core 04 §9.0 and §9.1 | Appendix C, Appendix D, Appendix E | — | history only |
+| `16. Open question on nullable direct-reference scalar boundary completeness` | Core 00 §5.1, Core 01 §3.3.5, §7.4, §18B, and §19, Core 02 §10.4.1 and §19, Core 03 §16.2, §16.4, and §20, Core 04 §9.0 and §9.1 | Appendix C, Appendix D, Appendix E | — | history only |
+| Define-once create-time defaults and initial-value ownership | Core 00 §2 and §5.1, Core 01 §7.4 and §19, Core 02 §10.4.1.1, §10.4.4, and §10.4.6 | Appendix E | — | history only |
+| Manual-link confidence default and client-supplied relationship confidence | Core 01 §7.4, Core 02 §12.3, Core 03 §13.1, Core 04 §9.0.1 and §9.1 | Appendix D, Appendix E | — | history only |
+| Extension route-family public-contract parity | Core 00 §5.1, Core 01 §17 and §20, Core 04 §9.0, §9.2, §9.3, §9.4, §9.5, and §9.11 | Appendix E | — | owner-local route, resource, and error tables now carry the compact extension-family contract; appendices remain history and navigation only |
+| Enterprise-auth identity-binding lifecycle and deployment-admin binding surface | Core 00 §5.1, Core 01 §20, Core 02 §14.1, Core 04 §1.2, §2, §3, and §9.5 | Appendix C, Appendix E | — | Core 01 §20 now carries owner-local protocol and binding-management tables; appendices remain history and realization only |
 
 ## F.3 Completeness note
 
-Every source section lands in at least one derived target and in the full-source archive. The normative core is intentionally more compact than the exploratory artifact; rationale, alternatives, mockups, diagrams, roadmap material, historical source-question material, and editorial-hardening backlog were moved to non-normative appendices so the authoritative core can later be promoted into NLSpecs with minimal churn. No current-profile design question remains open in Appendix E. Appendix E now serves as roadmap, historical source context, and bounded editorial-hardening backlog rather than as a live source of unresolved current-profile contract decisions. The remaining work is normalization and promotion hardening, not current-profile design discovery. The remaining current-profile AC wording gap for performance reproducibility is now closed by Core 04's benchmark-profile registry, required `benchmark_manifest`, and exact `measurement_predicate_id` registry for timed or fixture-sensitive criteria. The remaining row-create ambiguity was resolved by strengthening existing view-contract, workflow, and acceptance-criterion blocks rather than by adding a new route family or copying Timeline rough-capture semantics onto non-Timeline surfaces. The same-level fallback for cross-document contradictions was removed, and create-time defaults plus server-managed initial values are now define-once, owner-scoped behavior rather than cross-core restatements.
+Appendix F is navigation only.
+
+Current-profile behavior is controlled by Core 00 through Core 05. Appendix E preserves historical source-question context, future-only backlog, and editorial-hardening support. Appendix H preserves non-normative operating-model guidance for operator practice such as tracker hygiene, handoff quality, status-review cadence, debrief discipline, workload redistribution, and challenge/escalation practice.
+
+No appendix text is authoritative for current-profile runtime behavior unless the same behavior is restated in the normative core.
 
 ## F.4 Requirement-to-verification navigation
 
@@ -87,22 +97,47 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-00-006 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
 | REQ-00-007 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
 | REQ-00-008 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
-| REQ-00-009 | Core 00 §5.2 Requirement and acceptance-criterion traceability | base | AC-231, AC-237 |
-| REQ-00-010 | Core 00 §5.2 Requirement and acceptance-criterion traceability | base | AC-231, AC-237 |
-| REQ-00-011 | Core 00 §5.2 Requirement and acceptance-criterion traceability | base | AC-231, AC-237 |
-| REQ-00-012 | Core 00 §5.2 Requirement and acceptance-criterion traceability | base | AC-231, AC-237 |
 | REQ-00-013 | Core 00 §7 Supported operating envelope | base, reference_pack | AC-043..AC-046, AC-231, AC-234 |
 | REQ-00-014 | Core 00 §8.1 Core identifiers | base | AC-116, AC-118, AC-123..AC-125, AC-127..AC-129, AC-231 |
 | REQ-00-015 | Core 00 §9 Global invariants | base, snapshot_reporting, reference_pack | AC-231, AC-233..AC-234 |
 | REQ-00-016 | Core 00 §9.1 Lifecycle state-machine notation | base | AC-107..AC-111, AC-231, AC-313 |
 | REQ-00-017 | Core 00 §9.1 Lifecycle state-machine notation | base | AC-107..AC-111, AC-231 |
-| REQ-00-018 | Core 00 §9.1 Lifecycle state-machine notation | base | AC-231, AC-237 |
 | REQ-00-019 | Core 00 §9.1 Lifecycle state-machine notation | base | AC-231, AC-313 |
 | REQ-00-020 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
 | REQ-00-021 | Core 00 §5.1 Contract-owner matrix | enterprise_authentication | AC-235 |
-| REQ-01-001 | Core 01 §1 Architecture pattern | base | AC-231 |
-| REQ-01-002 | Core 01 §1 Architecture pattern | base | AC-231 |
-| REQ-01-003 | Core 01 §1 Architecture pattern | base | AC-231 |
+| REQ-00-022 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-023 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-024 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-025 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-026 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-027 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-028 | Core 00 §5.1 Contract-owner matrix | claim_publication | PC-006 |
+| REQ-00-029 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-030 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-031 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-032 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-033 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-034 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-035 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-036 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-037 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-038 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-039 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-040 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-041 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-042 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-043 | Core 00 §5.1 Contract-owner matrix | reference_pack | AC-234 |
+| REQ-00-044 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-045 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-046 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-047 | Core 00 §5.1 Contract-owner matrix | import, snapshot_reporting, incident_portability, reference_pack | AC-232, AC-233, AC-234, AC-236 |
+| REQ-00-048 | Core 00 §5.1 Contract-owner matrix | enterprise_authentication | AC-235 |
+| REQ-00-049 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-050 | Core 00 §5.1 Contract-owner matrix | base | AC-231 |
+| REQ-00-051 | Core 00 §1 Status | base | AC-231 |
+| REQ-01-001 | Core 01 §1 Architecture pattern | base | AC-231, AC-404 |
+| REQ-01-002 | Core 01 §1 Architecture pattern | base | AC-231, AC-404, AC-405 |
+| REQ-01-003 | Core 01 §1 Architecture pattern | base | AC-231, AC-404 |
 | REQ-01-004 | Core 01 §2 Required modules and boundaries | base, snapshot_reporting | AC-027..AC-029, AC-046, AC-063..AC-067, AC-231, AC-233 |
 | REQ-01-005 | Core 01 §2 Required modules and boundaries | base | AC-027..AC-029, AC-046, AC-063..AC-067, AC-231 |
 | REQ-01-006 | Core 01 §2 Required modules and boundaries | base, import | AC-027..AC-029, AC-046, AC-063..AC-067, AC-231..AC-232 |
@@ -133,27 +168,27 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-031 | Core 01 §3.3.2.1 Session resource and expiry contract | base, enterprise_authentication | AC-123, AC-130, AC-156..AC-162, AC-231, AC-235, AC-250, AC-290..AC-291 |
 | REQ-01-032 | Core 01 §3.3.3 Route families | base | AC-175..AC-180, AC-186..AC-187, AC-231, AC-251..AC-255 |
 | REQ-01-033 | Core 01 §3.3.3 Route families | base, import, snapshot_reporting, incident_portability, reference_pack, enterprise_authentication | AC-175..AC-180, AC-186..AC-187, AC-231..AC-236 |
-| REQ-01-034 | Core 01 §3.3.4 View-shaped read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-035 | Core 01 §3.3.4 View-shaped read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-238..AC-240, AC-243 |
-| REQ-01-036 | Core 01 §3.3.4 View-shaped read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-238, AC-241, AC-243 |
-| REQ-01-037 | Core 01 §3.3.4 View-shaped read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-243 |
-| REQ-01-038 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-039 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-040 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-041 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-042 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-043 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-044 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-045 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-046 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-047 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
+| REQ-01-034 | Core 01 §3.3.4 View-shaped read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-366..AC-368 |
+| REQ-01-035 | Core 01 §3.3.4 View-shaped read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-238..AC-240, AC-243, AC-372..AC-375, AC-387 |
+| REQ-01-036 | Core 01 §3.3.4 View-shaped read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-238, AC-241, AC-243, AC-366..AC-367, AC-372..AC-374, AC-387 |
+| REQ-01-037 | Core 01 §3.3.4 View-shaped read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-243, AC-387 |
+| REQ-01-038 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-360, AC-387 |
+| REQ-01-039 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-387 |
+| REQ-01-040 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-387 |
+| REQ-01-041 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-387 |
+| REQ-01-042 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-387 |
+| REQ-01-043 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-387 |
+| REQ-01-044 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-387 |
+| REQ-01-045 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-387 |
+| REQ-01-046 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-360..AC-361, AC-387 |
+| REQ-01-047 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-387 |
 | REQ-01-048 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
 | REQ-01-049 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
 | REQ-01-050 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
 | REQ-01-051 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
 | REQ-01-052 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
 | REQ-01-053 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
-| REQ-01-054 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
+| REQ-01-054 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231, AC-383..AC-384 |
 | REQ-01-055 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-231 |
 | REQ-01-056 | Core 01 §3.3.4.2 Record-history read contract | base | AC-124, AC-127, AC-184..AC-185, AC-215, AC-231 |
 | REQ-01-057 | Core 01 §3.3.5 Mutation contract | base | AC-125..AC-126, AC-181..AC-183, AC-188..AC-190, AC-200..AC-218, AC-221..AC-225, AC-231 |
@@ -162,7 +197,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-060 | Core 01 §3.3.5 Mutation contract | base | AC-125..AC-126, AC-181..AC-183, AC-188..AC-190, AC-200..AC-218, AC-221..AC-225, AC-231 |
 | REQ-01-061 | Core 01 §3.3.5 Mutation contract | base | AC-125..AC-126, AC-181..AC-183, AC-188..AC-190, AC-200..AC-218, AC-221..AC-225, AC-231 |
 | REQ-01-062 | Core 01 §3.3.5 Mutation contract | base | AC-125..AC-126, AC-181..AC-183, AC-188..AC-190, AC-200..AC-218, AC-221..AC-225, AC-231 |
-| REQ-01-063 | Core 01 §3.3.5 Mutation contract | base | AC-125..AC-126, AC-181..AC-183, AC-188..AC-190, AC-200..AC-218, AC-221..AC-225, AC-231 |
+| REQ-01-063 | Core 01 §3.3.5 Mutation contract | base | AC-125..AC-126, AC-181..AC-183, AC-188..AC-190, AC-200..AC-218, AC-221..AC-225, AC-231, AC-299 |
 | REQ-01-064 | Core 01 §3.3.5 Mutation contract | base | AC-125..AC-126, AC-181..AC-183, AC-188..AC-190, AC-200..AC-218, AC-221..AC-225, AC-231 |
 | REQ-01-065 | Core 01 §3.3.5 Mutation contract | base | AC-125..AC-126, AC-181..AC-183, AC-188..AC-190, AC-200..AC-218, AC-221..AC-225, AC-231 |
 | REQ-01-066 | Core 01 §3.3.5 Mutation contract | base | AC-125..AC-126, AC-181..AC-183, AC-188..AC-190, AC-200..AC-218, AC-221..AC-225, AC-231 |
@@ -195,7 +230,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-093 | Core 01 §3.3.5.0 Destructive-operation concurrency and rollback contract | base | AC-215..AC-218, AC-231 |
 | REQ-01-094 | Core 01 §3.3.5.0 Destructive-operation concurrency and rollback contract | base | AC-215..AC-218, AC-231 |
 | REQ-01-095 | Core 01 §3.3.5.0 Destructive-operation concurrency and rollback contract | base | AC-215..AC-218, AC-231 |
-| REQ-01-096 | Core 01 §3.3.5.0 Destructive-operation concurrency and rollback contract | base | AC-215..AC-218, AC-231 |
+| REQ-01-096 | Core 01 §3.3.5.0 Destructive-operation concurrency and rollback contract | base | AC-215..AC-218, AC-231, AC-384 |
 | REQ-01-097 | Core 01 §3.3.5.0 Destructive-operation concurrency and rollback contract | base | AC-215..AC-218, AC-231 |
 | REQ-01-098 | Core 01 §3.3.5.0 Destructive-operation concurrency and rollback contract | base, snapshot_reporting | AC-215..AC-218, AC-231, AC-233 |
 | REQ-01-099 | Core 01 §3.3.5.0 Destructive-operation concurrency and rollback contract | base | AC-215..AC-218, AC-231 |
@@ -241,11 +276,11 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-139 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
 | REQ-01-140 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
 | REQ-01-141 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
-| REQ-01-142 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
+| REQ-01-142 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231, AC-360 |
 | REQ-01-143 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
 | REQ-01-144 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-127, AC-146..AC-153, AC-231 |
-| REQ-01-145 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
-| REQ-01-146 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
+| REQ-01-145 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231, AC-360 |
+| REQ-01-146 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231, AC-360 |
 | REQ-01-147 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
 | REQ-01-148 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
 | REQ-01-149 | Core 01 §3.3.5.2 View-schema, saved-view, and workbook-preference contracts | base | AC-146..AC-153, AC-231 |
@@ -298,7 +333,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-196 | Core 01 §3.3.5.5 Entity-mention action contract | base | AC-019..AC-021, AC-188..AC-190, AC-221..AC-225, AC-231 |
 | REQ-01-197 | Core 01 §3.3.5.5 Entity-mention action contract | base | AC-019..AC-021, AC-188..AC-190, AC-221..AC-225, AC-231 |
 | REQ-01-198 | Core 01 §3.3.5.5 Entity-mention action contract | base | AC-019..AC-021, AC-188..AC-190, AC-221..AC-225, AC-231 |
-| REQ-01-199 | Core 01 §3.3.5.5 Entity-mention action contract | base | AC-019..AC-021, AC-188..AC-190, AC-221..AC-225, AC-231 |
+| REQ-01-199 | Core 01 §3.3.5.5 Entity-mention action contract | base | AC-019..AC-021, AC-188..AC-190, AC-201, AC-221..AC-225, AC-231 |
 | REQ-01-200 | Core 01 §3.3.5.5 Entity-mention action contract | base | AC-019..AC-021, AC-188..AC-190, AC-221..AC-225, AC-231 |
 | REQ-01-201 | Core 01 §3.3.5.5 Entity-mention action contract | base | AC-019..AC-021, AC-188..AC-190, AC-221..AC-225, AC-231 |
 | REQ-01-202 | Core 01 §3.3.5.5 Entity-mention action contract | base | AC-019..AC-021, AC-188..AC-190, AC-221..AC-225, AC-231 |
@@ -337,7 +372,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-235 | Core 01 §3.3.6.1 Canonical public error-code registry | base | AC-126, AC-203..AC-208, AC-211, AC-213..AC-214, AC-218..AC-219, AC-231 |
 | REQ-01-236 | Core 01 §3.3.6.1 Canonical public error-code registry | base | AC-126, AC-203..AC-208, AC-211, AC-213..AC-214, AC-218..AC-219, AC-231 |
 | REQ-01-237 | Core 01 §3.3.6.1 Canonical public error-code registry | base | AC-126, AC-187, AC-203..AC-208, AC-211, AC-213..AC-214, AC-218..AC-219, AC-231 |
-| REQ-01-238 | Core 01 §3.3.6.2 Canonical public reason-code registries | base | AC-126, AC-203..AC-208, AC-211, AC-213..AC-214, AC-218..AC-219, AC-231, AC-239..AC-240, AC-252, AC-255, AC-260, AC-293, AC-321..AC-328 |
+| REQ-01-238 | Core 01 §3.3.6.2 Canonical public reason-code registries | base | AC-126, AC-203..AC-208, AC-211, AC-213..AC-214, AC-218..AC-219, AC-231, AC-239..AC-240, AC-252, AC-255, AC-260, AC-293, AC-321..AC-328, AC-375 |
 | REQ-01-239 | Core 01 §3.3.6.2 Canonical public reason-code registries | base | AC-126, AC-203..AC-208, AC-211, AC-213..AC-214, AC-218..AC-219, AC-231 |
 | REQ-01-240 | Core 01 §3.3.7 Pagination and cursor contract | base | AC-116, AC-127, AC-151, AC-171, AC-175, AC-178, AC-215, AC-231, AC-238..AC-240 |
 | REQ-01-241 | Core 01 §3.3.7 Pagination and cursor contract | base | AC-116, AC-127, AC-151, AC-171, AC-175, AC-178, AC-215, AC-231, AC-239 |
@@ -366,7 +401,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-264 | Core 01 §3.3.10.1 v1 collaboration wire contract | base | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231 |
 | REQ-01-265 | Core 01 §3.3.10.1 v1 collaboration wire contract | base, snapshot_reporting | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231, AC-233 |
 | REQ-01-266 | Core 01 §3.3.10.1 v1 collaboration wire contract | base | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231 |
-| REQ-01-267 | Core 01 §3.3.10.1 v1 collaboration wire contract | base | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231 |
+| REQ-01-267 | Core 01 §3.3.10.1 v1 collaboration wire contract | base | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231, AC-368 |
 | REQ-01-268 | Core 01 §3.3.10.1 v1 collaboration wire contract | base | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231, AC-257..AC-259 |
 | REQ-01-269 | Core 01 §3.3.10.1 v1 collaboration wire contract | base | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231 |
 | REQ-01-270 | Core 01 §3.3.10.1 v1 collaboration wire contract | base, snapshot_reporting | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231, AC-233 |
@@ -377,9 +412,9 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-275 | Core 01 §3.3.10.1 v1 collaboration wire contract | base | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231 |
 | REQ-01-276 | Core 01 §3.3.10.1 v1 collaboration wire contract | base | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231 |
 | REQ-01-277 | Core 01 §3.3.10.1 v1 collaboration wire contract | base | AC-129, AC-131..AC-136, AC-156..AC-163, AC-231 |
-| REQ-01-278 | Core 01 §4.1 Postgres | base, snapshot_reporting, reference_pack | AC-231, AC-233..AC-234 |
-| REQ-01-279 | Core 01 §4.2 Object storage | base, snapshot_reporting | AC-231, AC-233 |
-| REQ-01-280 | Core 01 §4.3 Storage exclusions | base | AC-231 |
+| REQ-01-278 | Core 01 §4.1 Postgres | base, snapshot_reporting, reference_pack | AC-231, AC-233..AC-234, AC-405 |
+| REQ-01-279 | Core 01 §4.2 Object storage | base, snapshot_reporting | AC-231, AC-233, AC-405 |
+| REQ-01-280 | Core 01 §4.3 Storage exclusions | base | AC-231, AC-405 |
 | REQ-01-281 | Core 01 §4.3 Storage exclusions | base | AC-231 |
 | REQ-01-282 | Core 01 §5 Incident data versus reference packs | base, reference_pack | AC-034, AC-092, AC-096, AC-231, AC-234 |
 | REQ-01-283 | Core 01 §5 Incident data versus reference packs | base, reference_pack | AC-034, AC-092, AC-096, AC-231, AC-234 |
@@ -408,14 +443,14 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-306 | Core 01 §7.3 Notes sheet contract | base | AC-068..AC-070, AC-112, AC-185, AC-231 |
 | REQ-01-307 | Core 01 §7.4 Authoritative base-profile view schema registry | base | AC-116..AC-122, AC-124..AC-125, AC-231, AC-281..AC-284 |
 | REQ-01-308 | Core 01 §7.4 Authoritative base-profile view schema registry | base, reference_pack | AC-116..AC-122, AC-124..AC-125, AC-231, AC-234, AC-285..AC-287 |
-| REQ-01-309 | Core 01 §7.4 Authoritative base-profile view schema registry | base | AC-116..AC-122, AC-124..AC-125, AC-231, AC-281..AC-287 |
-| REQ-01-310 | Core 01 §7.4 Authoritative base-profile view schema registry | base, reference_pack | AC-116..AC-122, AC-124..AC-125, AC-231, AC-234, AC-281..AC-287, AC-300..AC-303 |
+| REQ-01-309 | Core 01 §7.4 Authoritative base-profile view schema registry | base | AC-116..AC-122, AC-124..AC-125, AC-231, AC-281..AC-287, AC-410 |
+| REQ-01-310 | Core 01 §7.4 Authoritative base-profile view schema registry | base, reference_pack | AC-116..AC-122, AC-124..AC-125, AC-184..AC-185, AC-231, AC-234, AC-281..AC-287, AC-300..AC-303, AC-366..AC-368 |
 | REQ-01-311 | Core 01 §7.4 Authoritative base-profile view schema registry | base | AC-116..AC-122, AC-124..AC-125, AC-196, AC-231, AC-281..AC-284, AC-331..AC-332 |
-| REQ-01-312 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231, AC-300..AC-301, AC-303, AC-331..AC-332 |
+| REQ-01-312 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-118, AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231, AC-300..AC-301, AC-303, AC-331..AC-332 |
 | REQ-01-313 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231 |
 | REQ-01-314 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231 |
-| REQ-01-315 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231 |
-| REQ-01-316 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231 |
+| REQ-01-315 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-118, AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231, AC-388..AC-391 |
+| REQ-01-316 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-118, AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231, AC-388..AC-391 |
 | REQ-01-317 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231 |
 | REQ-01-318 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231 |
 | REQ-01-319 | Core 01 §7.4.1 `cartulary.view.timeline.v1` | base | AC-119, AC-124..AC-125, AC-184, AC-191..AC-198, AC-231 |
@@ -448,8 +483,8 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-346 | Core 01 §8.1 Projection tables | base | AC-032, AC-046, AC-210, AC-231 |
 | REQ-01-347 | Core 01 §8.1 Projection tables | base | AC-032, AC-046, AC-210, AC-231 |
 | REQ-01-348 | Core 01 §8.1 Projection tables | base | AC-032, AC-046, AC-210, AC-231 |
-| REQ-01-349 | Core 01 §8.2 Projection-row identity | base | AC-231 |
-| REQ-01-350 | Core 01 §8.2 Projection-row identity | base | AC-231 |
+| REQ-01-349 | Core 01 §8.2 Projection-row identity | base | AC-124, AC-125, AC-231 |
+| REQ-01-350 | Core 01 §8.2 Projection-row identity | base | AC-013, AC-125, AC-231 |
 | REQ-01-351 | Core 01 §8.3 Projection maintenance | base | AC-032, AC-046, AC-210, AC-231 |
 | REQ-01-352 | Core 01 §8.3 Projection maintenance | base | AC-032, AC-046, AC-210, AC-231 |
 | REQ-01-353 | Core 01 §8.3 Projection maintenance | base | AC-032, AC-046, AC-210, AC-231 |
@@ -566,11 +601,37 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-464 | Core 01 §16 Evidence-access handle contract | base | AC-231, AC-256 |
 | REQ-01-465 | Core 01 §16 Evidence-access handle contract | base | AC-231, AC-251..AC-255, AC-322 |
 | REQ-01-466 | Core 01 §17.1 Common parity rules | import, snapshot_reporting, incident_portability, reference_pack | AC-262..AC-276 |
-| REQ-01-467 | Core 01 §17.1 Common parity rules | import, snapshot_reporting, incident_portability, reference_pack | AC-262, AC-264, AC-266..AC-268, AC-270..AC-271, AC-273..AC-275, AC-309 |
+| REQ-01-467 | Core 01 §17.1 Common parity rules | import, snapshot_reporting, incident_portability, reference_pack | AC-262, AC-264, AC-266..AC-268, AC-270..AC-271, AC-273..AC-275, AC-309, AC-369 |
 | REQ-01-468 | Core 01 §17.1 Common parity rules | import, snapshot_reporting, incident_portability, reference_pack | AC-263, AC-266, AC-270, AC-274 |
-| REQ-01-469 | Core 01 §17.1 Common parity rules | import, snapshot_reporting, incident_portability, reference_pack | AC-262..AC-264, AC-266..AC-268, AC-270..AC-271, AC-273..AC-275, AC-305, AC-308 |
-| REQ-01-470 | Core 01 §17.1 Common parity rules | import, snapshot_reporting, incident_portability, reference_pack | AC-262, AC-264, AC-266..AC-268, AC-270..AC-271, AC-273, AC-275, AC-305, AC-308 |
+| REQ-01-469 | Core 01 §17.1 Common parity rules | import, snapshot_reporting, incident_portability, reference_pack | AC-262..AC-264, AC-266..AC-268, AC-270..AC-271, AC-273..AC-275, AC-305, AC-308, AC-369 |
+| REQ-01-470 | Core 01 §17.1 Common parity rules | import, snapshot_reporting, incident_portability, reference_pack | AC-262, AC-264, AC-266..AC-268, AC-270..AC-271, AC-273, AC-275, AC-305, AC-308, AC-369 |
 | REQ-01-471 | Core 01 §17.1 Common parity rules | import, snapshot_reporting, incident_portability, reference_pack | AC-265, AC-269, AC-272, AC-276, AC-307, AC-310 |
+| REQ-01-542 | Core 01 §3.3.3.1 Runtime extension discovery and reserved-unclaimed extension semantics | base | AC-370 |
+| REQ-01-543 | Core 01 §3.3.3.1 Runtime extension discovery and reserved-unclaimed extension semantics | base | AC-370 |
+| REQ-01-544 | Core 01 §3.3.3.1 Runtime extension discovery and reserved-unclaimed extension semantics | base | AC-370..AC-371 |
+| REQ-01-545 | Core 01 §3.3.3.1 Runtime extension discovery and reserved-unclaimed extension semantics | base | AC-370 |
+| REQ-01-546 | Core 01 §3.3.3.1 Runtime extension discovery and reserved-unclaimed extension semantics | base | AC-370..AC-371 |
+| REQ-01-547 | Core 01 §3.3.3.1 Runtime extension discovery and reserved-unclaimed extension semantics | base | AC-371 |
+| REQ-01-548 | Core 01 §3.3.3.1 Runtime extension discovery and reserved-unclaimed extension semantics | base | AC-371 |
+| REQ-01-549 | Core 01 §17.1.1 Shared upload-envelope contract for upload-style extension routes | import, incident_portability, reference_pack | AC-262, AC-270, AC-275 |
+| REQ-01-550 | Core 01 §17.1.1 Shared upload-envelope contract for upload-style extension routes | import, incident_portability, reference_pack | AC-262, AC-270, AC-275 |
+| REQ-01-551 | Core 01 §17.1.1 Shared upload-envelope contract for upload-style extension routes | import, incident_portability, reference_pack | AC-262, AC-270, AC-275 |
+| REQ-01-552 | Core 01 §17.1.1 Shared upload-envelope contract for upload-style extension routes | import, incident_portability, reference_pack | AC-262, AC-270, AC-275 |
+| REQ-01-553 | Core 01 §17.1.1 Shared upload-envelope contract for upload-style extension routes | import, incident_portability, reference_pack | AC-262, AC-265, AC-270, AC-272, AC-275, AC-276 |
+| REQ-01-554 | Core 01 §3.3.7 Pagination and cursor contract | base | AC-231, AC-372..AC-375 |
+| REQ-01-555 | Core 01 §3.3.7 Pagination and cursor contract | base | AC-231, AC-372..AC-374 |
+| REQ-01-556 | Core 01 §3.3.7 Pagination and cursor contract | base | AC-231, AC-372..AC-373 |
+| REQ-01-557 | Core 01 §3.3.7 Pagination and cursor contract | base | AC-231, AC-373..AC-374 |
+| REQ-01-558 | Core 01 §3.3.7 Pagination and cursor contract | base | AC-231, AC-374..AC-375 |
+| REQ-01-559 | Core 01 §3.3.7 Pagination and cursor contract | base | AC-231, AC-375 |
+| REQ-01-560 | Core 01 §3.3.7 Pagination and cursor contract | base | AC-231, AC-372..AC-375 |
+| REQ-01-561 | Core 01 §3.3.4.2 Record-history read contract | base | AC-231, AC-383 |
+| REQ-01-562 | Core 01 §3.3.4.2 Record-history read contract | base | AC-231, AC-383 |
+| REQ-01-563 | Core 01 §3.3.4.2 Record-history read contract | base | AC-231, AC-384 |
+| REQ-01-564 | Core 01 §12.3 Incident portability | incident_portability | AC-236, AC-386 |
+| REQ-01-565 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-231, AC-387 |
+| REQ-01-566 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-231, AC-387 |
+| REQ-01-567 | Core 01 §3.3.4.1 Filter predicate wire contract | base | AC-231, AC-387 |
 | REQ-01-472 | Core 01 §17.2 Import Extension Profile public contract | import | AC-262..AC-264 |
 | REQ-01-473 | Core 01 §17.2 Import Extension Profile public contract | import | AC-262, AC-323 |
 | REQ-01-474 | Core 01 §17.2 Import Extension Profile public contract | import | AC-263..AC-264, AC-324..AC-325 |
@@ -580,14 +641,14 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-478 | Core 01 §17.3 Snapshot and Reporting Extension Profile public contract | snapshot_reporting | AC-268, AC-305..AC-306 |
 | REQ-01-479 | Core 01 §17.3 Snapshot and Reporting Extension Profile public contract | snapshot_reporting | AC-269, AC-307 |
 | REQ-01-480 | Core 01 §17.4 Reference Pack Extension Profile public contract | reference_pack | AC-270..AC-271 |
-| REQ-01-481 | Core 01 §17.4 Reference Pack Extension Profile public contract | reference_pack | AC-270..AC-271, AC-308..AC-309, AC-326 |
+| REQ-01-481 | Core 01 §17.4 Reference Pack Extension Profile public contract | reference_pack | AC-270..AC-271, AC-308..AC-309, AC-326, AC-369 |
 | REQ-01-482 | Core 01 §17.4 Reference Pack Extension Profile public contract | reference_pack | AC-272, AC-310, AC-326 |
 | REQ-01-483 | Core 01 §17.5 Incident Portability Extension Profile public contract | incident_portability | AC-273..AC-275 |
 | REQ-01-484 | Core 01 §17.5 Incident Portability Extension Profile public contract | incident_portability | AC-273..AC-274 |
 | REQ-01-485 | Core 01 §17.5 Incident Portability Extension Profile public contract | incident_portability | AC-275 |
 | REQ-01-486 | Core 01 §17.5 Incident Portability Extension Profile public contract | incident_portability | AC-276, AC-327..AC-328, AC-332 |
 | REQ-01-487 | Core 01 §18 Writable-string contract registry | base | AC-015, AC-068, AC-085..AC-086, AC-112, AC-118, AC-152, AC-175..AC-176, AC-181..AC-182, AC-186, AC-194, AC-196, AC-200, AC-202, AC-216, AC-221, AC-225, AC-231, AC-300..AC-303, AC-315..AC-319 |
-| REQ-01-488 | Core 01 §18 Writable-string contract registry | base | AC-015, AC-068, AC-085..AC-086, AC-112, AC-118, AC-152, AC-175..AC-176, AC-181..AC-182, AC-186, AC-194, AC-196, AC-200, AC-202, AC-216, AC-221, AC-225, AC-231, AC-300..AC-303, AC-315..AC-319 |
+| REQ-01-488 | Core 01 §18 Writable-string contract registry | base | AC-015, AC-068, AC-085..AC-086, AC-112, AC-118, AC-152, AC-175..AC-176, AC-181..AC-182, AC-184..AC-186, AC-194, AC-196, AC-200, AC-202, AC-216, AC-221, AC-225, AC-231, AC-300..AC-303, AC-315..AC-319 |
 | REQ-01-489 | Core 01 §18 Writable-string contract registry | base | AC-118, AC-152, AC-175..AC-176, AC-231 |
 | REQ-01-490 | Core 01 §18 Writable-string contract registry | base | AC-015, AC-068, AC-085..AC-086, AC-112, AC-118, AC-231 |
 | REQ-01-491 | Core 01 §18 Writable-string contract registry | base | AC-068, AC-085..AC-086, AC-112, AC-118, AC-216, AC-231 |
@@ -626,6 +687,17 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-01-519 | Core 01 §18B Writable direct-reference-scalar contract registry | base | AC-315..AC-318 |
 | REQ-01-520 | Core 01 §18B Writable direct-reference-scalar contract registry | base | AC-315..AC-317, AC-319 |
 | REQ-01-521 | Core 01 §18 Writable-string contract registry | base | AC-175..AC-176, AC-231, AC-244..AC-245 |
+| REQ-01-568 | Core 01 §18 Writable-string contract registry | base | AC-118, AC-231, AC-388..AC-391 |
+| REQ-01-569 | Core 01 §7.4 Authoritative base-profile view schema registry | base | AC-396 |
+| REQ-01-570 | Core 01 §3.3.3 Route families | base | AC-402 |
+| REQ-01-571 | Core 01 §12.1 Backup | base | AC-398..AC-399 |
+| REQ-01-572 | Core 01 §12.1 Backup | base | AC-398, AC-401 |
+| REQ-01-573 | Core 01 §12.1 Backup | base | AC-398 |
+| REQ-01-574 | Core 01 §12.1 Backup | base | AC-398..AC-399, AC-401 |
+| REQ-01-575 | Core 01 §12.2 Restore | base | AC-399..AC-400 |
+| REQ-01-576 | Core 01 §12.2 Restore | base | AC-400 |
+| REQ-01-577 | Core 01 §12.2 Restore | base | AC-399 |
+| REQ-01-578 | Core 01 §12.2 Restore | base | AC-401 |
 | REQ-01-522 | Core 01 §3.3.2.2 Credential lifecycle and TOTP bootstrap routes | base | AC-334..AC-339 |
 | REQ-01-523 | Core 01 §3.3.2.2 Credential lifecycle and TOTP bootstrap routes | base | AC-335, AC-339 |
 | REQ-01-524 | Core 01 §3.3.2.2 Credential lifecycle and TOTP bootstrap routes | base | AC-338..AC-339 |
@@ -664,8 +736,8 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-02-021 | Core 02 §4.5 Current-profile promoted field sets | base | AC-097..AC-101, AC-211..AC-214, AC-231, AC-278, AC-280, AC-318 |
 | REQ-02-022 | Core 02 §4.5 Current-profile promoted field sets | base | AC-097..AC-101, AC-211..AC-214, AC-231, AC-277..AC-280, AC-318 |
 | REQ-02-023 | Core 02 §4.5 Current-profile promoted field sets | base | AC-097..AC-101, AC-211..AC-214, AC-231 |
-| REQ-02-024 | Core 02 §5 Partial and uncertain data | base | AC-231 |
-| REQ-02-025 | Core 02 §5 Partial and uncertain data | base | AC-231 |
+| REQ-02-024 | Core 02 §5 Partial and uncertain data | base | AC-231, AC-406 |
+| REQ-02-025 | Core 02 §5 Partial and uncertain data | base | AC-231, AC-406 |
 | REQ-02-026 | Core 02 §6.1 Separation invariant | base | AC-019, AC-188..AC-190, AC-221..AC-223, AC-231 |
 | REQ-02-027 | Core 02 §6.1 Separation invariant | base | AC-019, AC-188..AC-190, AC-221..AC-223, AC-231 |
 | REQ-02-028 | Core 02 §6.2 Binding modes | base | AC-118, AC-188..AC-190, AC-221..AC-223, AC-231 |
@@ -774,7 +846,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-02-131 | Core 02 §10.4.4 Structured coordination artifact types | base | AC-087..AC-089, AC-231, AC-284 |
 | REQ-02-132 | Core 02 §10.4.4 Structured coordination artifact types | base | AC-087..AC-089, AC-231, AC-281..AC-284 |
 | REQ-02-133 | Core 02 §10.4.4 Structured coordination artifact types | base | AC-087..AC-089, AC-231, AC-281..AC-284 |
-| REQ-02-134 | Core 02 §10.4.5 Hypothesis boundary | base | AC-089, AC-231 |
+| REQ-02-134 | Core 02 §10.4.5 Hypothesis boundary | base | AC-089, AC-231, AC-410 |
 | REQ-02-135 | Core 02 §10.4.6 Optional structured findings, investigative-query, and forensic-keyword surfaces | base | AC-101, AC-231, AC-285..AC-287 |
 | REQ-02-136 | Core 02 §10.4.6 Optional structured findings, investigative-query, and forensic-keyword surfaces | base | AC-101, AC-231, AC-285 |
 | REQ-02-137 | Core 02 §10.4.6 Optional structured findings, investigative-query, and forensic-keyword surfaces | base | AC-101, AC-231, AC-286 |
@@ -829,22 +901,33 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-02-186 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
 | REQ-02-187 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
 | REQ-02-188 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-02-189 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-02-190 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-02-191 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-02-192 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-02-193 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-02-194 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-02-195 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-02-196 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
+| REQ-02-189 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-02-190 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-02-191 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-02-192 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-02-193 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-02-194 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-02-195 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-02-196 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
 | REQ-02-197 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231, AC-278, AC-280 |
 | REQ-02-198 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231, AC-280 |
 | REQ-02-199 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231, AC-278 |
 | REQ-02-200 | Core 02 §13 Evidence and object metadata | base, snapshot_reporting | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231, AC-233 |
 | REQ-02-201 | Core 02 §13 Evidence and object metadata | base | AC-015..AC-016, AC-053, AC-100, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-02-202 | Core 02 §14.1 Mention, indicator, provenance, and coordination fields | base, import, snapshot_reporting, reference_pack | AC-017..AC-018, AC-072..AC-075, AC-118, AC-128, AC-154..AC-155, AC-188..AC-190, AC-200..AC-204, AC-231..AC-234, AC-277..AC-278, AC-280 |
-| REQ-02-203 | Core 02 §14.1 Mention, indicator, provenance, and coordination fields | base | AC-017..AC-018, AC-072..AC-075, AC-118, AC-128, AC-154..AC-155, AC-188..AC-190, AC-200..AC-204, AC-231 |
-| REQ-02-204 | Core 02 §14.1 Mention, indicator, provenance, and coordination fields | base, incident_portability | AC-017..AC-018, AC-072..AC-075, AC-118, AC-128, AC-154..AC-155, AC-188..AC-190, AC-200..AC-204, AC-231, AC-236 |
+| REQ-02-202 | Core 02 §14.1 Persistence realization status and deployment-local invariants | base, import, snapshot_reporting, reference_pack | AC-017..AC-018, AC-072..AC-075, AC-118, AC-128, AC-154..AC-155, AC-188..AC-190, AC-200..AC-204, AC-231..AC-234, AC-277..AC-278, AC-280 |
+| REQ-02-243 | Core 02 §14.1 Persistence realization status and deployment-local invariants | base | AC-170, AC-174, AC-231 |
+| REQ-02-244 | Core 02 §14.1 Persistence realization status and deployment-local invariants | base | AC-175..AC-176, AC-178, AC-231 |
+| REQ-02-245 | Core 02 §14.1 Persistence realization status and deployment-local invariants | base | AC-175, AC-177, AC-335..AC-342, AC-231 |
+| REQ-02-246 | Core 02 §14.1 Persistence realization status and deployment-local invariants | base | AC-231, AC-343..AC-344, AC-346 |
+| REQ-02-247 | Core 02 §14.1 Persistence realization status and deployment-local invariants | reference_pack | AC-093..AC-095, AC-234 |
+| REQ-02-248 | Core 02 §12.3 Link metadata semantics | base | AC-394..AC-397 |
+| REQ-02-249 | Core 02 §14.1 Persistence realization status and deployment-local invariants | incident_portability | AC-236, AC-409 |
+| REQ-02-250 | Core 02 §10.4.4A Tagged-variant registry for artifact-backed notes, coordination artifacts, and structured findings | base | AC-410 |
+| REQ-02-251 | Core 02 §10.4.4A Tagged-variant registry for artifact-backed notes, coordination artifacts, and structured findings | base | AC-410 |
+| REQ-02-252 | Core 02 §10.4.4A Tagged-variant registry for artifact-backed notes, coordination artifacts, and structured findings | base | AC-410 |
+| REQ-02-253 | Core 02 §10.4.4A Tagged-variant registry for artifact-backed notes, coordination artifacts, and structured findings | base | AC-410 |
+| REQ-02-203 | Core 02 §14.1 Persistence realization status and deployment-local invariants | base | AC-170, AC-231 |
+| REQ-02-204 | Core 02 §14.1 Persistence realization status and deployment-local invariants | base, incident_portability | AC-231, AC-236, AC-409 |
 | REQ-02-205 | Core 02 §14.2 Rollback granularity substrate | base | AC-215..AC-218, AC-231 |
 | REQ-02-206 | Core 02 §14.2 Rollback granularity substrate | base, snapshot_reporting | AC-215..AC-218, AC-231, AC-233 |
 | REQ-02-207 | Core 02 §14.2 Rollback granularity substrate | base, snapshot_reporting | AC-215..AC-218, AC-231, AC-233 |
@@ -856,7 +939,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-02-213 | Core 02 §15.1 Attribution unit | base | AC-215..AC-217, AC-231 |
 | REQ-02-214 | Core 02 §15.2 Mutation-entry unit | base | AC-215..AC-217, AC-231 |
 | REQ-02-215 | Core 02 §15.2 Mutation-entry unit | base | AC-215..AC-217, AC-231 |
-| REQ-02-216 | Core 02 §15.2 Mutation-entry unit | base | AC-215..AC-217, AC-231 |
+| REQ-02-216 | Core 02 §15.2 Mutation-entry unit | base | AC-215..AC-217, AC-231, AC-384 |
 | REQ-02-217 | Core 02 §15.3 Reconstruction requirement | base, snapshot_reporting | AC-215, AC-217, AC-231, AC-233 |
 | REQ-02-218 | Core 02 §15.3 Reconstruction requirement | base | AC-215, AC-217, AC-231 |
 | REQ-02-219 | Core 02 §15.4 Entity-merge history | base | AC-023, AC-186, AC-209, AC-217, AC-231 |
@@ -874,21 +957,26 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-02-231 | Core 02 §19 Incident-scoped party model | base | AC-231, AC-280 |
 | REQ-02-232 | Core 02 §19 Incident-scoped party model | base | AC-231, AC-279..AC-280 |
 | REQ-02-233 | Core 02 §10.4.1 `task_request` record type | base | AC-319 |
-| REQ-02-234 | Core 02 §14.1 Mention, indicator, provenance, and coordination fields | enterprise_authentication | AC-348..AC-351 |
-| REQ-02-235 | Core 02 §14.1 Mention, indicator, provenance, and coordination fields | enterprise_authentication | AC-349..AC-351 |
-| REQ-02-236 | Core 02 §14.1 Mention, indicator, provenance, and coordination fields | enterprise_authentication | AC-348, AC-351..AC-352 |
-| REQ-02-237 | Core 02 §14.1 Mention, indicator, provenance, and coordination fields | enterprise_authentication | AC-175, AC-348, AC-351 |
+| REQ-02-234 | Core 02 §14.1 Persistence realization status and deployment-local invariants | enterprise_authentication | AC-348..AC-351 |
+| REQ-02-235 | Core 02 §14.1 Persistence realization status and deployment-local invariants | enterprise_authentication | AC-349..AC-351 |
+| REQ-02-236 | Core 02 §14.1 Persistence realization status and deployment-local invariants | enterprise_authentication | AC-348, AC-351..AC-352 |
+| REQ-02-237 | Core 02 §14.1 Persistence realization status and deployment-local invariants | enterprise_authentication | AC-175, AC-348, AC-351 |
+| REQ-02-238 | Core 02 §15.3.1 Retained history and rollback horizon | base | AC-231, AC-383, AC-386 |
+| REQ-02-239 | Core 02 §15.3.1 Retained history and rollback horizon | base | AC-231, AC-383, AC-385 |
+| REQ-02-240 | Core 02 §15.3.1 Retained history and rollback horizon | base | AC-231, AC-383 |
+| REQ-02-241 | Core 02 §15.3.1 Retained history and rollback horizon | base | AC-231, AC-384, AC-386 |
+| REQ-02-242 | Core 02 §15.3.1 Retained history and rollback horizon | base | AC-231 |
 | REQ-03-001 | Core 03 §1 Interaction model | base | AC-001..AC-002, AC-005, AC-043, AC-231 |
 | REQ-03-002 | Core 03 §1 Interaction model | base | AC-001..AC-002, AC-005, AC-043, AC-231 |
 | REQ-03-003 | Core 03 §1 Interaction model | base | AC-001..AC-002, AC-005, AC-043, AC-231 |
-| REQ-03-004 | Core 03 §2.1 Built-in tabs | base | AC-112, AC-116, AC-231 |
+| REQ-03-004 | Core 03 §2.1 Built-in tabs | base | AC-112, AC-116, AC-231, AC-410 |
 | REQ-03-005 | Core 03 §2.2 System views | base | AC-078, AC-085..AC-090, AC-121..AC-122, AC-231, AC-277 |
 | REQ-03-006 | Core 03 §2.2 System views | base | AC-078, AC-085..AC-090, AC-121..AC-122, AC-231 |
 | REQ-03-007 | Core 03 §2.2 System views | base | AC-078, AC-085..AC-090, AC-121..AC-122, AC-231 |
 | REQ-03-008 | Core 03 §2.2 System views | base | AC-078, AC-085..AC-090, AC-121..AC-122, AC-231 |
 | REQ-03-009 | Core 03 §2.2 System views | base | AC-078, AC-085..AC-090, AC-121..AC-122, AC-231 |
 | REQ-03-010 | Core 03 §2.2 System views | base | AC-078, AC-085..AC-090, AC-121..AC-122, AC-231, AC-281..AC-284 |
-| REQ-03-011 | Core 03 §2.2 System views | base | AC-078, AC-085..AC-090, AC-121..AC-122, AC-231, AC-281..AC-284 |
+| REQ-03-011 | Core 03 §2.2 System views | base | AC-078, AC-085..AC-090, AC-121..AC-122, AC-231, AC-281..AC-284, AC-410 |
 | REQ-03-012 | Core 03 §2.3 Saved views | base | AC-146..AC-149, AC-151..AC-152, AC-231 |
 | REQ-03-013 | Core 03 §2.3 Saved views | base | AC-146..AC-149, AC-151..AC-152, AC-231 |
 | REQ-03-014 | Core 03 §2.3 Saved views | base | AC-146..AC-149, AC-151..AC-152, AC-231 |
@@ -949,7 +1037,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-03-069 | Core 03 §3.3.4 Same-field conflict transport contract | base | AC-126, AC-203..AC-204, AC-226..AC-231 |
 | REQ-03-070 | Core 03 §3.3.4 Same-field conflict transport contract | base | AC-126, AC-203..AC-204, AC-226..AC-231 |
 | REQ-03-071 | Core 03 §3.3.4 Same-field conflict transport contract | base | AC-126, AC-203..AC-204, AC-226..AC-231 |
-| REQ-03-072 | Core 03 §3.3.4 Same-field conflict transport contract | base | AC-126, AC-203..AC-204, AC-226..AC-231 |
+| REQ-03-072 | Core 03 §3.3.4 Same-field conflict transport contract | base | AC-126, AC-203..AC-204, AC-226..AC-231, AC-381 |
 | REQ-03-073 | Core 03 §3.3.4 Same-field conflict transport contract | base | AC-126, AC-203..AC-204, AC-226..AC-231 |
 | REQ-03-074 | Core 03 §3.3.4 Same-field conflict transport contract | base | AC-126, AC-203..AC-204, AC-226..AC-231 |
 | REQ-03-075 | Core 03 §3.3.4 Same-field conflict transport contract | base | AC-126, AC-203..AC-204, AC-226..AC-231 |
@@ -966,18 +1054,18 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-03-086 | Core 03 §3.4 Client addressing rules | base | AC-013, AC-047, AC-125, AC-231 |
 | REQ-03-087 | Core 03 §4.1 Autosave | base | AC-043, AC-231 |
 | REQ-03-088 | Core 03 §4.1 Autosave | base | AC-043, AC-231 |
-| REQ-03-089 | Core 03 §4.2 Save-state presentation | base | AC-043, AC-231 |
+| REQ-03-089 | Core 03 §4.2 Save-state presentation | base | AC-043, AC-231, AC-376 |
 | REQ-03-090 | Core 03 §4.3 Presence | base | AC-008, AC-132, AC-231 |
 | REQ-03-091 | Core 03 §4.3 Presence | base | AC-008, AC-132, AC-231 |
 | REQ-03-092 | Core 03 §4.3.1 Collaboration message application | base | AC-129, AC-131..AC-136, AC-231 |
 | REQ-03-093 | Core 03 §4.3.1 Collaboration message application | base | AC-129, AC-131..AC-136, AC-231 |
 | REQ-03-094 | Core 03 §4.3.1 Collaboration message application | base, snapshot_reporting | AC-129, AC-131..AC-136, AC-231, AC-233 |
-| REQ-03-095 | Core 03 §4.3.1 Collaboration message application | base | AC-129, AC-131..AC-136, AC-231 |
+| REQ-03-095 | Core 03 §4.3.1 Collaboration message application | base | AC-129, AC-131..AC-136, AC-231, AC-376 |
 | REQ-03-096 | Core 03 §4.3.1 Collaboration message application | base | AC-129, AC-131..AC-136, AC-231 |
-| REQ-03-097 | Core 03 §4.3.1 Collaboration message application | base | AC-129, AC-131..AC-136, AC-231 |
+| REQ-03-097 | Core 03 §4.3.1 Collaboration message application | base | AC-129, AC-131..AC-136, AC-231, AC-368 |
 | REQ-03-098 | Core 03 §4.3.1 Collaboration message application | base | AC-129, AC-131..AC-136, AC-231 |
-| REQ-03-099 | Core 03 §4.4 Local pending queue | base | AC-156..AC-163, AC-231 |
-| REQ-03-100 | Core 03 §4.4 Local pending queue | base | AC-156..AC-163, AC-231 |
+| REQ-03-099 | Core 03 §4.4 Local pending queue | base | AC-156..AC-163, AC-231, AC-376..AC-382 |
+| REQ-03-100 | Core 03 §4.4 Local pending queue | base | AC-156..AC-163, AC-231, AC-376..AC-382 |
 | REQ-03-101 | Core 03 §5 Locking policy | base | AC-182, AC-187, AC-218, AC-231, AC-353 |
 | REQ-03-102 | Core 03 §6 Record lifecycle | base | AC-107..AC-111, AC-137..AC-145, AC-191..AC-199, AC-231 |
 | REQ-03-103 | Core 03 §6 Record lifecycle | base | AC-107..AC-111, AC-137..AC-145, AC-191..AC-199, AC-231 |
@@ -998,12 +1086,12 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-03-118 | Core 03 §8.1 Two-step upload | base | AC-004, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
 | REQ-03-119 | Core 03 §8.1 Two-step upload | base | AC-004, AC-102..AC-103, AC-128, AC-154..AC-155, AC-231 |
 | REQ-03-120 | Core 03 §8.2 Pending evidence without blob | base | AC-015, AC-102, AC-154..AC-155, AC-231 |
-| REQ-03-121 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-03-122 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-03-123 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-03-124 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-03-125 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-128, AC-154..AC-155, AC-231 |
-| REQ-03-126 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-128, AC-154..AC-155, AC-231 |
+| REQ-03-121 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-03-122 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-03-123 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-03-124 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-03-125 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
+| REQ-03-126 | Core 03 §8.3 Blob and evidence lifecycle bridge | base | AC-015..AC-016, AC-103, AC-107..AC-111, AC-128, AC-154..AC-155, AC-231, AC-313 |
 | REQ-03-127 | Core 03 §8.4 Evidence access | base | AC-053..AC-054, AC-103, AC-128, AC-231, AC-252, AC-255 |
 | REQ-03-128 | Core 03 §8.4 Evidence access | base | AC-053..AC-054, AC-103, AC-128, AC-231, AC-252..AC-254 |
 | REQ-03-129 | Core 03 §9 Mention resolution workflow | base | AC-006, AC-019..AC-021, AC-188..AC-190, AC-221..AC-225, AC-231 |
@@ -1082,10 +1170,16 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-03-202 | Core 03 §11.2.6 Closed warning vocabulary and workbook downgrade semantics | import | AC-063, AC-067, AC-232 |
 | REQ-03-203 | Core 03 §11.2.6 Closed warning vocabulary and workbook downgrade semantics | import | AC-063, AC-067, AC-232 |
 | REQ-03-204 | Core 03 §11.2.6 Closed warning vocabulary and workbook downgrade semantics | import | AC-063, AC-067, AC-232 |
-| REQ-03-205 | Core 03 §12.2 Required confidence conditions | base | AC-205, AC-231 |
+| REQ-03-276 | Core 03 §12.1 Allowed scope | base | AC-205, AC-231, AC-388, AC-392, AC-393 |
+| REQ-03-277 | Core 03 §12.2 Required confidence conditions | base | AC-205, AC-231, AC-388..AC-391 |
+| REQ-03-278 | Core 03 §12.2 Required confidence conditions | base | AC-231, AC-389..AC-390 |
+| REQ-03-279 | Core 03 §12.2 Required confidence conditions | base | AC-231, AC-391 |
+| REQ-03-280 | Core 03 §13.1 Grid editing | base | AC-231, AC-394..AC-396 |
+| REQ-03-281 | Core 03 §13.1 Grid editing | base | AC-231, AC-354 |
+| REQ-03-205 | Core 03 §12.2 Required confidence conditions | base | AC-205, AC-231, AC-389..AC-391 |
 | REQ-03-206 | Core 03 §12.3 Required write effects | base | AC-205, AC-231 |
 | REQ-03-207 | Core 03 §12.3 Required write effects | base | AC-205, AC-231 |
-| REQ-03-208 | Core 03 §12.4 Allowed and forbidden workflows | base, import | AC-205, AC-231..AC-232 |
+| REQ-03-208 | Core 03 §12.4 Allowed and forbidden workflows | base, import | AC-205, AC-231..AC-232, AC-392..AC-393 |
 | REQ-03-209 | Core 03 §12.5 Disclosure and undo | base | AC-006, AC-188..AC-190, AC-205, AC-231 |
 | REQ-03-210 | Core 03 §12.5 Disclosure and undo | base | AC-006, AC-188..AC-190, AC-205, AC-231 |
 | REQ-03-211 | Core 03 §12.5 Disclosure and undo | base | AC-006, AC-188..AC-190, AC-205, AC-231 |
@@ -1100,8 +1194,8 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-03-220 | Core 03 §13.2 Required keyboard actions | base | AC-005, AC-231 |
 | REQ-03-221 | Core 03 §13.3 Bulk editing | base | AC-003, AC-040, AC-231 |
 | REQ-03-222 | Core 03 §13.3 Bulk editing | base | AC-003, AC-040, AC-231 |
-| REQ-03-223 | Core 03 §14.1 Sort and filter behavior | base | AC-013..AC-014, AC-044, AC-047, AC-124, AC-184..AC-185, AC-231 |
-| REQ-03-224 | Core 03 §14.1 Sort and filter behavior | base | AC-013..AC-014, AC-044, AC-047, AC-124, AC-184..AC-185, AC-231 |
+| REQ-03-223 | Core 03 §14.1 Sort and filter behavior | base | AC-013..AC-014, AC-044, AC-047, AC-124, AC-184..AC-185, AC-231, AC-387 |
+| REQ-03-224 | Core 03 §14.1 Sort and filter behavior | base | AC-013..AC-014, AC-044, AC-047, AC-124, AC-184..AC-185, AC-231, AC-360, AC-387 |
 | REQ-03-225 | Core 03 §14.2 Timeline grouping boundary | base | AC-024..AC-026, AC-231 |
 | REQ-03-226 | Core 03 §14.3 Allowed grouping keys | base | AC-024..AC-026, AC-231 |
 | REQ-03-227 | Core 03 §14.3 Allowed grouping keys | base | AC-024..AC-026, AC-231 |
@@ -1124,7 +1218,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-03-244 | Core 03 §16.1 Entity and evidence sheets | base | AC-015, AC-045, AC-097..AC-100, AC-112, AC-116..AC-118, AC-231 |
 | REQ-03-245 | Core 03 §16.1 Entity and evidence sheets | base | AC-015, AC-045, AC-097..AC-100, AC-112, AC-116..AC-118, AC-231 |
 | REQ-03-246 | Core 03 §16.1 Entity and evidence sheets | base | AC-015, AC-045, AC-097..AC-100, AC-112, AC-116..AC-118, AC-231 |
-| REQ-03-247 | Core 03 §16.2 Inspector | base | AC-006, AC-020, AC-023, AC-072..AC-075, AC-186..AC-187, AC-209..AC-210, AC-231, AC-278..AC-279 |
+| REQ-03-247 | Core 03 §16.2 Inspector | base | AC-006, AC-020, AC-023, AC-072..AC-075, AC-186..AC-187, AC-209..AC-210, AC-231, AC-278..AC-279, AC-366 |
 | REQ-03-248 | Core 03 §16.2 Inspector | base | AC-006, AC-020, AC-023, AC-072..AC-075, AC-186..AC-187, AC-209..AC-210, AC-231 |
 | REQ-03-249 | Core 03 §16.2 Inspector | base | AC-006, AC-020, AC-023, AC-072..AC-075, AC-186..AC-187, AC-209..AC-210, AC-231 |
 | REQ-03-250 | Core 03 §16.3 Compromise-assessment surfaces | base | AC-018, AC-080..AC-084, AC-121, AC-231 |
@@ -1152,6 +1246,7 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-03-272 | Core 03 §16.2 Inspector | base | AC-315, AC-318 |
 | REQ-03-273 | Core 03 §16.4 Analyst-work coordination surfaces | base | AC-315, AC-319 |
 | REQ-03-274 | Core 03 §20 Parties system-view and linking flows | base | AC-315, AC-318 |
+| REQ-03-275 | Core 03 §4.3.1 Collaboration message application | base | AC-231 |
 | REQ-04-001 | Core 04 §1.1 Base authentication | base | AC-123, AC-130, AC-156..AC-162, AC-231 |
 | REQ-04-002 | Core 04 §1.1 Base authentication | base | AC-123, AC-130, AC-156..AC-162, AC-231 |
 | REQ-04-003 | Core 04 §1.1 Base authentication | base | AC-123, AC-130, AC-156..AC-162, AC-231 |
@@ -1189,9 +1284,9 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-04-033 | Core 04 §2.1 Snapshot and Reporting Extension Profile release gate | snapshot_reporting | AC-059..AC-060, AC-104..AC-106, AC-233 |
 | REQ-04-034 | Core 04 §2.1 Snapshot and Reporting Extension Profile release gate | snapshot_reporting | AC-059..AC-060, AC-104..AC-106, AC-233, AC-306 |
 | REQ-04-035 | Core 04 §2.1 Snapshot and Reporting Extension Profile release gate | snapshot_reporting | AC-059..AC-060, AC-104..AC-106, AC-233 |
-| REQ-04-036 | Core 04 §3 Attribution and audit requirements | base | AC-231 |
-| REQ-04-037 | Core 04 §3 Attribution and audit requirements | base | AC-231 |
-| REQ-04-038 | Core 04 §3 Attribution and audit requirements | base, incident_portability | AC-175, AC-231, AC-236, AC-343..AC-344, AC-346 |
+| REQ-04-036 | Core 04 §3 Attribution and audit requirements | base | AC-231, AC-407 |
+| REQ-04-037 | Core 04 §3 Attribution and audit requirements | base | AC-231, AC-408 |
+| REQ-04-038 | Core 04 §3 Attribution and audit requirements | base, incident_portability | AC-175, AC-231, AC-236, AC-343..AC-344, AC-346, AC-409 |
 | REQ-04-039 | Core 04 §3 Attribution and audit requirements | base | AC-231 |
 | REQ-04-040 | Core 04 §4.1 Reference packs | reference_pack | AC-033, AC-035, AC-052, AC-092..AC-096, AC-234 |
 | REQ-04-041 | Core 04 §4.1 Reference packs | reference_pack | AC-033, AC-035, AC-052, AC-092..AC-096, AC-234 |
@@ -1215,9 +1310,6 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-04-059 | Core 04 §6 Runtime roots and storage paths | base | AC-051, AC-055, AC-169, AC-231, AC-296 |
 | REQ-04-060 | Core 04 §7 Container boundary | base | AC-231 |
 | REQ-04-061 | Core 04 §8.1 Required services | base | AC-231 |
-| REQ-04-062 | Core 04 §9 Conformance criteria | base | AC-231, AC-237 |
-| REQ-04-063 | Core 04 §9 Conformance criteria | base | AC-231, AC-237 |
-| REQ-04-064 | Core 04 §9 Conformance criteria | base | AC-231, AC-237 |
 | REQ-04-065 | Core 04 §11 Operational posture | base | AC-164..AC-169, AC-231 |
 | REQ-04-066 | Core 04 §12.1 Scope and owner | base | AC-294, AC-298, AC-320 |
 | REQ-04-067 | Core 04 §12.2 Canonical artifact and discovery | base | AC-294, AC-297 |
@@ -1235,7 +1327,6 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-04-079 | Core 04 §12.3.1 Resource-limit registry | base | AC-320..AC-328 |
 | REQ-04-080 | Core 04 §12.3.1 Resource-limit registry | base | AC-320, AC-322..AC-328 |
 | REQ-04-081 | Core 04 §12.3.1 Resource-limit registry | base | AC-320 |
-| REQ-04-082 | Core 04 §9 Conformance criteria | base | AC-237 |
 | REQ-04-083 | Core 04 §1.1 Base authentication | base | AC-334..AC-342 |
 | REQ-04-084 | Core 04 §1.1 Base authentication | base | AC-334..AC-339, AC-347 |
 | REQ-04-085 | Core 04 §2 Authorization model | base | AC-340..AC-342 |
@@ -1248,15 +1339,26 @@ Every source section lands in at least one derived target and in the full-source
 | REQ-04-090 | Core 04 §12.3.2 First-admin bootstrap binding | base | AC-343..AC-346 |
 | REQ-04-091 | Core 04 §12.3.2 First-admin bootstrap binding | base | AC-345 |
 | REQ-04-092 | Core 04 §12.3.2 First-admin bootstrap binding | base | AC-344, AC-346 |
-| REQ-04-097 | Core 04 §9 Performance benchmark environment and reproducibility | base | AC-354..AC-355 |
-| REQ-04-098 | Core 04 §9 Performance benchmark environment and reproducibility | base | AC-355 |
-| REQ-04-099 | Core 04 §9 Performance benchmark environment and reproducibility | base | AC-355 |
-| REQ-04-100 | Core 04 §9 Performance benchmark environment and reproducibility | base | AC-354, AC-358 |
-| REQ-04-101 | Core 04 §9 Performance benchmark environment and reproducibility | base | AC-357 |
-| REQ-04-102 | Core 04 §9 Performance benchmark environment and reproducibility | base | AC-356 |
-| REQ-04-103 | Core 04 §9 Performance benchmark environment and reproducibility | base | AC-355..AC-356 |
-| REQ-04-104 | Core 04 §9 Performance benchmark environment and reproducibility | base | AC-355 |
 
+
+
+| REQ-04-105 | Core 04 §2 Authorization model | base | AC-370..AC-371 |
+| REQ-04-106 | Core 04 §2 Authorization model | base | AC-402 |
+| REQ-04-107 | Core 04 §12.3.3 Backup storage binding | base | AC-403 |
+| REQ-04-108 | Core 04 §12.3.3 Backup storage binding | base | AC-403 |
+| REQ-05-001 | Core 05 §1 Scope and separation | claim_publication | PC-006 |
+| REQ-05-002 | Core 05 §1 Scope and separation | claim_publication | PC-006 |
+| REQ-05-003 | Core 05 §1 Scope and separation | claim_publication | PC-001, PC-002, PC-006 |
+| REQ-05-004 | Core 05 §2 Benchmark fixtures and observable-timing rules | claim_publication | PC-003 |
+| REQ-05-005 | Core 05 §2 Benchmark fixtures and observable-timing rules | claim_publication | PC-003 |
+| REQ-05-006 | Core 05 §3 Benchmark profile registry and benchmark-manifest contract | claim_publication | PC-001, PC-002 |
+| REQ-05-007 | Core 05 §3 Benchmark profile registry and benchmark-manifest contract | claim_publication | PC-002 |
+| REQ-05-008 | Core 05 §3 Benchmark profile registry and benchmark-manifest contract | claim_publication | PC-002 |
+| REQ-05-009 | Core 05 §3 Benchmark profile registry and benchmark-manifest contract | claim_publication | PC-001, PC-005 |
+| REQ-05-010 | Core 05 §3 Benchmark profile registry and benchmark-manifest contract | claim_publication | PC-004 |
+| REQ-05-011 | Core 05 §4 Measurement-predicate registry | claim_publication | PC-003 |
+| REQ-05-012 | Core 05 §4 Measurement-predicate registry | claim_publication | PC-002, PC-003 |
+| REQ-05-013 | Core 05 §4 Measurement-predicate registry | claim_publication | PC-002 |
 
 ## F.5 Acceptance-criterion reverse navigation
 
@@ -1274,7 +1376,7 @@ Every source section lands in at least one derived target and in the full-source
 | AC-010 | REQ-03-141..REQ-03-142 |
 | AC-011 | REQ-03-141..REQ-03-142 |
 | AC-012 | REQ-03-141..REQ-03-142 |
-| AC-013 | REQ-03-033..REQ-03-035, REQ-03-086, REQ-03-223..REQ-03-224 |
+| AC-013 | REQ-01-350, REQ-03-033..REQ-03-035, REQ-03-086, REQ-03-223..REQ-03-224 |
 | AC-014 | REQ-03-223..REQ-03-224 |
 | AC-015 | REQ-01-243..REQ-01-247, REQ-01-291..REQ-01-295, REQ-01-355..REQ-01-366, REQ-01-487..REQ-01-488, REQ-01-490, REQ-01-492..REQ-01-493, REQ-02-186..REQ-02-201, REQ-03-120..REQ-03-126, REQ-03-242..REQ-03-246 |
 | AC-016 | REQ-01-243..REQ-01-247, REQ-01-355..REQ-01-366, REQ-02-186..REQ-02-201, REQ-03-121..REQ-03-126 |
@@ -1354,9 +1456,9 @@ Every source section lands in at least one derived target and in the full-source
 | AC-090 | REQ-01-296..REQ-01-302, REQ-02-094, REQ-02-120..REQ-02-122, REQ-03-005..REQ-03-011, REQ-03-255..REQ-03-260, REQ-03-264 |
 | AC-091 | REQ-01-377..REQ-01-384, REQ-02-139..REQ-02-146, REQ-04-044..REQ-04-047 |
 | AC-092 | REQ-01-282..REQ-01-284, REQ-01-400..REQ-01-406, REQ-04-040..REQ-04-043, REQ-04-054..REQ-04-055 |
-| AC-093 | REQ-01-407..REQ-01-413, REQ-04-040..REQ-04-043 |
-| AC-094 | REQ-01-407..REQ-01-418, REQ-04-040..REQ-04-043 |
-| AC-095 | REQ-01-409..REQ-01-421, REQ-04-040..REQ-04-043 |
+| AC-093 | REQ-01-407..REQ-01-413, REQ-02-247, REQ-04-040..REQ-04-043 |
+| AC-094 | REQ-01-407..REQ-01-418, REQ-02-247, REQ-04-040..REQ-04-043 |
+| AC-095 | REQ-01-409..REQ-01-421, REQ-02-247, REQ-04-040..REQ-04-043 |
 | AC-096 | REQ-01-282..REQ-01-284, REQ-01-407..REQ-01-413, REQ-04-040..REQ-04-043, REQ-04-054..REQ-04-055 |
 | AC-097 | REQ-01-323..REQ-01-325, REQ-02-009..REQ-02-023, REQ-03-242..REQ-03-246 |
 | AC-098 | REQ-01-326..REQ-01-327, REQ-02-009..REQ-02-023, REQ-03-242..REQ-03-246 |
@@ -1368,25 +1470,25 @@ Every source section lands in at least one derived target and in the full-source
 | AC-104 | REQ-01-374..REQ-01-376, REQ-02-139..REQ-02-146, REQ-04-031..REQ-04-035 |
 | AC-105 | REQ-01-374..REQ-01-376, REQ-02-139..REQ-02-146, REQ-04-031..REQ-04-035 |
 | AC-106 | REQ-01-374..REQ-01-376, REQ-02-139..REQ-02-146, REQ-04-031..REQ-04-035 |
-| AC-107 | REQ-00-016..REQ-00-017, REQ-03-102..REQ-03-110 |
-| AC-108 | REQ-00-016..REQ-00-017, REQ-03-102..REQ-03-110 |
-| AC-109 | REQ-00-016..REQ-00-017, REQ-03-102..REQ-03-110 |
-| AC-110 | REQ-00-016..REQ-00-017, REQ-03-102..REQ-03-110 |
-| AC-111 | REQ-00-016..REQ-00-017, REQ-03-102..REQ-03-110 |
+| AC-107 | REQ-00-016..REQ-00-017, REQ-02-189..REQ-02-196, REQ-03-102..REQ-03-110, REQ-03-121..REQ-03-126 |
+| AC-108 | REQ-00-016..REQ-00-017, REQ-02-189..REQ-02-196, REQ-03-102..REQ-03-110, REQ-03-121..REQ-03-126 |
+| AC-109 | REQ-00-016..REQ-00-017, REQ-02-189..REQ-02-196, REQ-03-102..REQ-03-110, REQ-03-121..REQ-03-126 |
+| AC-110 | REQ-00-016..REQ-00-017, REQ-02-189..REQ-02-196, REQ-03-102..REQ-03-110, REQ-03-121..REQ-03-126 |
+| AC-111 | REQ-00-016..REQ-00-017, REQ-02-189..REQ-02-196, REQ-03-102..REQ-03-110, REQ-03-121..REQ-03-126 |
 | AC-112 | REQ-01-303..REQ-01-306, REQ-01-329..REQ-01-330, REQ-01-487..REQ-01-488, REQ-01-490..REQ-01-491, REQ-02-067..REQ-02-071, REQ-03-004, REQ-03-242..REQ-03-246 |
 | AC-113 | REQ-01-377..REQ-01-380, REQ-01-385..REQ-01-393, REQ-02-139..REQ-02-146, REQ-02-211, REQ-04-044..REQ-04-047 |
 | AC-114 | REQ-01-377..REQ-01-380, REQ-01-385..REQ-01-393, REQ-02-139..REQ-02-146, REQ-02-211, REQ-04-044..REQ-04-047 |
 | AC-115 | REQ-01-377..REQ-01-380, REQ-01-385..REQ-01-393, REQ-02-139..REQ-02-146, REQ-02-211, REQ-04-044..REQ-04-047 |
 | AC-116 | REQ-00-014, REQ-01-240..REQ-01-242, REQ-01-285..REQ-01-296, REQ-01-307..REQ-01-310, REQ-01-499, REQ-01-503..REQ-01-509, REQ-03-004, REQ-03-242..REQ-03-246 |
 | AC-117 | REQ-01-285..REQ-01-290, REQ-01-307..REQ-01-310, REQ-01-499..REQ-01-500, REQ-01-503..REQ-01-509, REQ-03-242..REQ-03-246 |
-| AC-118 | REQ-00-014, REQ-01-285..REQ-01-290, REQ-01-307..REQ-01-310, REQ-01-323..REQ-01-341, REQ-01-487..REQ-01-509, REQ-02-028..REQ-02-029, REQ-02-202..REQ-02-204, REQ-03-052..REQ-03-053, REQ-03-242..REQ-03-246 |
+| AC-118 | REQ-00-014, REQ-01-285..REQ-01-290, REQ-01-307..REQ-01-310, REQ-01-323..REQ-01-341, REQ-01-487..REQ-01-509, REQ-01-568, REQ-02-028..REQ-02-029, REQ-02-202..REQ-02-204, REQ-03-052..REQ-03-053, REQ-03-242..REQ-03-246 |
 | AC-119 | REQ-01-285..REQ-01-290, REQ-01-307..REQ-01-322, REQ-03-236..REQ-03-241 |
 | AC-120 | REQ-01-285..REQ-01-290, REQ-01-307..REQ-01-311, REQ-03-236..REQ-03-241 |
 | AC-121 | REQ-01-296..REQ-01-302, REQ-01-307..REQ-01-311, REQ-01-332..REQ-01-335, REQ-02-083..REQ-02-093, REQ-02-222..REQ-02-223, REQ-03-005..REQ-03-011, REQ-03-250..REQ-03-254 |
 | AC-122 | REQ-01-296..REQ-01-302, REQ-01-307..REQ-01-311, REQ-01-331, REQ-02-056..REQ-02-057, REQ-02-072..REQ-02-082, REQ-02-222..REQ-02-223, REQ-03-005..REQ-03-011 |
 | AC-123 | REQ-00-014, REQ-01-023..REQ-01-031, REQ-04-001..REQ-04-017 |
-| AC-124 | REQ-00-014, REQ-01-019..REQ-01-022, REQ-01-034..REQ-01-056, REQ-01-285..REQ-01-290, REQ-01-307..REQ-01-341, REQ-03-223..REQ-03-224, REQ-03-236..REQ-03-241 |
-| AC-125 | REQ-00-014, REQ-01-019..REQ-01-022, REQ-01-057..REQ-01-088, REQ-01-285..REQ-01-290, REQ-01-307..REQ-01-330, REQ-02-208..REQ-02-209, REQ-03-086, REQ-03-111..REQ-03-115, REQ-03-236..REQ-03-241 |
+| AC-124 | REQ-00-014, REQ-01-019..REQ-01-022, REQ-01-034..REQ-01-056, REQ-01-285..REQ-01-290, REQ-01-307..REQ-01-341, REQ-01-349, REQ-03-223..REQ-03-224, REQ-03-236..REQ-03-241 |
+| AC-125 | REQ-00-014, REQ-01-019..REQ-01-022, REQ-01-057..REQ-01-088, REQ-01-285..REQ-01-290, REQ-01-307..REQ-01-330, REQ-01-349..REQ-01-350, REQ-02-208..REQ-02-209, REQ-03-086, REQ-03-111..REQ-03-115, REQ-03-236..REQ-03-241 |
 | AC-126 | REQ-01-019, REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-03-036..REQ-03-040, REQ-03-063..REQ-03-076 |
 | AC-127 | REQ-00-014, REQ-01-019..REQ-01-022, REQ-01-034..REQ-01-056, REQ-01-117..REQ-01-118, REQ-01-129, REQ-01-144, REQ-01-168, REQ-01-240..REQ-01-242, REQ-01-288 |
 | AC-128 | REQ-00-014, REQ-01-019, REQ-01-243..REQ-01-247, REQ-01-328, REQ-01-355..REQ-01-366, REQ-02-186..REQ-02-204, REQ-03-116..REQ-03-119, REQ-03-121..REQ-03-128, REQ-04-048 |
@@ -1431,22 +1533,22 @@ Every source section lands in at least one derived target and in the full-source
 | AC-167 | REQ-01-425..REQ-01-426, REQ-01-431..REQ-01-432, REQ-01-443..REQ-01-450, REQ-04-044..REQ-04-047, REQ-04-065 |
 | AC-168 | REQ-01-425..REQ-01-426, REQ-01-443..REQ-01-446, REQ-04-044..REQ-04-047, REQ-04-065 |
 | AC-169 | REQ-01-425..REQ-01-430, REQ-01-447..REQ-01-450, REQ-01-452..REQ-01-456, REQ-04-044..REQ-04-047, REQ-04-054..REQ-04-055, REQ-04-058..REQ-04-059, REQ-04-065 |
-| AC-170 | REQ-01-152..REQ-01-180 |
+| AC-170 | REQ-01-152..REQ-01-180, REQ-02-203, REQ-02-243 |
 | AC-171 | REQ-01-152..REQ-01-180, REQ-01-240..REQ-01-242 |
 | AC-172 | REQ-01-152..REQ-01-180 |
 | AC-173 | REQ-01-152..REQ-01-180 |
-| AC-174 | REQ-01-152..REQ-01-180 |
-| AC-175 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137, REQ-01-240..REQ-01-242, REQ-01-487..REQ-01-489, REQ-01-497, REQ-01-521, REQ-02-237, REQ-04-038 |
-| AC-176 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137, REQ-01-487..REQ-01-489, REQ-01-497, REQ-01-521 |
-| AC-177 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137 |
-| AC-178 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137, REQ-01-240..REQ-01-242, REQ-01-497, REQ-04-021..REQ-04-030 |
+| AC-174 | REQ-01-152..REQ-01-180, REQ-02-243 |
+| AC-175 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137, REQ-01-240..REQ-01-242, REQ-01-487..REQ-01-489, REQ-01-497, REQ-01-521, REQ-02-237, REQ-02-244..REQ-02-245, REQ-04-038 |
+| AC-176 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137, REQ-01-487..REQ-01-489, REQ-01-497, REQ-01-521, REQ-02-244 |
+| AC-177 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137, REQ-02-245 |
+| AC-178 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137, REQ-01-240..REQ-01-242, REQ-01-497, REQ-02-244, REQ-04-021..REQ-04-030 |
 | AC-179 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137, REQ-04-021..REQ-04-030 |
 | AC-180 | REQ-01-032..REQ-01-033, REQ-01-112..REQ-01-137, REQ-04-021..REQ-04-030 |
 | AC-181 | REQ-01-057..REQ-01-088, REQ-01-487..REQ-01-488, REQ-01-496, REQ-02-210 |
 | AC-182 | REQ-01-057..REQ-01-088, REQ-01-104, REQ-01-487..REQ-01-488, REQ-01-496, REQ-02-210, REQ-03-101 |
 | AC-183 | REQ-01-057..REQ-01-088, REQ-02-210 |
-| AC-184 | REQ-01-034..REQ-01-056, REQ-01-312..REQ-01-322, REQ-03-223..REQ-03-224 |
-| AC-185 | REQ-01-034..REQ-01-056, REQ-01-303..REQ-01-306, REQ-01-329..REQ-01-330, REQ-02-067..REQ-02-071, REQ-03-223..REQ-03-224 |
+| AC-184 | REQ-01-034..REQ-01-056, REQ-01-310, REQ-01-312..REQ-01-322, REQ-01-488, REQ-03-223..REQ-03-224 |
+| AC-185 | REQ-01-034..REQ-01-056, REQ-01-303..REQ-01-306, REQ-01-310, REQ-01-329..REQ-01-330, REQ-01-488, REQ-02-067..REQ-02-071, REQ-03-223..REQ-03-224 |
 | AC-186 | REQ-01-032..REQ-01-033, REQ-01-181..REQ-01-195, REQ-01-487..REQ-01-488, REQ-01-496, REQ-02-054..REQ-02-055, REQ-02-060..REQ-02-061, REQ-02-064..REQ-02-066, REQ-02-219..REQ-02-220, REQ-03-247..REQ-03-249 |
 | AC-187 | REQ-01-032..REQ-01-033, REQ-01-104, REQ-01-181..REQ-01-195, REQ-01-237, REQ-02-060..REQ-02-061, REQ-02-064..REQ-02-066, REQ-03-101, REQ-03-247..REQ-03-249 |
 | AC-188 | REQ-01-057..REQ-01-088, REQ-01-196..REQ-01-227, REQ-02-026..REQ-02-036, REQ-02-039..REQ-02-044, REQ-02-058..REQ-02-059, REQ-02-202..REQ-02-204, REQ-03-129..REQ-03-134, REQ-03-209..REQ-03-216, REQ-03-236..REQ-03-241 |
@@ -1466,7 +1568,7 @@ Every source section lands in at least one derived target and in the full-source
 | AC-202 | REQ-01-057..REQ-01-088, REQ-01-487..REQ-01-488, REQ-01-495, REQ-02-202..REQ-02-204, REQ-02-208..REQ-02-209 |
 | AC-203 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-02-202..REQ-02-204, REQ-02-208..REQ-02-209, REQ-03-048..REQ-03-053, REQ-03-063..REQ-03-076 |
 | AC-204 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-02-202..REQ-02-204, REQ-02-208..REQ-02-209, REQ-03-048..REQ-03-053, REQ-03-063..REQ-03-076 |
-| AC-205 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-02-163..REQ-02-185, REQ-02-208..REQ-02-209, REQ-03-205..REQ-03-216 |
+| AC-205 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-01-315..REQ-01-316, REQ-01-568, REQ-02-163..REQ-02-185, REQ-02-208..REQ-02-209, REQ-03-205..REQ-03-216, REQ-03-276..REQ-03-279 |
 | AC-206 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-02-163..REQ-02-185, REQ-02-208..REQ-02-209 |
 | AC-207 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-02-163..REQ-02-185, REQ-02-208..REQ-02-209 |
 | AC-208 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-02-163..REQ-02-185, REQ-02-208..REQ-02-209 |
@@ -1492,13 +1594,12 @@ Every source section lands in at least one derived target and in the full-source
 | AC-228 | REQ-03-048..REQ-03-076 |
 | AC-229 | REQ-03-048..REQ-03-076 |
 | AC-230 | REQ-03-048..REQ-03-076 |
-| AC-231 | REQ-00-001..REQ-00-003, REQ-00-005..REQ-00-020, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-465, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-521, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-274, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-048..REQ-04-065 |
-| AC-232 | REQ-00-004, REQ-01-006..REQ-01-014, REQ-01-033, REQ-01-457, REQ-02-032, REQ-02-045..REQ-02-053, REQ-02-202, REQ-03-146..REQ-03-147, REQ-03-153..REQ-03-204, REQ-03-208, REQ-04-053 |
-| AC-233 | REQ-00-004, REQ-00-015, REQ-01-004, REQ-01-018, REQ-01-033, REQ-01-068, REQ-01-078, REQ-01-098, REQ-01-251, REQ-01-263, REQ-01-265, REQ-01-270, REQ-01-273..REQ-01-274, REQ-01-278..REQ-01-279, REQ-01-368..REQ-01-398, REQ-01-452, REQ-01-457, REQ-02-009, REQ-02-112, REQ-02-139..REQ-02-146, REQ-02-200, REQ-02-202, REQ-02-206..REQ-02-207, REQ-02-211, REQ-02-217, REQ-03-021, REQ-03-078, REQ-03-094, REQ-04-027, REQ-04-031..REQ-04-035, REQ-04-044..REQ-04-047 |
-| AC-234 | REQ-00-004, REQ-00-013, REQ-00-015, REQ-01-018, REQ-01-033, REQ-01-278, REQ-01-282..REQ-01-284, REQ-01-286, REQ-01-308, REQ-01-310, REQ-01-399..REQ-01-422, REQ-01-452, REQ-01-455, REQ-02-001, REQ-02-003, REQ-02-009, REQ-02-202, REQ-02-221, REQ-04-040..REQ-04-043, REQ-04-053, REQ-04-055, REQ-04-058 |
-| AC-235 | REQ-00-004, REQ-01-031, REQ-01-033, REQ-01-510..REQ-01-515, REQ-04-018..REQ-04-020 |
-| AC-236 | REQ-00-004, REQ-01-033, REQ-01-425..REQ-01-450, REQ-01-457, REQ-02-204, REQ-02-222, REQ-04-038, REQ-04-044..REQ-04-047 |
-| AC-237 | REQ-00-009..REQ-00-012, REQ-00-018, REQ-04-062..REQ-04-064, REQ-04-082, REQ-04-097..REQ-04-104 |
+| AC-231 | REQ-00-001..REQ-00-003, REQ-00-005..REQ-00-008, REQ-00-013..REQ-00-017, REQ-00-019..REQ-00-020, REQ-00-022..REQ-00-027, REQ-00-029..REQ-00-042, REQ-00-044..REQ-00-046, REQ-00-049..REQ-00-051, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-465, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-521, REQ-01-554..REQ-01-563, REQ-01-568, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-02-238..REQ-02-246, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-279, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-048..REQ-04-061, REQ-04-065..REQ-04-092 |
+| AC-232 | REQ-00-004, REQ-00-047, REQ-01-006..REQ-01-014, REQ-01-033, REQ-01-457, REQ-02-032, REQ-02-045..REQ-02-053, REQ-02-202, REQ-03-146..REQ-03-147, REQ-03-153..REQ-03-204, REQ-03-208, REQ-04-053 |
+| AC-233 | REQ-00-004, REQ-00-015, REQ-00-047, REQ-01-004, REQ-01-018, REQ-01-033, REQ-01-068, REQ-01-078, REQ-01-098, REQ-01-251, REQ-01-263, REQ-01-265, REQ-01-270, REQ-01-273..REQ-01-274, REQ-01-278..REQ-01-279, REQ-01-368..REQ-01-398, REQ-01-452, REQ-01-457, REQ-02-009, REQ-02-112, REQ-02-139..REQ-02-146, REQ-02-200, REQ-02-202, REQ-02-206..REQ-02-207, REQ-02-211, REQ-02-217, REQ-03-021, REQ-03-078, REQ-03-094, REQ-04-027, REQ-04-031..REQ-04-035, REQ-04-044..REQ-04-047 |
+| AC-234 | REQ-00-004, REQ-00-013, REQ-00-015, REQ-00-043, REQ-00-047, REQ-01-018, REQ-01-033, REQ-01-278, REQ-01-282..REQ-01-284, REQ-01-286, REQ-01-308, REQ-01-310, REQ-01-399..REQ-01-422, REQ-01-452, REQ-01-455, REQ-02-001, REQ-02-003, REQ-02-009, REQ-02-202, REQ-02-221, REQ-02-247, REQ-04-040..REQ-04-043, REQ-04-053, REQ-04-055, REQ-04-058 |
+| AC-235 | REQ-00-004, REQ-00-021, REQ-00-048, REQ-01-031, REQ-01-033, REQ-01-510..REQ-01-515, REQ-04-018..REQ-04-020 |
+| AC-236 | REQ-00-004, REQ-00-047, REQ-01-033, REQ-01-425..REQ-01-450, REQ-01-457, REQ-01-564, REQ-02-204, REQ-02-222, REQ-02-249, REQ-04-038, REQ-04-044..REQ-04-047 |
 | AC-238 | REQ-01-035..REQ-01-036, REQ-01-240, REQ-01-242 |
 | AC-239 | REQ-01-035, REQ-01-234, REQ-01-238, REQ-01-240..REQ-01-242 |
 | AC-240 | REQ-01-035, REQ-01-234, REQ-01-238, REQ-01-240 |
@@ -1523,21 +1624,21 @@ Every source section lands in at least one derived target and in the full-source
 | AC-259 | REQ-01-249, REQ-01-268 |
 | AC-260 | REQ-01-234, REQ-01-238, REQ-01-249, REQ-01-453, REQ-04-023 |
 | AC-261 | REQ-01-234, REQ-01-249, REQ-04-023, REQ-04-029 |
-| AC-262 | REQ-01-466..REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-472..REQ-01-473 |
+| AC-262 | REQ-01-466..REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-472..REQ-01-473, REQ-01-549..REQ-01-553 |
 | AC-263 | REQ-01-466, REQ-01-468..REQ-01-469, REQ-01-472, REQ-01-474 |
 | AC-264 | REQ-01-466..REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-472, REQ-01-474 |
-| AC-265 | REQ-01-466, REQ-01-471, REQ-01-475 |
+| AC-265 | REQ-01-466, REQ-01-471, REQ-01-475, REQ-01-553 |
 | AC-266 | REQ-01-466..REQ-01-470, REQ-01-476..REQ-01-477 |
 | AC-267 | REQ-01-466..REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-476..REQ-01-477 |
 | AC-268 | REQ-01-466..REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-476, REQ-01-478 |
 | AC-269 | REQ-01-466, REQ-01-471, REQ-01-479 |
-| AC-270 | REQ-01-466..REQ-01-470, REQ-01-480..REQ-01-481 |
+| AC-270 | REQ-01-466..REQ-01-470, REQ-01-480..REQ-01-481, REQ-01-549..REQ-01-553 |
 | AC-271 | REQ-01-466..REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-480..REQ-01-481 |
-| AC-272 | REQ-01-466, REQ-01-471, REQ-01-482 |
+| AC-272 | REQ-01-466, REQ-01-471, REQ-01-482, REQ-01-553 |
 | AC-273 | REQ-01-466..REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-483..REQ-01-484 |
 | AC-274 | REQ-01-466..REQ-01-469, REQ-01-483..REQ-01-484 |
-| AC-275 | REQ-01-466..REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-483, REQ-01-485 |
-| AC-276 | REQ-01-466, REQ-01-471, REQ-01-486 |
+| AC-275 | REQ-01-466..REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-483, REQ-01-485, REQ-01-549..REQ-01-553 |
+| AC-276 | REQ-01-466, REQ-01-471, REQ-01-486, REQ-01-553 |
 | AC-277 | REQ-01-296, REQ-01-343, REQ-01-497..REQ-01-501, REQ-02-003, REQ-02-006, REQ-02-009, REQ-02-022, REQ-02-202, REQ-02-222..REQ-02-225, REQ-03-005, REQ-03-266 |
 | AC-278 | REQ-01-328, REQ-01-336, REQ-01-502, REQ-02-017, REQ-02-021..REQ-02-022, REQ-02-120, REQ-02-124..REQ-02-125, REQ-02-197, REQ-02-199, REQ-02-202, REQ-02-226..REQ-02-228, REQ-03-247, REQ-03-256, REQ-03-268..REQ-03-271 |
 | AC-279 | REQ-01-328, REQ-01-336, REQ-01-497, REQ-01-502, REQ-02-022, REQ-02-060..REQ-02-063, REQ-02-229..REQ-02-230, REQ-02-232, REQ-03-247, REQ-03-256, REQ-03-259, REQ-03-267..REQ-03-268, REQ-03-270..REQ-03-271 |
@@ -1565,21 +1666,23 @@ Every source section lands in at least one derived target and in the full-source
 | AC-296 | REQ-01-456, REQ-04-059, REQ-04-074..REQ-04-075, REQ-04-077 |
 | AC-297 | REQ-01-455, REQ-04-058, REQ-04-067, REQ-04-069, REQ-04-071..REQ-04-076 |
 | AC-298 | REQ-04-066, REQ-04-077..REQ-04-078 |
-| AC-299 | REQ-01-058, REQ-01-069..REQ-01-070 |
+| AC-299 | REQ-01-058, REQ-01-063, REQ-01-069..REQ-01-070 |
 | AC-300 | REQ-01-310, REQ-01-312, REQ-01-328, REQ-01-332, REQ-01-336, REQ-01-339, REQ-01-487..REQ-01-488, REQ-01-503..REQ-01-506 |
 | AC-301 | REQ-01-310, REQ-01-312, REQ-01-328, REQ-01-336, REQ-01-488, REQ-01-503..REQ-01-505 |
 | AC-302 | REQ-01-310, REQ-01-332, REQ-01-339, REQ-01-488, REQ-01-503..REQ-01-506 |
 | AC-303 | REQ-01-310, REQ-01-312, REQ-01-328, REQ-01-332, REQ-01-336, REQ-01-339, REQ-01-487..REQ-01-488, REQ-01-503..REQ-01-506 |
+| AC-354 | REQ-03-281 |
 | AC-304 | REQ-01-336, REQ-01-338 |
 | AC-305 | REQ-01-469..REQ-01-470, REQ-01-478, REQ-01-496 |
 | AC-306 | REQ-01-478, REQ-04-034 |
 | AC-307 | REQ-01-471, REQ-01-479 |
 | AC-308 | REQ-01-469..REQ-01-470, REQ-01-481, REQ-01-496 |
 | AC-309 | REQ-01-467, REQ-01-481 |
+| AC-369 | REQ-01-467, REQ-01-469..REQ-01-470, REQ-01-481 |
 | AC-310 | REQ-01-471, REQ-01-482 |
 | AC-311 | REQ-01-025, REQ-01-497 |
 | AC-312 | REQ-01-119..REQ-01-120, REQ-01-122, REQ-01-124, REQ-01-497 |
-| AC-313 | REQ-00-016, REQ-00-019 |
+| AC-313 | REQ-00-016, REQ-00-019, REQ-02-189..REQ-02-196, REQ-03-121..REQ-03-126 |
 | AC-314 | REQ-02-114 |
 | AC-315 | REQ-01-059..REQ-01-060, REQ-01-328, REQ-01-336, REQ-01-516..REQ-01-517, REQ-01-519..REQ-01-520, REQ-03-272..REQ-03-274 |
 | AC-316 | REQ-01-061, REQ-01-328, REQ-01-336, REQ-01-517, REQ-01-519..REQ-01-520 |
@@ -1601,41 +1704,89 @@ Every source section lands in at least one derived target and in the full-source
 | AC-332 | REQ-01-311..REQ-01-312, REQ-01-448..REQ-01-449, REQ-01-486, REQ-02-169, REQ-02-175, REQ-02-181 |
 | AC-333 | REQ-01-377..REQ-01-380, REQ-02-139, REQ-02-143, REQ-02-211, REQ-04-045 |
 | AC-334 | REQ-01-024..REQ-01-025, REQ-01-234, REQ-01-522, REQ-04-083, REQ-04-084 |
-| AC-335 | REQ-01-024, REQ-01-522..REQ-01-523, REQ-02-222, REQ-04-083, REQ-04-084 |
-| AC-336 | REQ-01-024, REQ-01-234, REQ-01-522, REQ-01-525, REQ-04-083, REQ-04-084, REQ-04-086 |
-| AC-337 | REQ-01-024, REQ-01-234, REQ-01-238, REQ-01-522, REQ-01-526, REQ-04-083, REQ-04-084, REQ-04-086 |
-| AC-338 | REQ-01-024, REQ-01-234, REQ-01-522, REQ-01-524, REQ-04-016, REQ-04-083, REQ-04-084, REQ-04-086 |
-| AC-339 | REQ-01-234, REQ-01-238, REQ-01-522..REQ-01-526, REQ-04-083, REQ-04-084 |
-| AC-340 | REQ-01-032, REQ-01-527, REQ-04-016, REQ-04-083, REQ-04-085, REQ-04-086 |
-| AC-341 | REQ-01-025, REQ-01-032, REQ-01-234, REQ-01-238, REQ-01-528, REQ-04-001, REQ-04-016, REQ-04-083, REQ-04-084, REQ-04-085, REQ-04-086 |
-| AC-342 | REQ-01-032, REQ-01-529, REQ-04-016, REQ-04-083, REQ-04-085, REQ-04-086 |
-| AC-343 | REQ-01-121, REQ-01-530..REQ-01-536, REQ-02-007..REQ-02-008, REQ-02-202, REQ-04-028, REQ-04-038, REQ-04-087..REQ-04-090 |
-| AC-344 | REQ-01-121, REQ-01-530..REQ-01-535, REQ-04-028, REQ-04-038, REQ-04-087..REQ-04-092 |
+| AC-335 | REQ-01-024, REQ-01-522..REQ-01-523, REQ-02-222, REQ-02-245, REQ-04-083, REQ-04-084 |
+| AC-336 | REQ-01-024, REQ-01-234, REQ-01-522, REQ-01-525, REQ-02-245, REQ-04-083, REQ-04-084, REQ-04-086 |
+| AC-337 | REQ-01-024, REQ-01-234, REQ-01-238, REQ-01-522, REQ-01-526, REQ-02-245, REQ-04-083, REQ-04-084, REQ-04-086 |
+| AC-338 | REQ-01-024, REQ-01-234, REQ-01-522, REQ-01-524, REQ-02-245, REQ-04-016, REQ-04-083, REQ-04-084, REQ-04-086 |
+| AC-339 | REQ-01-234, REQ-01-238, REQ-01-522..REQ-01-526, REQ-02-245, REQ-04-083, REQ-04-084 |
+| AC-340 | REQ-01-032, REQ-01-527, REQ-02-245, REQ-04-016, REQ-04-083, REQ-04-085, REQ-04-086 |
+| AC-341 | REQ-01-025, REQ-01-032, REQ-01-234, REQ-01-238, REQ-01-528, REQ-02-245, REQ-04-001, REQ-04-016, REQ-04-083, REQ-04-084, REQ-04-085, REQ-04-086 |
+| AC-342 | REQ-01-032, REQ-01-529, REQ-02-245, REQ-04-016, REQ-04-083, REQ-04-085, REQ-04-086 |
+| AC-343 | REQ-01-121, REQ-01-530..REQ-01-536, REQ-02-007..REQ-02-008, REQ-02-202, REQ-02-246, REQ-04-028, REQ-04-038, REQ-04-087..REQ-04-090 |
+| AC-344 | REQ-01-121, REQ-01-530..REQ-01-535, REQ-02-246, REQ-04-028, REQ-04-038, REQ-04-087..REQ-04-092 |
 | AC-345 | REQ-01-121, REQ-01-530, REQ-01-533, REQ-01-535, REQ-04-028, REQ-04-089..REQ-04-091 |
-| AC-346 | REQ-01-121, REQ-01-530, REQ-01-533..REQ-01-535, REQ-02-007..REQ-02-008, REQ-02-202, REQ-04-028, REQ-04-038, REQ-04-090, REQ-04-092 |
+| AC-346 | REQ-01-121, REQ-01-530, REQ-01-533..REQ-01-535, REQ-02-007..REQ-02-008, REQ-02-202, REQ-02-246, REQ-04-028, REQ-04-038, REQ-04-090, REQ-04-092 |
 | AC-347 | REQ-01-121, REQ-01-536, REQ-04-084 |
 | AC-353 | REQ-01-104, REQ-03-101 |
-| AC-354 | REQ-04-097, REQ-04-100 |
-| AC-355 | REQ-04-097..REQ-04-099, REQ-04-103..REQ-04-104 |
-| AC-356 | REQ-04-102..REQ-04-103 |
-| AC-357 | REQ-04-101 |
-| AC-358 | REQ-04-100 |
 | AC-359 | REQ-01-035, REQ-01-286, REQ-01-310 |
-| AC-360 | REQ-01-035, REQ-01-046, REQ-01-142, REQ-01-145..REQ-01-146, REQ-02-010, REQ-02-155, REQ-03-224, REQ-03-227 |
+| AC-360 | REQ-01-035, REQ-01-038, REQ-01-046, REQ-01-142, REQ-01-145..REQ-01-146, REQ-02-010, REQ-02-155, REQ-03-224, REQ-03-227 |
 | AC-361 | REQ-01-035..REQ-01-036, REQ-01-046 |
 | AC-362 | REQ-01-286, REQ-01-310, REQ-01-312, REQ-01-323, REQ-01-326, REQ-01-328, REQ-01-329, REQ-01-331..REQ-01-332, REQ-01-336, REQ-01-339, REQ-01-499, REQ-01-503..REQ-01-509 |
 | AC-363 | REQ-01-310, REQ-03-223 |
 | AC-364 | REQ-03-225..REQ-03-235 |
 | AC-365 | REQ-01-310 |
+| AC-366 | REQ-01-034, REQ-01-036, REQ-01-310, REQ-01-328, REQ-01-336, REQ-03-247 |
+| AC-367 | REQ-01-034, REQ-01-036, REQ-01-070, REQ-01-310, REQ-01-328, REQ-01-336 |
+| AC-368 | REQ-01-034, REQ-01-267, REQ-01-310, REQ-03-097 |
+| AC-370 | REQ-00-022, REQ-01-032..REQ-01-033, REQ-01-542..REQ-01-546, REQ-04-105 |
+| AC-371 | REQ-00-022, REQ-01-033, REQ-01-234, REQ-01-544, REQ-01-546..REQ-01-548, REQ-04-105 |
+| AC-372 | REQ-01-035, REQ-01-554..REQ-01-556 |
+| AC-373 | REQ-01-035..REQ-01-036, REQ-01-555..REQ-01-557 |
+| AC-374 | REQ-01-035..REQ-01-036, REQ-01-554..REQ-01-558, REQ-01-560 |
+| AC-375 | REQ-01-035, REQ-01-238, REQ-01-554, REQ-01-558..REQ-01-560 |
+| AC-376 | REQ-03-089, REQ-03-095, REQ-03-099..REQ-03-100 |
+| AC-377 | REQ-03-099..REQ-03-100 |
+| AC-378 | REQ-03-099..REQ-03-100 |
+| AC-379 | REQ-03-099..REQ-03-100 |
+| AC-380 | REQ-03-099..REQ-03-100 |
+| AC-381 | REQ-03-072, REQ-03-099..REQ-03-100 |
+| AC-382 | REQ-03-099..REQ-03-100 |
+| AC-383 | REQ-01-054, REQ-01-561..REQ-01-562, REQ-02-238..REQ-02-240 |
+| AC-384 | REQ-01-054, REQ-01-096, REQ-01-563, REQ-02-216, REQ-02-241 |
+| AC-385 | REQ-02-239 |
+| AC-386 | REQ-01-564, REQ-02-238, REQ-02-241 |
+| AC-387 | REQ-01-035..REQ-01-047, REQ-01-565..REQ-01-567, REQ-03-223..REQ-03-224 |
+| AC-388 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-01-315..REQ-01-316, REQ-01-568, REQ-02-163..REQ-02-185, REQ-02-208..REQ-02-209, REQ-03-205..REQ-03-216, REQ-03-276..REQ-03-279 |
+| AC-389 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-01-315..REQ-01-316, REQ-01-568, REQ-02-163..REQ-02-185, REQ-02-208..REQ-02-209, REQ-03-205..REQ-03-216, REQ-03-276..REQ-03-279 |
+| AC-390 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-01-315..REQ-01-316, REQ-01-568, REQ-02-163..REQ-02-185, REQ-02-208..REQ-02-209, REQ-03-205..REQ-03-216, REQ-03-276..REQ-03-279 |
+| AC-391 | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-01-315..REQ-01-316, REQ-01-568, REQ-02-163..REQ-02-185, REQ-02-208..REQ-02-209, REQ-03-205..REQ-03-216, REQ-03-276..REQ-03-279 |
+| AC-392 | REQ-02-163..REQ-02-185, REQ-03-208, REQ-03-276 |
+| AC-393 | REQ-01-010..REQ-01-014, REQ-02-032, REQ-03-208, REQ-03-276 |
 
 
-## F.6 Profile Definition-of-Done navigation
 
-| Profile | Prerequisite claim | Required REQs | Required ACs |
+| AC-394 | REQ-01-311, REQ-01-314..REQ-01-320, REQ-02-163..REQ-02-180, REQ-02-248, REQ-03-280 |
+| AC-395 | REQ-01-311, REQ-01-333..REQ-01-340, REQ-01-503..REQ-01-506, REQ-02-163..REQ-02-180, REQ-02-248, REQ-03-280 |
+| AC-396 | REQ-01-569, REQ-03-280 |
+| AC-397 | REQ-02-248 |
+| AC-398 | REQ-01-572..REQ-01-573 |
+| AC-399 | REQ-01-571, REQ-01-575, REQ-01-423..REQ-01-424, REQ-01-577 |
+| AC-400 | REQ-01-575..REQ-01-576 |
+| AC-401 | REQ-01-572, REQ-01-578 |
+| AC-402 | REQ-01-570, REQ-04-106 |
+| AC-403 | REQ-04-053, REQ-04-058, REQ-04-071..REQ-04-073, REQ-04-076, REQ-04-107..REQ-04-108 |
+| AC-404 | REQ-01-001..REQ-01-003 |
+| AC-405 | REQ-01-002, REQ-01-278..REQ-01-280 |
+| AC-406 | REQ-02-024..REQ-02-025 |
+| AC-407 | REQ-04-036 |
+| AC-408 | REQ-04-037 |
+| AC-409 | REQ-02-204, REQ-02-249, REQ-04-038 |
+| AC-410 | REQ-01-309, REQ-02-134, REQ-02-250..REQ-02-253, REQ-03-004, REQ-03-011 |
+| PC-001 | REQ-05-003, REQ-05-006, REQ-05-009 |
+| PC-002 | REQ-05-003, REQ-05-006..REQ-05-008, REQ-05-012..REQ-05-013 |
+| PC-003 | REQ-05-004..REQ-05-005, REQ-05-011..REQ-05-012 |
+| PC-004 | REQ-05-010 |
+| PC-005 | REQ-05-009 |
+| PC-006 | REQ-00-028, REQ-05-001..REQ-05-003 |
+
+## F.6 Profile and companion claim Definition-of-Done navigation
+
+| Profile or companion claim | Prerequisite claim | Required REQs | Required ACs |
 | --- | --- | --- | --- |
-| base | — | REQ-00-001..REQ-00-003, REQ-00-005..REQ-00-020, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-465, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-536, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-274, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-048..REQ-04-092, REQ-04-097..REQ-04-104 | AC-001..AC-026, AC-037..AC-055, AC-097..AC-103, AC-107..AC-112, AC-116..AC-163, AC-170..AC-231, AC-237..AC-261, AC-277..AC-287, AC-294..AC-304, AC-311..AC-322, AC-329..AC-331, AC-334..AC-347, AC-353..AC-365 |
-| import | base | REQ-00-001..REQ-00-020, REQ-01-001..REQ-01-368, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-475, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-536, REQ-02-001..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-03-001..REQ-03-274, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-048..REQ-04-092, REQ-04-097..REQ-04-104 | AC-001..AC-029, AC-037..AC-055, AC-063..AC-067, AC-097..AC-103, AC-107..AC-112, AC-116..AC-163, AC-170..AC-232, AC-237..AC-265, AC-277..AC-287, AC-294..AC-304, AC-311..AC-325, AC-334..AC-347, AC-353..AC-365 |
-| snapshot_reporting | base | REQ-00-001..REQ-00-020, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-398, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-471, REQ-01-476..REQ-01-479, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-536, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-233, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-274, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-039, REQ-04-044..REQ-04-092, REQ-04-097..REQ-04-104 | AC-001..AC-026, AC-030..AC-032, AC-037..AC-062, AC-091, AC-097..AC-163, AC-170..AC-231, AC-233, AC-237..AC-261, AC-266..AC-269, AC-277..AC-287, AC-294..AC-307, AC-311..AC-322, AC-333, AC-334..AC-347, AC-353..AC-365 |
-| reference_pack | base | REQ-00-001..REQ-00-020, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-399..REQ-01-424, REQ-01-451..REQ-01-471, REQ-01-480..REQ-01-482, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-536, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-274, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-043, REQ-04-048..REQ-04-092, REQ-04-097..REQ-04-104 | AC-001..AC-026, AC-033..AC-035, AC-037..AC-055, AC-092..AC-103, AC-107..AC-112, AC-116..AC-163, AC-170..AC-231, AC-234, AC-237..AC-261, AC-270..AC-272, AC-277..AC-287, AC-294..AC-310, AC-311..AC-322, AC-326, AC-334..AC-347, AC-353..AC-365 |
-| incident_portability | base | REQ-00-001..REQ-00-020, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-423..REQ-01-471, REQ-01-483..REQ-01-509, REQ-01-516..REQ-01-536, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-274, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-044..REQ-04-092, REQ-04-097..REQ-04-104 | AC-001..AC-026, AC-037..AC-055, AC-097..AC-103, AC-107..AC-112, AC-116..AC-231, AC-236..AC-261, AC-273..AC-287, AC-294..AC-304, AC-311..AC-322, AC-327..AC-328, AC-332, AC-334..AC-347, AC-353..AC-365 |
-| enterprise_authentication | base | REQ-00-001..REQ-00-020, REQ-00-021, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-465, REQ-01-487..REQ-01-541, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-237, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-274, REQ-04-001..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-048..REQ-04-104 | AC-001..AC-026, AC-036..AC-055, AC-097..AC-103, AC-107..AC-112, AC-116..AC-163, AC-170..AC-231, AC-235, AC-237..AC-261, AC-277..AC-293, AC-294..AC-304, AC-311..AC-322, AC-334..AC-352, AC-353..AC-365 |
+| base | — | REQ-00-001..REQ-00-003, REQ-00-005..REQ-00-008, REQ-00-013..REQ-00-017, REQ-00-019..REQ-00-020, REQ-00-022..REQ-00-027, REQ-00-029..REQ-00-042, REQ-00-044..REQ-00-046, REQ-00-049..REQ-00-051, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-465, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-536, REQ-01-542..REQ-01-548, REQ-01-554..REQ-01-563, REQ-01-565..REQ-01-578, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-02-238..REQ-02-246, REQ-02-248, REQ-02-250..REQ-02-253, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-281, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-048..REQ-04-061, REQ-04-065..REQ-04-081, REQ-04-083..REQ-04-092, REQ-04-105..REQ-04-108 | AC-001..AC-026, AC-037..AC-055, AC-068..AC-070, AC-072..AC-090, AC-097..AC-103, AC-107..AC-112, AC-116..AC-163, AC-170..AC-231, AC-238..AC-261, AC-277..AC-287, AC-294..AC-304, AC-311..AC-322, AC-329..AC-331, AC-334..AC-347, AC-353..AC-354, AC-359..AC-368, AC-370..AC-385, AC-387..AC-392, AC-394..AC-408, AC-410 |
+| import | base | REQ-00-001..REQ-00-008, REQ-00-013..REQ-00-017, REQ-00-019..REQ-00-020, REQ-00-022..REQ-00-027, REQ-00-029..REQ-00-042, REQ-00-044..REQ-00-047, REQ-00-049..REQ-00-051, REQ-01-001..REQ-01-368, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-475, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-536, REQ-01-542..REQ-01-563, REQ-01-565..REQ-01-578, REQ-02-001..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-02-238..REQ-02-246, REQ-02-248, REQ-02-250..REQ-02-253, REQ-03-001..REQ-03-281, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-048..REQ-04-061, REQ-04-065..REQ-04-081, REQ-04-083..REQ-04-092, REQ-04-105..REQ-04-108 | AC-001..AC-029, AC-037..AC-055, AC-063..AC-070, AC-072..AC-090, AC-097..AC-103, AC-107..AC-112, AC-116..AC-163, AC-170..AC-232, AC-238..AC-265, AC-277..AC-287, AC-294..AC-304, AC-311..AC-325, AC-329..AC-331, AC-334..AC-347, AC-353..AC-354, AC-359..AC-368, AC-370..AC-385, AC-387..AC-408, AC-410 |
+| snapshot_reporting | base | REQ-00-001..REQ-00-008, REQ-00-013..REQ-00-017, REQ-00-019..REQ-00-020, REQ-00-022..REQ-00-027, REQ-00-029..REQ-00-042, REQ-00-044..REQ-00-047, REQ-00-049..REQ-00-051, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-398, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-471, REQ-01-476..REQ-01-479, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-536, REQ-01-542..REQ-01-548, REQ-01-554..REQ-01-563, REQ-01-565..REQ-01-578, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-233, REQ-02-238..REQ-02-246, REQ-02-248, REQ-02-250..REQ-02-253, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-281, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-039, REQ-04-044..REQ-04-061, REQ-04-065..REQ-04-081, REQ-04-083..REQ-04-092, REQ-04-105..REQ-04-108 | AC-001..AC-026, AC-030..AC-032, AC-037..AC-062, AC-068..AC-091, AC-097..AC-163, AC-170..AC-231, AC-233, AC-238..AC-261, AC-266..AC-269, AC-277..AC-287, AC-294..AC-307, AC-311..AC-322, AC-329..AC-331, AC-333..AC-347, AC-353..AC-354, AC-359..AC-368, AC-370..AC-385, AC-387..AC-392, AC-394..AC-408, AC-410 |
+| reference_pack | base | REQ-00-001..REQ-00-008, REQ-00-013..REQ-00-017, REQ-00-019..REQ-00-020, REQ-00-022..REQ-00-027, REQ-00-029..REQ-00-047, REQ-00-049..REQ-00-051, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-399..REQ-01-424, REQ-01-451..REQ-01-471, REQ-01-480..REQ-01-482, REQ-01-487..REQ-01-509, REQ-01-516..REQ-01-536, REQ-01-542..REQ-01-563, REQ-01-565..REQ-01-578, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-02-238..REQ-02-248, REQ-02-250..REQ-02-253, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-281, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-043, REQ-04-048..REQ-04-061, REQ-04-065..REQ-04-081, REQ-04-083..REQ-04-092, REQ-04-105..REQ-04-108 | AC-001..AC-026, AC-033..AC-035, AC-037..AC-055, AC-068..AC-070, AC-072..AC-090, AC-092..AC-103, AC-107..AC-112, AC-116..AC-163, AC-170..AC-231, AC-234, AC-238..AC-261, AC-270..AC-272, AC-277..AC-287, AC-294..AC-304, AC-308..AC-322, AC-326, AC-329..AC-331, AC-334..AC-347, AC-353..AC-354, AC-359..AC-385, AC-387..AC-392, AC-394..AC-408, AC-410 |
+| incident_portability | base | REQ-00-001..REQ-00-008, REQ-00-013..REQ-00-017, REQ-00-019..REQ-00-020, REQ-00-022..REQ-00-027, REQ-00-029..REQ-00-042, REQ-00-044..REQ-00-047, REQ-00-049..REQ-00-051, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-423..REQ-01-471, REQ-01-483..REQ-01-509, REQ-01-516..REQ-01-536, REQ-01-542..REQ-01-578, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-233, REQ-02-238..REQ-02-246, REQ-02-248..REQ-02-249, REQ-02-250..REQ-02-253, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-281, REQ-04-001..REQ-04-017, REQ-04-021..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-044..REQ-04-061, REQ-04-065..REQ-04-081, REQ-04-083..REQ-04-092, REQ-04-105..REQ-04-108 | AC-001..AC-026, AC-037..AC-055, AC-068..AC-070, AC-072..AC-090, AC-097..AC-103, AC-107..AC-112, AC-116..AC-231, AC-236, AC-238..AC-261, AC-273..AC-287, AC-294..AC-304, AC-311..AC-322, AC-327..AC-332, AC-334..AC-347, AC-353..AC-354, AC-359..AC-368, AC-370..AC-392, AC-394..AC-410 |
+| enterprise_authentication | base | REQ-00-001..REQ-00-008, REQ-00-013..REQ-00-017, REQ-00-019..REQ-00-027, REQ-00-029..REQ-00-042, REQ-00-044..REQ-00-046, REQ-00-048..REQ-00-051, REQ-01-001..REQ-01-009, REQ-01-015..REQ-01-368, REQ-01-423..REQ-01-424, REQ-01-451..REQ-01-465, REQ-01-487..REQ-01-548, REQ-01-554..REQ-01-563, REQ-01-565..REQ-01-578, REQ-02-001..REQ-02-044, REQ-02-054..REQ-02-138, REQ-02-147..REQ-02-210, REQ-02-212..REQ-02-246, REQ-02-248, REQ-02-250..REQ-02-253, REQ-03-001..REQ-03-152, REQ-03-205..REQ-03-281, REQ-04-001..REQ-04-030, REQ-04-036..REQ-04-039, REQ-04-048..REQ-04-061, REQ-04-065..REQ-04-081, REQ-04-083..REQ-04-096, REQ-04-105..REQ-04-108 | AC-001..AC-026, AC-036..AC-055, AC-068..AC-070, AC-072..AC-090, AC-097..AC-103, AC-107..AC-112, AC-116..AC-163, AC-170..AC-231, AC-235, AC-238..AC-261, AC-277..AC-304, AC-311..AC-322, AC-329..AC-331, AC-334..AC-354, AC-359..AC-368, AC-370..AC-385, AC-387..AC-392, AC-394..AC-408, AC-410 |
+| claim_publication | relevant implementation claim for each published timed or fixture-sensitive criterion | REQ-00-028, REQ-05-001..REQ-05-013 | PC-001..PC-006 |

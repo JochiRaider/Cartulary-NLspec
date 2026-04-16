@@ -2,6 +2,8 @@
 
 This appendix is **non-normative**.
 
+No table name, column name, helper column, generated column, functional index, trigger, or DDL topology in this appendix is authoritative unless the same requirement is restated in Core 01 through Core 04.
+
 It preserves the schema-oriented source extract, including ER diagram, concrete DDL sketch, and indexing notes.
 
 ## 7. Postgres schema proposal
@@ -52,9 +54,9 @@ erDiagram
 
 ### Key tables
 
-The central modeling decision is a **`records` envelope table**. Every user-visible object gets one row there. That costs an extra join but buys strong generic linking, tagging, revisions, and consistent UI routing. Canonical indicators fit this same envelope pattern, while source-bound `indicator_observations` remain separate structured observation rows. Built-in view behavior should live in `view_schemas` and reference-pack tables, not in visible headers or tab names.
+One conformant non-normative realization uses a **`records` envelope table**. Every user-visible object gets one row there. That costs an extra join but buys strong generic linking, tagging, revisions, and consistent UI routing. Canonical indicators fit this same envelope pattern, while source-bound `indicator_observations` remain separate structured observation rows. In this realization, built-in view behavior lives in `view_schemas` and reference-pack tables rather than in visible headers or tab names.
 
-### Additional schema requirements for view-query sort and group contract
+### Illustrative realization notes for view-query sort and group contract
 
 One conformant non-normative realization of the current sort and grouping contract needs explicit storage for:
 
@@ -63,42 +65,80 @@ One conformant non-normative realization of the current sort and grouping contra
 - optional field-level `header_sort_field_key` metadata inside field-registry storage or equivalent child rows,
 - canonical saved-view persistence where `query_json.sort` stores only normalized user sort overrides, `[]` is the only stored representation of `no user sort override`, and inactive grouping omits `query_json.group_by` rather than storing JSON `null`.
 
-### Additional schema requirements for mention/stub provenance
+One additional non-normative realization note is now explicit: generated comparison columns, expression indexes, token tables, or `tsvector`-style realizations are conformant only when they reproduce the Core 01 comparison and tokenization contract exactly. Database-default locale, collation, or tokenizer behavior is not authoritative when it differs from the normative contract.
 
-The schema sketch needs a few explicit contract fields beyond the high-level tables named above:
+### Illustrative realization notes for snapshot-stable cursor pagination
 
-- `entity_mentions` MUST store `source_field_key`, `origin_kind`, and `origin_locator`, plus resolution metadata such as `resolved_at`, `resolved_by_user_id`, and `resolution_method`.
-- Host and identity records MUST store `entity_origin` and structured provenance, including an optional seed mention reference when the entity was created from a mention.
-- `view_schemas.writeback_contract` and import mappings MUST declare `entity_binding_mode` per entity-bearing field. Same-field-conflict-capable write-back fields MUST also declare `conflict_resolution_class` per `field_key`.
-- Repeated mentions MUST remain separate rows; repeated entity-origin inputs MAY upsert the same entity when exact-match rules select a unique active target.
+One conformant non-normative realization of `snapshot_stable` cursor continuation needs explicit runtime state for:
 
-### Additional schema requirements for import-session and mapping reconstruction
+- a snapshot descriptor or equivalent opaque snapshot anchor,
+- a deterministic continuation position within that snapshot,
+- `last_used_at` or equivalent inactivity-expiry state for the cursor chain.
 
-The schema sketch now needs one explicit import-session and mapping-reconstruction section so the durable read resources in Core 01 §17.2 do not depend on inferred field names or lossy persistence:
+A conformant realization can use:
 
-- `import_sessions` or equivalent structured rows SHOULD persist the durable session fields already required by Core 03, including `import_session_id`, incident anchor, creator attribution, source-file identity, parser identity, assistant profile, durable `session_status`, `selected_unit_ids[]`, `blocking_diagnostics[]`, and `nonblocking_warning_codes[]`.
-- `import_units` or equivalent structured rows SHOULD persist the durable unit fields already required by Core 03, including locator identity, source rectangle, row-boundary refs, inferred dimensions, `warning_codes[]`, durable `unit_status`, and optional `mapping_fingerprint`.
-- Each approved unit SHOULD persist one approved-mapping parent object or an equivalent structured row set sufficient to reconstruct the exact Core 01 §17.2 `approved_mapping` object.
-- That approved-mapping realization SHOULD persist one child row per discovered source column carrying at minimum `source_column_ordinal`, `source_header_text`, `field_key`, `entity_binding_mode`, `transform_id`, `transform_options`, and `empty_value_policy`.
-- Read-side reconstruction of `approved_mapping.source_columns[]` MUST remain exhaustive, ordered by `source_column_ordinal`, and lossless for deterministic `mapping_fingerprint` recomputation.
+- an exported or equivalent MVCC snapshot descriptor,
+- a server-side materialized ordered `record_id` list plus continuation position,
+- an equivalent snapshot descriptor plus deterministic seek anchor that reproduces the same externally observable continuation behavior.
 
-### Additional schema requirements for incident-scoped parties
+Snapshot descriptors and continuation state are deployment-local runtime state. They are not incident-portability content, not part of the authoritative incident source model, and not a reason to promote projection tables into source-of-truth tables. Projection tables remain disposable caches and do not become the authoritative snapshot contract.
 
-The schema sketch needs an explicit party model now that the core closes requester, collector, source, and related coordination identity on a standalone incident-scoped record:
+### Illustrative realization notes for canonical view-row wire family
 
-- `records.record_type` MUST include `party`.
-- `parties` MUST persist required `display_name` and `party_kind`, plus optional `organization_name`, `role_title`, `primary_email`, `timezone_name`, `external_ref`, and `notes`.
-- Task-request, evidence, and optional coordination-artifact refs such as requester, collector, source, audience, or attendee refs MUST use same-incident `party_id` values while preserving raw or source text separately.
+One conformant non-normative realization of the current full-row and sparse-patch contract needs explicit serializer and projection discipline for the canonical row family:
+
+- no new authoritative source tables are required solely to satisfy `view_row_v1` or `view_row_patch_v1`,
+- the serializer can reconstruct `view_row_v1` from the active `view_schema` field registry, the projection row, and authoritative joined source tables,
+- full-row serialization in one conformant realization emits explicit JSON `null` for schema-declared non-technical fields whose authoritative value is null rather than omitting those fields from `cells`,
+- sparse collaboration patches can be materialized as field-subset row objects keyed by `field_key` rather than as flat cell maps unrelated to the canonical row envelope,
+- `group_values` can be derived alongside the row and need not live as authoritative columns on base record tables so long as full-row and sparse-patch derivation remains deterministic for the active schema.
+
+### Illustrative realization notes for collaboration-array canonicalization
+
+One conformant non-normative realization of the current collaboration-array contract needs explicit emitter discipline for the canonical public arrays:
+
+- no new authoritative source tables are required solely to satisfy collaboration-array canonicalization,
+- `presence_snapshot.payload.presences[]` can be materialized from a map keyed by exact `connection_id`, with expired presence rows pruned before serialization and the remaining entries sorted before serialization under the Core 01 exact-identifier ordering contract,
+- `record_changed.payload.changed_field_keys[]` can be materialized from a set of exact public `field_key` identifiers and sorted before serialization under the Core 01 exact-identifier ordering contract,
+- `record_changed.payload.affected_views[]` can be materialized from a map keyed by base `view_schema_id` and sorted before serialization under the Core 01 exact-identifier ordering contract,
+- this realization does not rely on database-default locale behavior, query row order, map iteration order, or object insertion order to satisfy the public collaboration wire contract.
+
+### Illustrative realization notes for mention/stub provenance
+
+One conformant realization can include the following explicit contract fields beyond the high-level tables named above:
+
+- `entity_mentions` rows in one conformant realization store `source_field_key`, `origin_kind`, and `origin_locator`, plus resolution metadata such as `resolved_at`, `resolved_by_user_id`, and `resolution_method`.
+- Host and identity rows in one conformant realization store `entity_origin` and structured provenance, including an optional seed mention reference when the entity was created from a mention.
+- `view_schemas.writeback_contract` and import mappings in one conformant realization store `entity_binding_mode` per entity-bearing field. Same-field-conflict-capable write-back fields in the same realization also store `conflict_resolution_class` per `field_key`.
+- Repeated mentions remain separate rows in this realization; repeated entity-origin inputs can upsert the same entity when exact-match rules select a unique active target.
+
+### Illustrative realization notes for import-session and mapping reconstruction
+
+This appendix illustrates a realization with one explicit import-session and mapping-reconstruction section so the durable read resources in Core 01 §17.2 do not depend on inferred field names or lossy persistence:
+
+- `import_sessions` or equivalent structured rows in one conformant realization persist the durable session fields already required by Core 03, including `import_session_id`, incident anchor, creator attribution, source-file identity, parser identity, assistant profile, durable `session_status`, `selected_unit_ids[]`, `blocking_diagnostics[]`, and `nonblocking_warning_codes[]`.
+- `import_units` or equivalent structured rows in one conformant realization persist the durable unit fields already required by Core 03, including locator identity, source rectangle, row-boundary refs, inferred dimensions, `warning_codes[]`, durable `unit_status`, and optional `mapping_fingerprint`.
+- Each approved unit in one conformant realization persists one approved-mapping parent object or an equivalent structured row set sufficient to reconstruct the exact Core 01 §17.2 `approved_mapping` object.
+- That approved-mapping realization persists one child row per discovered source column carrying at minimum `source_column_ordinal`, `source_header_text`, `field_key`, `entity_binding_mode`, `transform_id`, `transform_options`, and `empty_value_policy`.
+- Read-side reconstruction of `approved_mapping.source_columns[]` in this realization remains exhaustive, ordered by `source_column_ordinal`, and lossless for deterministic `mapping_fingerprint` recomputation.
+
+### Illustrative realization notes for incident-scoped parties
+
+One conformant realization can include an explicit party model now that the core closes requester, collector, source, and related coordination identity on a standalone incident-scoped record:
+
+- One conformant realization includes `party` in `records.record_type`.
+- `parties` in one conformant realization persist required `display_name` and `party_kind`, plus optional `organization_name`, `role_title`, `primary_email`, `timezone_name`, `external_ref`, and `notes`.
+- Task-request, evidence, and optional coordination-artifact refs such as requester, collector, source, audience, or attendee refs in this realization use same-incident `party_id` values while preserving raw or source text separately.
 - Exact-match reuse for direct party creation or explicit create-from-text is incident-scoped and limited to unique exact matches on normalized `primary_email` or `external_ref`; display name, organization, role title, and phone-like text are suggestion inputs only.
 - The current profile does not standardize party merge or phone-based dedupe.
 
-### Additional schema requirements for coordination collection fields
+### Illustrative realization notes for coordination collection fields
 
-The schema sketch needs one explicit mapping table for the coordination-surface collection families closed by the current profile:
+This appendix illustrates one explicit mapping table for the coordination-surface collection families closed by the current profile:
 
 | Field set | Public family | `item_kind` | `item_ref` form | Authoritative target or child identity | Storage note |
 | --- | --- | --- | --- | --- | --- |
-| `comm_log.decision_ids[]`, `comm_log.action_task_ids[]`, `handoff.open_task_ids[]`, `handoff.open_decision_ids[]`, `status_review.blocked_task_ids[]`, `status_review.pending_evidence_ids[]`, `status_review.open_decision_ids[]`, `lesson.follow_up_task_ids[]`, `lesson.evidence_refs[]` | `record_ref` | `record_ref` | `record_ref:<linked_record_id>` | same-incident active target `record_id` constrained by the owning `field_key` | The authoritative association MAY remain `record_links` with field-derived relation token `references_record`. |
+| `comm_log.decision_ids[]`, `comm_log.action_task_ids[]`, `handoff.open_task_ids[]`, `handoff.open_decision_ids[]`, `status_review.blocked_task_ids[]`, `status_review.pending_evidence_ids[]`, `status_review.open_decision_ids[]`, `lesson.follow_up_task_ids[]`, `lesson.evidence_refs[]` | `record_ref` | `record_ref` | `record_ref:<linked_record_id>` | same-incident active target `record_id` constrained by the owning `field_key` | One conformant storage realization keeps the authoritative association in `record_links` with field-derived relation token `references_record`. |
 | `comm_log.audience_party_ids[]`, `comm_log.attendee_party_ids[]` | `party_ref` | `party_ref` | `party_ref:<party_id>` | same-incident active `party_id` | The public target identifier remains `party_id` even when storage uses a record envelope internally. |
 | `handoff.open_risk_refs[]` | `risk_ref` | `risk_ref` | `risk_ref:<risk_ref_id>` | dedicated child-row `risk_ref_id` scoped to one `handoff` record | `risk_ref_text` remains source-preserving text on the child row; the current profile does not imply a first-class `risk` record type. |
 
@@ -115,110 +155,110 @@ One conformant realization of the `risk_ref` family is a dedicated child-row tab
 - each child row belongs to exactly one parent `handoff` record;
 - minimum child-row state is the parent `handoff` `record_id`, stable `risk_ref_id`, source-preserving `risk_ref_text`, and normalized `risk_ref_text` used for duplicate coalescing;
 - `risk_ref_id` is the child identity that backs public `item_ref="risk_ref:<risk_ref_id>"`;
-- the implementation must be able to enforce at most one active child row per `(handoff_record_id, normalized_risk_ref_text)`;
+- the implementation can enforce at most one active child row per `(handoff_record_id, normalized_risk_ref_text)`;
 - the child row is not a record-envelope row, does not consume a `record_id`, and does not imply a standalone public route family or a reusable future `risk` object;
 - add/remove history remains in the existing mutation/history substrate, while whole-row restore remains parent-row behavior on the `handoff` artifact.
 
-### Additional schema requirements for Timeline supersede replacement relation
+### Illustrative realization notes for Timeline supersede replacement relation
 
-The schema sketch now needs one explicit non-normative realization note for Timeline supersession with direct replacement:
+This appendix illustrates one explicit non-normative realization note for Timeline supersession with direct replacement:
 
 - `record_links.link_type='supersedes'` is valid for both `decision -> decision` and `timeline_event -> timeline_event` endpoint pairs.
 - For Timeline rows, the authoritative replacement relation is one active `supersedes` link from the replacement Timeline row to the superseded Timeline row.
-- The implementation must be able to enforce at most one active incoming Timeline `supersedes` link for any one superseded Timeline row, while still allowing one replacement Timeline row to supersede multiple older Timeline rows.
-- Because the generic `record_links` table does not encode endpoint record types, that Timeline-specific cardinality constraint may require a trigger, helper columns, or an equivalent realization.
-- If the implementation materializes a convenience projection, `timeline_grid_projection` MAY add nullable `replacement_record_id uuid`, but that field remains read-only and derived from the authoritative `record_links` relation.
+- A conformant realization can enforce at most one active incoming Timeline `supersedes` link for any one superseded Timeline row, while still allowing one replacement Timeline row to supersede multiple older Timeline rows.
+- Because the generic `record_links` table does not encode endpoint record types, that Timeline-specific cardinality constraint can require a trigger, helper columns, or an equivalent realization.
+- If the implementation materializes a convenience projection, `timeline_grid_projection` can add nullable `replacement_record_id uuid`, but that field remains read-only and derived from the authoritative `record_links` relation.
 - The current profile does not require a default visible grid column, filter key, grouping key, or default index for `timeline.replacement_record_id`.
 
-### Additional schema requirements for canonical indicators
+### Illustrative realization notes for canonical indicators
 
-The schema sketch needs a few explicit fields and separations for indicators:
+One conformant realization can include the following explicit fields and separations for indicators:
 
-- `records.record_type` MUST include `indicator`.
-- Canonical indicators MUST store `indicator_type`, `value_kind`, canonical display value, `normalized_value` when applicable, deterministic incident-scoped `dedupe_key`, optional `defanged_value`, optional hash fields, and optional `stix_pattern`.
+- One conformant realization includes `indicator` in `records.record_type`.
+- Canonical indicators in one conformant realization store `indicator_type`, `value_kind`, canonical display value, `normalized_value` when applicable, deterministic incident-scoped `dedupe_key`, optional `defanged_value`, optional hash fields, and optional `stix_pattern`.
 - In the current profile, the stored canonical-identity inputs are `indicator_type`, `value_kind`, canonical display value, and `normalized_value` when applicable, plus the pair `hash_algorithm` and `hash_value` when both are populated and incorporated into the canonical dedupe key; `defanged_value` and `stix_pattern` are stored fields, not canonical identity inputs.
-- Source-bound `indicator_observations` MUST store `source_record_id`, `source_field_key`, `origin_kind`, `origin_locator`, observed text, optional parsed indicator type and normalized candidate, deterministic span or selection locator when the source is inline text, resolution metadata, and attribution.
-- Indicator lifecycle windows MUST be stored separately from observations in append-only `indicator_state_intervals` or equivalent structured rows keyed to the canonical indicator.
-- `indicator_grid_projection` MUST be keyed by canonical indicator `record_id`, not by source artifact or observation identity.
+- Source-bound `indicator_observations` in one conformant realization store `source_record_id`, `source_field_key`, `origin_kind`, `origin_locator`, observed text, optional parsed indicator type and normalized candidate, deterministic span or selection locator when the source is inline text, resolution metadata, and attribution.
+- Indicator lifecycle windows in one conformant realization are stored separately from observations in append-only `indicator_state_intervals` or equivalent structured rows keyed to the canonical indicator.
+- `indicator_grid_projection` in one conformant realization is keyed by canonical indicator `record_id`, not by source artifact or observation identity.
 
-### Additional schema requirements for compromise assessments
+### Illustrative realization notes for compromise assessments
 
-The schema sketch needs a few explicit fields and separations for compromise assessments:
+One conformant realization can include the following explicit fields and separations for compromise assessments:
 
-- `assessment_state` MUST use the closed vocabulary `unknown`, `suspected`, `confirmed`, `disproven`, and `cleared`.
-- Operational-response terms such as `contained`, `isolated`, `disabled`, `reset`, or `monitored` MUST NOT be stored in `assessment_state`.
-- Compromise assessments MUST store nullable `confidence_score` in the range `0..100` and expose deterministic derived `confidence_band` values of `unset`, `low`, `medium`, or `high`.
-- Compromise assessment history MUST remain append-only and incident-scoped to a host or identity subject rather than overwriting a mutable compromise flag on the subject row.
-- Assessor attribution MUST be preserved either on the assessment row itself or through the owning assessment record envelope.
-- `assessment_grid_projection` MUST be keyed by assessment `record_id` or equivalent stable assessment-row identity, not by a mutable subject-state overwrite.
+- In one conformant realization, `assessment_state` uses the closed vocabulary `unknown`, `suspected`, `confirmed`, `disproven`, and `cleared`.
+- Operational-response terms such as `contained`, `isolated`, `disabled`, `reset`, or `monitored` do not appear in `assessment_state` in this realization.
+- Compromise assessments in one conformant realization store nullable `confidence_score` in the range `0..100` and expose deterministic derived `confidence_band` values of `unset`, `low`, `medium`, or `high`.
+- Compromise assessment history in this realization remains append-only and incident-scoped to a host or identity subject rather than overwriting a mutable compromise flag on the subject row.
+- Assessor attribution in this realization is preserved either on the assessment row itself or through the owning assessment record envelope.
+- `assessment_grid_projection` in one conformant realization is keyed by assessment `record_id` or equivalent stable assessment-row identity, not by a mutable subject-state overwrite.
 
-### Additional schema requirements for rollback granularity
+### Illustrative realization notes for rollback granularity
 
-A conformant history schema needs a mutation log in addition to row-snapshot revisions.
+One conformant history realization includes a mutation log in addition to row-snapshot revisions.
 
 - `change_sets` remain the attribution unit for actor, source, reason, and transaction grouping.
-- A `change_set_mutations`-style table or equivalent MUST record reversible entries at mutation-target granularity and order them deterministically within the parent `change_set`.
-- Mutation targets MUST include row-field edits, `record_links`, `record_tags`, `entity_mentions`, `indicator_observations`, `indicator_state_intervals`, compromise assessments, evidence associations, and merge/repoint fan-out.
-- Stable mutation target identities MUST use a canonical target-kind-specific serialization. Composite targets MUST serialize deterministically, for example `record_tag:<record_id>:<tag_id>`.
-- `record_revisions` MAY retain `before_json` / `after_json` row snapshots for audit and whole-row restore, but they MUST NOT be the sole rollback substrate.
+- A `change_set_mutations`-style table or equivalent in one conformant realization records reversible entries at mutation-target granularity and orders them deterministically within the parent `change_set`.
+- Illustrative mutation targets in this realization include row-field edits, `record_links`, `record_tags`, `entity_mentions`, `indicator_observations`, `indicator_state_intervals`, compromise assessments, evidence associations, and merge/repoint fan-out.
+- Stable mutation target identities in this realization use a canonical target-kind-specific serialization. Composite targets serialize deterministically, for example `record_tag:<record_id>:<tag_id>`.
+- `record_revisions` in one conformant realization can retain `before_json` / `after_json` row snapshots for audit and whole-row restore, but they are not the sole rollback substrate.
 
 One conformant realization of the base-profile destructive-operation concurrency contract is an internal lock service or transaction-scoped database locking keyed to the protected first-class `record_id` set computed by Core 01 §3.3.5.0. Advisory locks, row-level locks, or an equivalent internal coordinator are all acceptable if they preserve the owner-defined public behavior. In all such patterns, lock acquisition proceeds in canonical ascending `record_id` order, fails fast rather than queueing, remains deployment-local runtime state rather than portable incident data, and releases on commit, rollback, or request termination.
 
-### Additional contract requirements for same-field conflict resolution
+### Illustrative realization notes for same-field conflict resolution
 
-The same-field conflict path needs one explicit contract hook beyond base row-versioning:
+One conformant realization of same-field conflict handling includes one explicit contract hook beyond base row-versioning:
 
-- `view_schemas.writeback_contract` MUST declare `conflict_resolution_class` per write-back-capable `field_key`.
-- The closed vocabulary is `atomic_replace`, `text_compare_merge`, and `collection_review`. Unknown or omitted values MUST behave as `atomic_replace`.
-- The same-field conflict payload MUST include `conflict_token`, `record_id`, `field_key`, `conflict_resolution_class`, `base_row_version`, `current_row_version`, `client_value`, `server_value`, `server_updated_by`, and `server_updated_at`. For `text_compare_merge`, the base profile requires `base_value` rather than `base_revision_ref` alone, and `client_value`, `server_value`, `base_value`, and optional `suggested_merged_value` are raw text or `null`. For `collection_review`, `client_value`, `server_value`, and `base_value` use `collection_value_v1`.
-- `text_compare_merge` denotes a plain-text, line-based merge-capable conflict class. Same-field detection stays keyed by `field_key`, not by textual subrange. For merge computation only, `null` becomes the empty string and `CRLF` or `CR` normalize to `LF`. A clean deterministic suggestion MAY be surfaced as `suggested_merged_value` only when normalized client and server change hunks do not overlap and do not both insert at the same base boundary.
+- `view_schemas.writeback_contract` in one conformant realization stores `conflict_resolution_class` per write-back-capable `field_key`.
+- The closed vocabulary in the owner sections is `atomic_replace`, `text_compare_merge`, and `collection_review`. In this realization, unknown or omitted values fall back to `atomic_replace`.
+- A conformant same-field conflict payload realization carries `conflict_token`, `record_id`, `field_key`, `conflict_resolution_class`, `base_row_version`, `current_row_version`, `client_value`, `server_value`, `server_updated_by`, and `server_updated_at`. For `text_compare_merge`, the base profile uses `base_value` rather than `base_revision_ref` alone, and `client_value`, `server_value`, `base_value`, and optional `suggested_merged_value` are raw text or `null`. For `collection_review`, `client_value`, `server_value`, and `base_value` use `collection_value_v1`.
+- `text_compare_merge` denotes a plain-text, line-based merge-capable conflict class. Same-field detection stays keyed by `field_key`, not by textual subrange. For merge computation only, `null` becomes the empty string and `CRLF` or `CR` normalize to `LF`. A clean deterministic suggestion can be surfaced as `suggested_merged_value` only when normalized client and server change hunks do not overlap and do not both insert at the same base boundary.
 - Explicit `merged_value` resolution for `text_compare_merge` accepts only the final text scalar or `null`; it is not a diff script, token list, AST, or field-specific merge object.
-- Client implementations MUST keep same-field conflicts in a conflict queue keyed by the canonical composite `record_id:field_key` rather than mixing them into the transient retry queue.
+- Client implementations in one conformant realization keep same-field conflicts in a conflict queue keyed by the canonical composite `record_id:field_key` rather than mixing them into the transient retry queue.
 - The base profile does not require an authoritative persisted conflict-draft table. Unresolved conflict drafts remain client-local unsaved state until the analyst explicitly resolves them.
 
-### Additional schema requirements for direct-scalar timestamp contracts
+### Illustrative realization notes for direct-scalar timestamp contracts
 
-The schema sketch now needs one explicit contract hook for writable temporal scalars:
+One conformant realization includes one explicit contract hook for writable temporal scalars:
 
-- Writable direct temporal scalar fields MUST declare `direct_scalar_contract_id` and `clearable`.
+- The field registry for one conformant realization stores `direct_scalar_contract_id` and `clearable` explicitly for writable direct temporal scalar fields.
 - The base profile currently closes exactly one such contract, `timestamp_instant_v1`.
 - `timestamp_instant_v1` admits only RFC 3339 timestamp strings with an explicit timezone designator, compares canonical equality in UTC `Z` form, and uses explicit JSON `null` as the only authoritative clear representation when the bound field declares `clearable=true`.
 - Original timestamp text, original offset, and precision caveats remain source-preserving text or metadata rather than part of the canonical scalar column.
 
-### Additional schema requirements for direct-reference scalar contracts
+### Illustrative realization notes for direct-reference scalar contracts
 
-The schema sketch now needs one explicit contract hook for writable direct-reference scalars:
+One conformant realization includes one explicit contract hook for writable direct-reference scalars:
 
-- Writable direct-reference scalar fields MUST declare `direct_reference_contract_id` and `clearable`.
+- The field registry for one conformant realization stores `direct_reference_contract_id` and `clearable` explicitly for writable direct-reference scalar fields.
 - The base profile currently closes exactly two such contracts, `same_incident_party_ref_v1` and `same_incident_decision_ref_v1`.
 - `same_incident_party_ref_v1` admits only exact `party_id` strings as non-null input and uses explicit JSON `null` as the only authoritative clear representation when the bound field declares `clearable=true`.
 - `same_incident_decision_ref_v1` admits only exact `record_id` strings that resolve to same-incident active `decision` records and uses explicit JSON `null` as the only authoritative clear representation when the bound field declares `clearable=true`.
-- If `task.decision_record_id` is realized as a denormalized convenience scalar, set and clear operations MUST remain atomically consistent with the authoritative `record_links` representation rather than creating dual authority.
+- If `task.decision_record_id` is realized as a denormalized convenience scalar, set and clear operations remain atomically consistent with the authoritative `record_links` representation rather than creating dual authority.
 
-### Additional schema requirements for reference-pack lifecycle
+### Illustrative realization notes for reference-pack lifecycle
 
 The schema sketch models reference-pack lifecycle through two linked table sets:
 
 - `reference_packs` for version-scoped verification and availability state,
 - `reference_pack_activation_state` and `reference_pack_attestations` for the active-version pointer and import or activation events.
 
-The version-scoped public durable conditions are `staged`, `verified_available`, `disabled`, `failed`, and `missing`. `active` is not a stored version-state token; it is derived when `reference_packs.status='available'`, `verification_result='passed'`, and `reference_pack_activation_state.active_version` for the same `pack_key` equals that `pack_version`. The public durable condition `verified_available` is derived when `reference_packs.status='available'`, `verification_result='passed'`, and the version is not currently active for its `pack_key`. Activation is legal only from public durable condition `verified_available`. A disabled, failed, or missing version MUST NOT remain the active pointer for its `pack_key`.
+The version-scoped public durable conditions are `staged`, `verified_available`, `disabled`, `failed`, and `missing`. `active` is not a stored version-state token; it is derived when `reference_packs.status='available'`, `verification_result='passed'`, and `reference_pack_activation_state.active_version` for the same `pack_key` equals that `pack_version`. The public durable condition `verified_available` is derived when `reference_packs.status='available'`, `verification_result='passed'`, and the version is not currently active for its `pack_key`. The owner sections treat `verified_available` as the activation-eligible condition, and this derivation therefore never leaves a disabled, failed, or missing version as the active pointer for its `pack_key`.
 
-Core 01 §17.4 owns the public `reference_pack_version resource`; this appendix describes one storage realization only and does not own the public JSON shape. Public `pack_version_state` is derived from storage `status`, `verification_result`, and the activation pointer. Public `active` is the derived activation-pointer boolean rather than a stored version token. Public `payload_sha256` is the canonical public digest field and MAY be reconstructed from one or more stored payload SHA-256 digests or an equivalent canonical aggregate digest.
+Core 01 §11.3, Core 01 §11.3.1, Core 01 §11.4, and Core 04 §4.1 own the public lifecycle semantics, durable conditions, and verification rules; this appendix illustrates one storage derivation only. Core 01 §17.4 owns the public `reference_pack_version resource`; this appendix describes one storage realization only and does not own the public JSON shape. Public `pack_version_state` is derived from storage `status`, `verification_result`, and the activation pointer. Public `active` is the derived activation-pointer boolean rather than a stored version token. Public `payload_sha256` in this realization can be reconstructed from one or more stored payload SHA-256 digests or an equivalent canonical aggregate digest.
 
-### Additional schema requirements for snapshot artifact lifecycle
+### Illustrative realization notes for snapshot artifact lifecycle
 
-The schema sketch now needs three distinct storage surfaces so snapshot-boundary state, release-boundary state, and approval state do not collapse into one implied artifact row:
+This appendix illustrates three distinct storage surfaces so snapshot-boundary state, release-boundary state, and approval state do not collapse into one implied artifact row:
 
-- snapshot descriptor rows SHOULD persist only the snapshot-boundary fields from revised REQ-02-140: `snapshot_id`, `incident_id`, `created_by_user_id`, `created_at`, `snapshot_at`, `source_change_set_high_watermark`, `derivation_version`, and `export_model_sha256`; they SHOULD NOT carry template selectors, redaction-profile selectors, release-state metadata, or rendered-output hashes.
-- release rows SHOULD persist the release-owned fields from revised REQ-02-145: `release_id`, `incident_id`, `snapshot_id`, template selectors, redaction-profile selectors, `output_kind`, `release_scope`, `output_sha256`, `release_state`, creator attribution, lifecycle timestamps, and optional `invalidation_reason`.
-- approval rows MUST bind to `release_id` and MUST NOT bind to mutable incident rows.
+- snapshot descriptor rows in one conformant realization persist only the snapshot-boundary fields from revised REQ-02-140: `snapshot_id`, `incident_id`, `created_by_user_id`, `created_at`, `snapshot_at`, `source_change_set_high_watermark`, `derivation_version`, and `export_model_sha256`; they do not carry template selectors, redaction-profile selectors, release-state metadata, or rendered-output hashes.
+- release rows in one conformant realization persist the release-owned fields from revised REQ-02-145: `release_id`, `incident_id`, `snapshot_id`, template selectors, redaction-profile selectors, `output_kind`, `release_scope`, `output_sha256`, `release_state`, creator attribution, lifecycle timestamps, and optional `invalidation_reason`.
+- approval rows in one conformant realization bind to `release_id` rather than to mutable incident rows.
 
-A public release resource MAY expose snapshot-boundary fields such as `snapshot_at`, `source_change_set_high_watermark`, `derivation_version`, and `export_model_sha256` by deterministic join to the bound snapshot descriptor rather than by forcing redundant release-row storage. A superseding render for the same logical output slot or a byte change MUST create a new `pending_approval` candidate and MUST NOT inherit prior approval state.
+A public release resource can expose snapshot-boundary fields such as `snapshot_at`, `source_change_set_high_watermark`, `derivation_version`, and `export_model_sha256` by deterministic join to the bound snapshot descriptor rather than by forcing redundant release-row storage. In this realization, a superseding render for the same logical output slot or a byte change creates a new `pending_approval` candidate and does not inherit prior approval state.
 
-### Additional schema requirements for blob-upload and evidence lifecycle
+### Illustrative realization notes for blob-upload and evidence lifecycle
 
-Evidence-access `media_class` and `preview_kind` are contract vocabularies that MAY be derived from authoritative object metadata and server-side inspection. This appendix does not imply that same-named physical columns are required.
+Evidence-access `media_class` and `preview_kind` are contract vocabularies that can be derived from authoritative object metadata and server-side inspection. This appendix does not imply that same-named physical columns are required.
 
 The schema sketch keeps blob upload and evidence lifecycle separate:
 
@@ -230,7 +270,7 @@ The core now also requires `object_blobs` to persist the incident anchor, the ro
 
 Timeout, retry exhaustion, and terminal contract mismatch remain instances of `upload_state='failed'`; the sketch does not need a separate expired state. The base-profile blob slot behaves as a single-upload lease with a short-lived upload target and a longer pending-slot timeout.
 
-A blob slot left in `pending` without successful finalization MUST NOT be treated as attached evidence. A declared-size or expected-hash mismatch MUST fail finalization and leave no attached evidence. An evidence row MUST NOT surface as available, previewable, or released while its linked blob is `pending`, `failed`, or missing. If structured state becomes inconsistent, the application MUST fail closed for preview and download until repaired.
+A blob slot left in `pending` without successful finalization is not treated as attached evidence in this realization. A declared-size or expected-hash mismatch fails finalization and leaves no attached evidence. An evidence row does not surface as available, previewable, or released while its linked blob is `pending`, `failed`, or missing. If structured state becomes inconsistent, the application fails closed for preview and download until repaired.
 
 The deployment-level resource ceilings closed by the current core are configuration keys, not new authoritative schema columns. Core 04 §12.3.1 owns the numeric registry for blob-create ceilings, structured-import ceilings, archive extraction and compression limits, reference-pack and incident-bundle extracted-byte overrides, and preview ceilings. The schema remains responsible for accepted upload contract, observed object metadata, timeout and cleanup state, terminal reasons, and evidence or blob lifecycle state only.
 
@@ -271,6 +311,11 @@ CREATE TABLE users (
 -- identifier. `POST /api/v1/auth/login` retains the wire member name
 -- `username` for v1 compatibility only and does not imply a second
 -- persisted local username namespace.
+-- Non-normative example: `email citext UNIQUE` is one conformant
+-- realization of the local-user email comparison and uniqueness contract.
+-- An equivalent generated comparison column or functional unique index
+-- over the same `email_address_v1` comparison substrate is also
+-- conformant; `citext` itself is not required.
 
 ### Informative note on deployment-local credential lifecycle realization
 
@@ -279,9 +324,11 @@ administrative tables or columns such as `users.password_changed_at`,
 `users.totp_enrolled_at`, wrapped or encrypted-at-rest active TOTP secret
 material, one pending-enrollment row keyed by `enrollment_id`, and one
 non-reversible bootstrap-token lookup substrate such as `bootstrap_token_hash`.
-Those rows remain deployment-local auth state. They do not participate in the
-record-envelope model, workbook mutation routes, or incident-portability
-bundles.
+That illustrative name is one conformant realization of the required
+non-reversible lookup substrate rather than a required column name or required
+co-located storage shape. Those rows remain deployment-local auth state. They
+do not participate in the record-envelope model, workbook mutation routes, or
+incident-portability bundles.
 
 One conformant realization of the one-time bootstrap marker is a dedicated
 deployment-local table written in the same transaction as the first created
@@ -334,6 +381,11 @@ CREATE UNIQUE INDEX auth_identities_active_user_provider_uniq
     ON auth_identities (user_id, provider_id)
     WHERE retired_at IS NULL;
 
+-- Non-normative example: the `auth_identities` table plus the partial unique
+-- indexes below is one conformant realization of the enterprise-auth binding
+-- persistence and active-binding uniqueness contract. Equivalent helper
+-- columns, partial indexes, triggers, or storage-engine-specific constraints
+-- are also conformant when they preserve the same public invariants.
 -- Informative: `auth_providers.config_json` is the natural home for protocol
 -- type and subject-mapping configuration sufficient to declare one stable
 -- authoritative SAML subject source and browser-interactive provider behavior.
@@ -675,7 +727,11 @@ CREATE TABLE entity_aliases (
 
 CREATE INDEX idx_entity_aliases_incident_alias_trgm
     ON entity_aliases USING gin (lower(alias_text::text) gin_trgm_ops);
+```
 
+One conformant realization can keep ordinary `suggestion_only` aliases and host or identity `exact_match_reuse` carry-forward values in one child store by adding a server-owned internal classification field or equivalent companion rows that are not surfaced through the ordinary alias editor. Another conformant realization can keep `entity_aliases` for `suggestion_only` values only and place active reusable identifiers in a separate child table keyed by same-incident `record_id`, identifier class, normalized value, and active-state boundary. In either realization, the normative core still requires incident-scoped uniqueness checks for active host and identity `exact_match_reuse` values and fail-closed third-record collision detection during merge.
+
+```sql
 CREATE TABLE artifacts (
     record_id uuid PRIMARY KEY REFERENCES records(id) ON DELETE CASCADE,
     incident_id uuid NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -1042,7 +1098,7 @@ CREATE TABLE saved_views (
     view_schema_id text NOT NULL REFERENCES view_schemas(id),
     display_name text NOT NULL CHECK (char_length(display_name) <= 256),
     query_json jsonb NOT NULL,
-    layout_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    layout_json jsonb NOT NULL,
     saved_view_version bigint NOT NULL DEFAULT 1,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
@@ -1071,9 +1127,10 @@ CREATE TABLE incident_workbook_preferences (
 
 -- Informative: public `POST /api/v1/incidents/{incident_id}/saved-views`
 -- requires non-null `display_name` and `query_json`, defaults omitted
--- `scope` to `private`, defaults omitted `layout_json` to `'{}'::jsonb`,
--- and keeps startup/default surface selection in the separate workbook-
--- preference objects above rather than on saved-view rows.
+-- `scope` to `private`, normalizes omitted or `{}` `layout_json` to the
+-- canonical schema-derived `cartulary.layout.v1` object, and keeps
+-- startup/default surface selection in the separate workbook-preference
+-- objects above rather than on saved-view rows.
 --
 -- Informative: public `PUT /api/v1/incidents/{incident_id}/workbook-
 -- preferences/me` accepts only `{ "home_sheet_ref": <sheet_ref|null> }`,
@@ -1089,6 +1146,372 @@ CREATE TABLE incident_workbook_preferences (
 -- implementation detail or a distinct saved-view object. It is not the
 -- authoritative public identity of the required base surface.
 ```
+
+### Illustrative public `view_schema_resource_v1` example
+
+```json
+{
+  "view_schema_id": "cartulary.view.evidence.v1",
+  "surface_kind": "built_in_sheet",
+  "title": "Evidence",
+  "source_record_types": ["evidence"],
+  "technical_fields": ["record_id", "row_version"],
+  "required_reference_pack_keys": [],
+  "default_sort": [
+    { "field_key": "evidence.requested_at", "direction": "desc" },
+    { "field_key": "record_id", "direction": "asc" }
+  ],
+  "sort_fields": [
+    "evidence.blob_hash",
+    "evidence.collector_party_text",
+    "evidence.edited_at",
+    "evidence.lifecycle_state",
+    "evidence.linked_record_count",
+    "evidence.received_at",
+    "evidence.requested_at",
+    "evidence.source_party_text",
+    "evidence.storage_ref",
+    "evidence.title",
+    "evidence.upload_state"
+  ],
+  "filter_fields": [
+    "evidence.blob_hash",
+    "evidence.collector_party_text",
+    "evidence.lifecycle_state",
+    "evidence.received_at",
+    "evidence.requested_at",
+    "evidence.source_party_text",
+    "evidence.storage_ref",
+    "evidence.upload_state"
+  ],
+  "synthetic_filter_predicates": [],
+  "grouping_fields": [],
+  "fields": [
+    {
+      "field_key": "evidence.title",
+      "label": "Title",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": ["eq", "prefix"],
+      "groupable": false,
+      "read_kind": "text",
+      "write_kind": "direct_value",
+      "conflict_resolution_class": "text_compare_merge",
+      "entity_binding_mode": null,
+      "string_contract_id": "single_line_title_v1",
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": null,
+      "clearable": false,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.lifecycle_state",
+      "label": "Lifecycle State",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": ["eq"],
+      "groupable": false,
+      "read_kind": "enum",
+      "write_kind": "direct_value",
+      "conflict_resolution_class": "atomic_replace",
+      "entity_binding_mode": null,
+      "string_contract_id": null,
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": null,
+      "clearable": false,
+      "enum_values": ["requested", "pending_receipt", "received", "available", "quarantined", "released"]
+    },
+    {
+      "field_key": "evidence.requested_at",
+      "label": "Requested At",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": ["eq", "range"],
+      "groupable": false,
+      "read_kind": "timestamp",
+      "write_kind": "direct_value",
+      "conflict_resolution_class": "atomic_replace",
+      "entity_binding_mode": null,
+      "string_contract_id": null,
+      "direct_scalar_contract_id": "timestamp_instant_v1",
+      "direct_reference_contract_id": null,
+      "clearable": true,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.received_at",
+      "label": "Received At",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": ["eq", "range"],
+      "groupable": false,
+      "read_kind": "timestamp",
+      "write_kind": "direct_value",
+      "conflict_resolution_class": "atomic_replace",
+      "entity_binding_mode": null,
+      "string_contract_id": null,
+      "direct_scalar_contract_id": "timestamp_instant_v1",
+      "direct_reference_contract_id": null,
+      "clearable": true,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.storage_ref",
+      "label": "Storage Ref",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": ["eq", "prefix"],
+      "groupable": false,
+      "read_kind": "text",
+      "write_kind": "direct_value",
+      "conflict_resolution_class": "atomic_replace",
+      "entity_binding_mode": null,
+      "string_contract_id": "locator_text_v1",
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": null,
+      "clearable": false,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.blob_hash",
+      "label": "Blob Hash",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": ["eq", "prefix"],
+      "groupable": false,
+      "read_kind": "text",
+      "write_kind": "read_only",
+      "conflict_resolution_class": null,
+      "entity_binding_mode": null,
+      "string_contract_id": null,
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": null,
+      "clearable": false,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.collector_party_text",
+      "label": "Collector",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": ["eq", "prefix"],
+      "groupable": false,
+      "read_kind": "text",
+      "write_kind": "direct_value",
+      "conflict_resolution_class": "text_compare_merge",
+      "entity_binding_mode": null,
+      "string_contract_id": "party_text_v1",
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": null,
+      "clearable": false,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.collector_party_id",
+      "label": "Collector Party",
+      "default_hidden": true,
+      "sortable": false,
+      "header_sort_field_key": null,
+      "filter_ops": [],
+      "groupable": false,
+      "read_kind": "text",
+      "write_kind": "direct_value",
+      "conflict_resolution_class": "atomic_replace",
+      "entity_binding_mode": null,
+      "string_contract_id": null,
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": "same_incident_party_ref_v1",
+      "clearable": true,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.source_party_text",
+      "label": "Source",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": ["eq", "prefix"],
+      "groupable": false,
+      "read_kind": "text",
+      "write_kind": "direct_value",
+      "conflict_resolution_class": "text_compare_merge",
+      "entity_binding_mode": null,
+      "string_contract_id": "party_text_v1",
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": null,
+      "clearable": false,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.source_party_id",
+      "label": "Source Party",
+      "default_hidden": true,
+      "sortable": false,
+      "header_sort_field_key": null,
+      "filter_ops": [],
+      "groupable": false,
+      "read_kind": "text",
+      "write_kind": "direct_value",
+      "conflict_resolution_class": "atomic_replace",
+      "entity_binding_mode": null,
+      "string_contract_id": null,
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": "same_incident_party_ref_v1",
+      "clearable": true,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.upload_state",
+      "label": "Upload State",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": ["eq"],
+      "groupable": false,
+      "read_kind": "enum",
+      "write_kind": "read_only",
+      "conflict_resolution_class": null,
+      "entity_binding_mode": null,
+      "string_contract_id": null,
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": null,
+      "clearable": false,
+      "enum_values": ["pending", "available", "failed", "quarantined"]
+    },
+    {
+      "field_key": "evidence.linked_record_count",
+      "label": "Linked Record Count",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": [],
+      "groupable": false,
+      "read_kind": "number",
+      "write_kind": "read_only",
+      "conflict_resolution_class": null,
+      "entity_binding_mode": null,
+      "string_contract_id": null,
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": null,
+      "clearable": false,
+      "enum_values": null
+    },
+    {
+      "field_key": "evidence.edited_at",
+      "label": "Edited At",
+      "default_hidden": false,
+      "sortable": true,
+      "header_sort_field_key": null,
+      "filter_ops": [],
+      "groupable": false,
+      "read_kind": "timestamp",
+      "write_kind": "read_only",
+      "conflict_resolution_class": null,
+      "entity_binding_mode": null,
+      "string_contract_id": null,
+      "direct_scalar_contract_id": null,
+      "direct_reference_contract_id": null,
+      "clearable": false,
+      "enum_values": null
+    }
+  ]
+}
+```
+
+### Illustrative public `view_field_entry_v1` example
+
+```json
+{
+  "field_key": "evidence.collector_party_id",
+  "label": "Collector Party",
+  "default_hidden": true,
+  "sortable": false,
+  "header_sort_field_key": null,
+  "filter_ops": [],
+  "groupable": false,
+  "read_kind": "text",
+  "write_kind": "direct_value",
+  "conflict_resolution_class": "atomic_replace",
+  "entity_binding_mode": null,
+  "string_contract_id": null,
+  "direct_scalar_contract_id": null,
+  "direct_reference_contract_id": "same_incident_party_ref_v1",
+  "clearable": true,
+  "enum_values": null
+}
+```
+
+### Illustrative canonical default `layout_json` example
+
+```json
+{
+  "layout_schema_id": "cartulary.layout.v1",
+  "column_order": [
+    "evidence.title",
+    "evidence.lifecycle_state",
+    "evidence.requested_at",
+    "evidence.received_at",
+    "evidence.storage_ref",
+    "evidence.blob_hash",
+    "evidence.collector_party_text",
+    "evidence.collector_party_id",
+    "evidence.source_party_text",
+    "evidence.source_party_id",
+    "evidence.upload_state",
+    "evidence.linked_record_count",
+    "evidence.edited_at"
+  ],
+  "hidden_field_keys": [
+    "evidence.collector_party_id",
+    "evidence.source_party_id"
+  ],
+  "column_widths": []
+}
+```
+
+### Illustrative non-default `layout_json` example
+
+```json
+{
+  "layout_schema_id": "cartulary.layout.v1",
+  "column_order": [
+    "evidence.title",
+    "evidence.requested_at",
+    "evidence.received_at",
+    "evidence.lifecycle_state",
+    "evidence.storage_ref",
+    "evidence.collector_party_text",
+    "evidence.source_party_text",
+    "evidence.blob_hash",
+    "evidence.collector_party_id",
+    "evidence.source_party_id",
+    "evidence.upload_state",
+    "evidence.linked_record_count",
+    "evidence.edited_at"
+  ],
+  "hidden_field_keys": [
+    "evidence.blob_hash",
+    "evidence.collector_party_id",
+    "evidence.source_party_id"
+  ],
+  "column_widths": [
+    { "field_key": "evidence.collector_party_text", "width_px": 260 },
+    { "field_key": "evidence.source_party_text", "width_px": 260 },
+    { "field_key": "evidence.title", "width_px": 420 }
+  ]
+}
+```
+
+### Non-normative migration note for saved-view normalization
+
+Legacy omitted `filters` normalize to `filters=[]`. Legacy omitted or `{}` `layout_json` normalizes to the canonical schema-derived `cartulary.layout.v1` object for the owning `view_schema_id`. Ambiguous legacy saved views are better left unrepaired at runtime. If an incident-portability implementation imports a saved view that cannot be normalized against the resolved `view_schema_id`, a defensible current-profile choice is to skip that saved-view object, import the core incident state, and emit a deterministic diagnostic rather than fail the entire bundle import. The underlying rationale for the closed shared-layout grammar is to preserve portable workbook semantics while keeping per-session UI state client-local.
 
 ```sql
 CREATE TABLE timeline_grid_projection (
@@ -1182,11 +1605,11 @@ CREATE INDEX idx_indicator_grid_search
 
 ### Rollback, lineage, revision history
 
-Every mutation creates a `change_set`. Storage MUST be authoritative at `change_set` plus mutation-target granularity, not at row-snapshot granularity alone. `record_revisions` remain useful row-centric snapshot history for audit and fast restore, but they MUST NOT be the sole rollback substrate.
+Every mutation creates a `change_set`. In one conformant realization, storage is authoritative at `change_set` plus mutation-target granularity, not at row-snapshot granularity alone. `record_revisions` remain useful row-centric snapshot history for audit and fast restore, but they are not the sole rollback substrate.
 
 #### Storage history granularity
 
-For each committed action, the system MUST create one immutable `change_set` and one or more reversible mutation entries. Each mutation entry MUST be queryable together with the parent change set's actor, timestamp, source, and reason, and it MUST record:
+For each committed action, one conformant history realization creates one immutable `change_set` and one or more reversible mutation entries. Each mutation entry is queryable together with the parent change set's actor, timestamp, source, and reason, and it records:
 
 - target kind and stable target id,
 - operation kind,
@@ -1194,7 +1617,7 @@ For each committed action, the system MUST create one immutable `change_set` and
 - pre-change and post-change version identifiers,
 - either `before_value` / `after_value` or an equivalent reversible patch.
 
-Mutation targets MUST include, at minimum:
+Illustrative mutation targets include, at minimum:
 
 - scalar/document fields on first-class records,
 - `record_links`,
@@ -1205,13 +1628,13 @@ Mutation targets MUST include, at minimum:
 - evidence association changes, including evidence-record linkage,
 - merge/repoint fan-out caused by entity merge or restore.
 
-For `entity_mentions`, ordinary dismiss and restore semantics are lifecycle transitions on the existing mention row, not delete-and-recreate operations. A dismiss transition MUST preserve `raw_text`, derived `normalized_text`, stable mention identity, and provenance, MUST clear active resolution metadata such as `resolved_record_id`, `resolved_by_user_id`, `resolved_at`, and `resolution_method`, and MUST remove or tombstone any corresponding active resolved `record_link` in the same `change_set`. An ordinary restore transition MUST return that same mention row to `unresolved` with resolution metadata null; recovering a prior resolved target is handled by rollback of the dismissal change, not by ordinary restore.
+For `entity_mentions`, ordinary dismiss and restore semantics are lifecycle transitions on the existing mention row, not delete-and-recreate operations. In this realization, a dismiss transition preserves `raw_text`, derived `normalized_text`, stable mention identity, and provenance, clears active resolution metadata such as `resolved_record_id`, `resolved_by_user_id`, `resolved_at`, and `resolution_method`, and removes or tombstones any corresponding active resolved `record_link` in the same `change_set`. An ordinary restore transition returns that same mention row to `unresolved` with resolution metadata null; recovering a prior resolved target is handled by rollback of the dismissal change, not by ordinary restore.
 
-The history model MUST preserve enough detail to reconstruct both the full row snapshot at any revision and the exact field/link/mention/tag/evidence delta introduced by a `change_set`. Row snapshots such as `before_json` / `after_json` SHOULD be retained for audit and fast restore, but they MUST NOT be the only rollback substrate. Projection tables MUST NOT be authoritative history; they remain derived state only.
+The history model in this realization preserves enough detail to reconstruct both the full row snapshot at any revision and the exact field/link/mention/tag/evidence delta introduced by a `change_set`. Row snapshots such as `before_json` / `after_json` can be retained for audit and fast restore, but they are not the only rollback substrate. Projection tables are not authoritative history; they remain derived state only.
 
 This yields a deliberate split: attribution unit = `change_set`; rollback unit = mutation entry or whole `change_set`; primary reviewer lens = row.
 
-For entity merges specifically, active mention resolutions and active links should never continue to point at a merged-away record. The merge change set MUST repoint those live references to the survivor, preserve the losing record for audit/history, and emit enough revision detail to reconstruct both the pre-merge graph and the post-merge graph.
+For entity merges specifically, active mention resolutions and active links in this realization never continue to point at a merged-away record. The merge change set repoints those live references to the survivor, preserves the losing record for audit/history, and emits enough revision detail to reconstruct both the pre-merge graph and the post-merge graph.
 
 ### Postgres-native features worth using
 

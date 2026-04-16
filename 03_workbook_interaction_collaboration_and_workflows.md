@@ -36,8 +36,10 @@ The workbook MUST expose these built-in tabs in the base profile:
 - Identities,
 - Evidence,
 - Notes.
+
+The Notes sheet is the built-in-sheet member of the tagged-variant family defined by Core 02 §10.4.4A.
 Profiles: base
-Verified by: AC-112, AC-116, AC-231
+Verified by: AC-112, AC-116, AC-231, AC-410
 
 ### 2.2 System views
 
@@ -72,9 +74,9 @@ Profiles: base
 Verified by: AC-078, AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-121, AC-122, AC-231, AC-281, AC-282, AC-283, AC-284
 
 **REQ-03-011**
-Such surfaces MUST remain workbook surfaces rather than separate application modules. Their canonical public identity MUST be the `view_schema` form of `sheet_ref` using that surface's standardized `view_schema_id`. In the current profile, only standardized base-profile `view_schema_id` values and the explicitly standardized optional artifact-backed `view_schema_id` values are valid `sheet_ref.kind='view_schema'` workbook-surface identities. Pack-dependent framework overlays such as ATT&CK, D3FEND, and VERIS MUST NOT be exposed or referenced as workbook-native `sheet_ref.kind='view_schema'` targets in the current profile. A saved view over the same `view_schema_id` MAY exist as an additional workbook surface, but it is a distinct saved-view object and MUST NOT replace the canonical identity of the required base surface.
+Such surfaces MUST remain workbook surfaces rather than separate application modules. Their canonical public identity MUST be the `view_schema` form of `sheet_ref` using that surface's standardized `view_schema_id`. In the current profile, only standardized base-profile `view_schema_id` values and the explicitly standardized optional artifact-backed `view_schema_id` values are valid `sheet_ref.kind='view_schema'` workbook-surface identities. Pack-dependent framework overlays such as ATT&CK, D3FEND, and VERIS MUST NOT be exposed or referenced as workbook-native `sheet_ref.kind='view_schema'` targets in the current profile. A saved view over the same `view_schema_id` MAY exist as an additional workbook surface, but it is a distinct saved-view object and MUST NOT replace the canonical identity of the required base surface. Variant membership, durable-discriminator semantics, and the no-separate-hypothesis rule for the artifact-backed note/coordination/finding family remain owned by Core 02 §10.4.4A and §10.4.5.
 Profiles: base
-Verified by: AC-078, AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-121, AC-122, AC-231, AC-281, AC-282, AC-283, AC-284
+Verified by: AC-078, AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-121, AC-122, AC-231, AC-281, AC-282, AC-283, AC-284, AC-410
 
 ### 2.3 Saved views
 
@@ -97,11 +99,13 @@ A saved view MUST persist, at minimum:
 - `created_at`,
 - `updated_at`,
 - `saved_view_version`.
+
+`layout_json` carries only shared portable layout state. Selection, scroll position, focused cell, local popover state, open inspector state, preview state, and presence remain client-local and MUST NOT be persisted as part of a saved view.
 Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-151, AC-152, AC-231
 
 **REQ-03-014**
-A saved view created from another saved view MUST persist a normalized copy of that source view's `view_schema_id`, `query_json`, and `layout_json`. After creation, the new saved view MUST NOT inherit runtime behavior from the source `saved_view_id`.
+A saved view created from another saved view MUST persist a normalized canonical copy of that source view's `view_schema_id`, `query_json`, and `layout_json`. After creation, the new saved view MUST NOT inherit runtime behavior from the source `saved_view_id`.
 Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-151, AC-152, AC-231
 
@@ -188,7 +192,7 @@ Profiles: base
 Verified by: AC-150, AC-153, AC-231
 
 **REQ-03-029**
-Both pointers MUST use the stable `sheet_ref` shape defined by Core 01 §3.3.10.1. When the pointed surface is the required base `comm_log`, `handoff`, `status_review`, or `lesson` surface itself, the stored `sheet_ref` MUST use `{ "kind": "view_schema", "id": <view_schema_id> }` rather than a `saved_view` reference.
+Both pointers MUST use the stable `sheet_ref` shape defined by Core 01 §3.3.10.1. When the pointed surface is any pack-independent base-profile registry surface listed in Core 01 REQ-01-307, the stored `sheet_ref` MUST use `{ "kind": "view_schema", "id": <view_schema_id> }` for the required base surface itself; the `saved_view` form remains valid only for a distinct saved-view object over that schema.
 Profiles: base
 Verified by: AC-150, AC-153, AC-231
 
@@ -203,7 +207,7 @@ Profiles: base
 Verified by: AC-150, AC-153, AC-231
 
 **REQ-03-031**
-If a referenced saved view or view schema is missing, no longer visible to the caller, invalid because a required optional pack is unavailable, or invalid because the referenced `view_schema_id` is not standardized for the current profile, the implementation MUST clear the invalid pointer and continue to the next step in the ordered fallback chain rather than failing workbook open. This fallback logic MUST NOT depend on the existence of a saved-view object for the required base `comm_log`, `handoff`, `status_review`, or `lesson` surfaces, because those surfaces remain directly addressable by standardized `view_schema_id`.
+If a referenced saved view or view schema is missing, no longer visible to the caller, invalid because a required optional pack is unavailable, or invalid because the referenced `view_schema_id` is not standardized for the current profile, the implementation MUST clear the invalid pointer and continue to the next step in the ordered fallback chain rather than failing workbook open. This fallback logic MUST NOT depend on the existence of a saved-view object for any pack-independent base-profile registry surface listed in Core 01 REQ-01-307, because those surfaces remain directly addressable by standardized `view_schema_id`.
 Profiles: base
 Verified by: AC-150, AC-153, AC-231
 
@@ -478,9 +482,9 @@ Profiles: base
 Verified by: AC-126, AC-203, AC-204, AC-226, AC-227, AC-228, AC-229, AC-230, AC-231
 
 **REQ-03-072**
-The client MUST keep this conflict queue separate from the transient pending-patch queue used for retryable transport failures.
+The client MUST keep this conflict queue separate from the transient local pending queue used for retryable transport failures.
 Profiles: base
-Verified by: AC-126, AC-203, AC-204, AC-226, AC-227, AC-228, AC-229, AC-230, AC-231
+Verified by: AC-126, AC-203, AC-204, AC-226, AC-227, AC-228, AC-229, AC-230, AC-231, AC-381
 
 **REQ-03-073**
 A same-field conflict MUST NOT auto-retry.
@@ -603,8 +607,16 @@ The UI MUST present a compact save state using exactly these user-visible labels
 - `Syncing`,
 - `Saved`,
 - `Conflict`.
+
+For the base profile, the label mapping is:
+
+- `Syncing`: at least one workbook mutation is in flight or the local pending queue is non-empty, including while replay is paused waiting for connectivity recovery, re-authentication, or an HTTP re-query required by `REQ-03-096`.
+- `Saved`: no workbook mutation is in flight, the local pending queue is empty, and the client has no unresolved same-field local drafts for that workbook state.
+- `Conflict`: at least one unresolved same-field conflict exists, or queue overflow has refused admission of a new replay unit, or replay is halted on a non-retryable failure that requires analyst action.
+
+Ambient collaboration state MUST NOT change this label mapping.
 Profiles: base
-Verified by: AC-043, AC-231
+Verified by: AC-043, AC-231, AC-376
 
 ### 4.3 Presence
 
@@ -632,7 +644,7 @@ The client MUST include its initial workbook presence in `hello` or `resume` and
 - same-cell editing starts or stops for a writable `field_key`,
 - the client becomes `idle` or returns from `idle`.
 
-When the active workbook surface is the required base `comm_log`, `handoff`, `status_review`, or `lesson` surface itself, the transmitted `sheet_ref` MUST use `kind = view_schema` with the standardized `view_schema_id`; opening a distinct saved view over one of those schemas MUST instead transmit `kind = saved_view` with that saved view's `saved_view_id`.
+When the active workbook surface is any pack-independent base-profile registry surface listed in Core 01 REQ-01-307 and the user is on the required base surface itself rather than a distinct saved-view object over the same schema, the transmitted `sheet_ref` MUST use `kind = view_schema` with the standardized `view_schema_id`; opening a distinct saved view over that schema MUST instead transmit `kind = saved_view` with that saved view's `saved_view_id`.
 Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
 
@@ -642,14 +654,14 @@ Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
 
 **REQ-03-094**
-Workbook-header presence avatars MUST be derived from `presence_snapshot` and `presence_delta` records whose `sheet_ref` exactly matches the active workbook surface. Row-gutter indicators MUST be derived from matching `record_id`. Same-cell indicators MUST be derived from matching `record_id` plus `field_key` with `mode = editing`. The client MUST key these indicators from `sheet_ref`, `record_id`, and `field_key`; it MUST NOT infer collaboration state from visible tab labels, row numbers, or column headers. The client MUST also preserve the distinction between a direct base coordination surface addressed as `sheet_ref.kind="view_schema"` and a distinct saved view over the same schema addressed as `sheet_ref.kind="saved_view"`.
+Workbook-header presence avatars MUST be derived from `presence_snapshot` and `presence_delta` records whose `sheet_ref` exactly matches the active workbook surface. Row-gutter indicators MUST be derived from matching `record_id`. Same-cell indicators MUST be derived from matching `record_id` plus `field_key` with `mode = editing`. The client MUST key these indicators from `sheet_ref`, `record_id`, and `field_key`; it MUST NOT infer collaboration state from visible tab labels, row numbers, or column headers. The client MUST treat `presence_snapshot.payload.presences[]` as a keyed collection by exact `connection_id` and MUST NOT infer recency, tie-break, or presentation order from array position. The client MUST also preserve the distinction between a direct base coordination surface addressed as `sheet_ref.kind="view_schema"` and a distinct saved view over the same schema addressed as `sheet_ref.kind="saved_view"`. Any avatar order shown in the UI MAY use a separate deterministic local presentation rule, but that presentation order is non-authoritative and MUST NOT be fed back into diffing, cache keys, or resume-state checks.
 Profiles: base, snapshot_reporting
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231, AC-233
 
 **REQ-03-095**
-Presence updates are ambient last-write-wins state. They MUST NOT change the local save state, conflict queue, or pending-patch queue.
+Presence updates are ambient last-write-wins state. They MUST NOT change the local save state, conflict queue, or local pending queue.
 Profiles: base
-Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
+Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231, AC-376
 
 **REQ-03-096**
 When a replayable `record_changed` message arrives, the client MUST de-duplicate it by `(incident_id, stream_seq)`. If the client detects a gap in replayable `stream_seq` or receives `resume_ack.status = reset_required`, it MUST stop incremental apply and re-query the current view through the HTTP query route before presenting the sheet as synchronized again.
@@ -657,35 +669,97 @@ Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
 
 **REQ-03-097**
-When the active surface's underlying `view_schema_id` appears in `record_changed.payload.affected_views[]`, the client MUST apply the matching entry as follows:
+When the active surface's underlying `view_schema_id` appears in `record_changed.payload.affected_views[]`, the client MUST locate the relevant entry by exact `view_schema_id` rather than by array position, MUST treat `changed_field_keys[]` as a canonical set of exact `field_key` identifiers rather than mutation order, and MUST apply the matching entry as follows:
 
-- `patch`: update only the supplied field-key-addressable cells, replace the row's `row_version` with the authoritative value from the event, preserve selection and edit anchoring by `record_id`, and clear any matching local pending-patch entry only when the authoritative event covers that row and row version or a later committed row version,
-- `invalidate`: mark the row or affected visible block dirty and refresh it through the existing HTTP view-query route rather than inventing a separate WebSocket read path,
+- `patch`: treat `patch_cells` as `view_row_patch_v1`; update only the `patch_cells.cells` members present in the event, apply only the `patch_cells.group_values` members present in the event, replace the row's `row_version` with the authoritative value from `patch_cells.row_version`, treat an included cell `{ "value": null }` as authoritative null when that field contract admits null, treat omitted cells and omitted grouping scalars as unchanged, preserve selection and edit anchoring by `record_id`, and clear any matching local pending-queue entry only when the authoritative event covers that row and row version or a later committed row version,
+- `invalidate`: mark the row or affected visible block dirty and refresh it through the existing HTTP view-query route rather than inventing a separate WebSocket read path or synthesizing a sparse patch the server did not send,
 - `remove`: remove the row from the current materialized grid or mark it absent on the next synchronized query, and if the removed row was selected, clear the selection or move it according to the normal row-removal behavior without silently rebinding the old selection to a different `record_id`.
+
+The client MAY use `changed_field_keys[]` for cache invalidation or reconciliation hints, but MUST NOT attach semantics to the order of those entries.
 Profiles: base
-Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
+Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231, AC-368
 
 **REQ-03-098**
 A client that originated the mutation MUST reconcile against the same echoed `record_changed` message family as every other subscriber. Incoming collaboration messages MUST NOT surface unresolved same-field local drafts as saved state or overwrite the client-local conflict queue defined in §3.3.4 and §3.3.5. When a terminal polled job resource or a terminal `job_progress` message includes `result_summary.resource_refs[]`, the client MUST treat those refs as a compact navigation summary rather than a deep result payload. The client MUST surface known current-profile `kind` values as non-modal result chips or links on the current surface, MUST degrade unknown `kind` values to `result_summary.message`-only rendering without failing job rendering, MUST treat `route` as an opaque same-origin path rather than a UI-local route or preview/download handle, and MUST NOT auto-follow `route` or automatically change the active workbook surface, selection, or scroll position when the terminal result arrives. If the client already has a stronger local navigation affordance for a known `kind`, it MAY use that affordance, but it MUST NOT require UI-route strings inside the job resource.
 Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-231
 
+**REQ-03-275**
+When the client continues a pageable workbook surface with `cursor_token`, it MUST treat every page obtained from that cursor chain as one snapshot sequence. The client MUST NOT interleave rows from a fresh query or explicit refresh into that same ordered list as though they were part of the same cursor chain. On explicit refresh, or on `400` with `error.code='invalid_view_query'` and `error.details.reason_code='cursor_snapshot_unavailable'`, the client MUST discard the old chain and restart from page 1 without `cursor_token`. Where practical, that restart SHOULD preserve the same workbook surface, focus target, and viewport anchor rather than forcing full-page navigation.
+Profiles: base
+Verified by: AC-231
+
 ### 4.4 Local pending queue
 
 **REQ-03-099**
-The client MUST maintain a small local pending-patch queue so that transient network interruptions do not lose typed data.
+The client MUST maintain a local pending queue for autosave-originated workbook hot-path mutations so that transient network interruptions do not lose typed data. A replay unit is exactly one autosave-originated workbook hot-path mutation: one row-create intent or one row-patch intent.
+
+In the base profile, the local pending queue is client-memory-local, incident-scoped, and client-instance-scoped by `(incident_id, client_instance_id)`. It MUST NOT be shared across tabs or client instances.
+
+In the base profile, the local pending queue MUST survive:
+
+- transient transport failure,
+- an HTTP auth failure on a queued write,
+- `session_revoked` within the same browser runtime.
+
+In the base profile, the local pending queue MUST NOT be relied on to survive:
+
+- full page reload,
+- tab close,
+- browser restart,
+- cross-tab transfer,
+- tab crash.
+
+The client MUST support a capacity of exactly `64` replay units per `(incident_id, client_instance_id)`. Replay MUST be FIFO by original enqueue order. The client MUST NOT reorder queued writes by visible row order, sort order, record type, or other presentation-derived state.
+
+Coalescing is allowed only as follows:
+
+- For a still-uncommitted local row, one queued create plus later unsent edits to that same local row MUST fold into one queued create unit until the first authoritative create succeeds.
+- For an existing authoritative row, unsent patch units for the same `record_id` MAY coalesce only within one contiguous same-record run in the queue. The coalesced unit MUST preserve the final direct-write value for each `field_key` and the declared order of any `collection_actions_v1.actions[]`.
+
+The client MUST NOT coalesce:
+
+- across record boundaries,
+- across intervening queued units for a different record,
+- across destructive actions,
+- across conflict-resolution actions,
+- across non-hot-path operations.
+
+When admitting a new replay unit would exceed capacity, the client MUST:
+
+- keep every already queued unit,
+- refuse admission of the new replay unit,
+- preserve the current visible edit as unsaved local work,
+- set save state to `Conflict`,
+- show a same-surface non-modal overflow message.
+
+On overflow the client MUST NOT silently evict oldest or newest queued units, and MUST NOT reorder queued units to make room.
+
+When the platform permits, the client SHOULD warn before unload while the local pending queue is non-empty or unresolved same-field local drafts exist.
 Profiles: base
-Verified by: AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231
+Verified by: AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231, AC-376, AC-377, AC-378, AC-379, AC-380, AC-381, AC-382
 
 **REQ-03-100**
-An authentication failure on a queued write, or a `session_revoked` event on the collaboration stream, MUST NOT discard unresolved same-field local drafts or queued unsent patches. This requirement applies when `session_revoked` is caused by self-service password change, self-service TOTP replacement, administrator password reset, administrator TOTP reset, or explicit session revoke-all. The client MUST preserve that client-local unsaved work, prompt for re-authentication when required, and replay queued writes only after a new authenticated session is established. Replayed writes MUST still satisfy ordinary `base_row_version`, authorization, and same-field conflict checks before they become authoritative incident state. No additional workbook tab, saved view, or inspector workflow is required for this credential-lifecycle behavior.
+An authentication failure on a queued write, or a `session_revoked` event on the collaboration stream, MUST NOT discard unresolved same-field local drafts or queued unsent writes. This requirement applies when `session_revoked` is caused by self-service password change, self-service TOTP replacement, administrator password reset, administrator TOTP reset, or explicit session revoke-all. The client MUST preserve that client-local unsaved work and prompt for re-authentication when required.
+
+Before replay begins, the client MUST:
+
+- establish a new authenticated session when required,
+- re-derive current incident authorization,
+- complete any HTTP re-query required by `REQ-03-096`.
+
+Replay MUST proceed in FIFO order.
+
+Replay MUST stop at the first non-retryable failure that requires analyst action. If that blocking failure is a same-field conflict, the blocked replay unit MUST leave the local pending queue, MUST enter the existing client-local same-field conflict queue keyed by `record_id:field_key`, and later queued units MUST remain queued behind it without being applied out of order. If the blocking failure is another terminal failure, later queued units MUST remain queued, save state MUST remain `Conflict`, and the blocking failure MUST be surfaced on the same workbook surface.
+
+Replayed writes MUST still satisfy ordinary `base_row_version`, authorization, and same-field conflict checks before they become authoritative incident state. No additional workbook tab, saved view, or inspector workflow is required for this credential-lifecycle behavior.
 Profiles: base
-Verified by: AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231
+Verified by: AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231, AC-376, AC-377, AC-378, AC-379, AC-380, AC-381, AC-382
 
 ## 5. Locking policy
 
 **REQ-03-101**
-Routine inline edits MUST NOT use hard record locks. In the current base profile, short-lived server-side destructive-operation locks are reserved to the destructive-operation family defined by Core 01 §3.3.5.0: restore, rollback, and merge only. Ordinary `PATCH` and ordinary `DELETE` remain on the optimistic-concurrency path.
+Routine inline edits MUST NOT use hard record locks. Any workbook-surface lock-backed contention behavior MUST follow the destructive-operation concurrency contract owned by Core 01 §3.3.5.0. This section defines only workbook-surface consequences of that owner contract.
 Profiles: base
 Verified by: AC-182, AC-187, AC-218, AC-231, AC-353
 
@@ -853,41 +927,42 @@ The blob-upload machine uses the exact `object_blobs.upload_state` tokens `pendi
 
 The evidence machine uses the exact `evidence_records.lifecycle_state` tokens `requested`, `pending_receipt`, `received`, `available`, `quarantined`, and `released`.
 
+Core 02 §13 owns the lifecycle state sets, legal transitions, bridge-derived outcomes, quarantine-entry semantics, and recovery rules for these machines. This subsection owns workbook-surface consequences only.
+
 **REQ-03-121**
-The required bridge behavior is:
+The required workbook-surface bridge behavior is:
 
 - a `pending` blob slot MUST NOT by itself create or imply an attached evidence row,
-- finalize attachment MUST succeed only when the selected blob slot is `available` or `quarantined` and the observed bytes satisfy the accepted create contract when that contract declares size or expected-hash checks,
-- an evidence record MUST NOT surface as `available`, previewable, or released while its linked blob is `pending`, `failed`, or missing,
-- if a linked blob becomes `quarantined`, normal preview and download MUST stop and the evidence surface MUST show the evidence as `quarantined` or otherwise non-available,
+- an evidence record whose linked blob or evidence lifecycle state makes preview or download unavailable under Core 02 §13 MUST render inline as blocked rather than navigating away,
+- if Core 02 §13.1 requires a linked-blob quarantine to drive the evidence row to `lifecycle_state='quarantined'`, the workbook surface MUST show that exact state rather than a paraphrased non-available fallback,
 - requested or pending evidence with no blob remains valid and MUST continue to support later receipt, custody, and optional blob linkage.
 Profiles: base
-Verified by: AC-015, AC-016, AC-103, AC-128, AC-154, AC-155, AC-231
+Verified by: AC-015, AC-016, AC-103, AC-107, AC-108, AC-109, AC-110, AC-111, AC-128, AC-154, AC-155, AC-231, AC-313
 
 **REQ-03-122**
 Abandoned pending uploads and terminal upload-contract mismatches MUST fail closed. A blob slot left in `pending` without successful finalization, or failed because declared size or expected SHA-256 did not match observed bytes, MUST NOT increment row evidence counts, MUST NOT show as attached, and MUST remain eligible only for retry, timeout handling, or administrative cleanup. A content-type mismatch against advisory `content_type_hint` alone MUST update observed metadata and preview policy and MUST NOT by itself fail the slot. Filename mismatch alone MUST NOT be a terminal finalization failure in the base profile.
 Profiles: base
-Verified by: AC-015, AC-016, AC-103, AC-128, AC-154, AC-155, AC-231
+Verified by: AC-015, AC-016, AC-103, AC-107, AC-108, AC-109, AC-110, AC-111, AC-128, AC-154, AC-155, AC-231, AC-313
 
 **REQ-03-123**
 A pending blob slot that reaches `pending_expires_at` without successful finalization MUST transition to `upload_state='failed'` with `terminal_reason='pending_timeout'`. Timeout MUST NOT create a distinct blob lifecycle state.
 Profiles: base
-Verified by: AC-015, AC-016, AC-103, AC-128, AC-154, AC-155, AC-231
+Verified by: AC-015, AC-016, AC-103, AC-107, AC-108, AC-109, AC-110, AC-111, AC-128, AC-154, AC-155, AC-231, AC-313
 
 **REQ-03-124**
 The implementation MUST allow 3 failed explicit finalization attempts per pending blob slot for non-terminal explicit finalization failures. Size or expected-hash mismatch is terminal on first detection and MUST NOT consume or extend this retry budget. Only other unsuccessful explicit finalization attempts count toward the limit, and an idempotent replay after already-committed success MUST NOT consume retry budget. On the 4th such failed finalization attempt, the slot MUST transition to `upload_state='failed'` with `terminal_reason='finalize_retry_exhausted'`. Later retry then requires a fresh blob slot.
 Profiles: base
-Verified by: AC-015, AC-016, AC-103, AC-128, AC-154, AC-155, AC-231
+Verified by: AC-015, AC-016, AC-103, AC-107, AC-108, AC-109, AC-110, AC-111, AC-128, AC-154, AC-155, AC-231, AC-313
 
 **REQ-03-125**
 Pending-blob timeout handling and orphaned unattached-blob cleanup MUST run as background cleanup work at least every 15 minutes. Any blob slot still in `pending` after `pending_expires_at` MUST be marked `failed` by the next cleanup sweep. Orphaned object bytes for a failed unattached blob slot MUST be deleted within 1 hour of terminal failure. Failed unattached slot metadata MUST remain queryable for at least 7 days, after which it MAY be hard-deleted automatically or by administrative action.
 Profiles: base
-Verified by: AC-015, AC-016, AC-103, AC-128, AC-154, AC-155, AC-231
+Verified by: AC-015, AC-016, AC-103, AC-107, AC-108, AC-109, AC-110, AC-111, AC-128, AC-154, AC-155, AC-231, AC-313
 
 **REQ-03-126**
 If the system detects an inconsistent blob-versus-evidence state or a create-contract-versus-observed-byte mismatch state that has not yet been repaired, it MUST block preview and download and surface the row as inconsistent until explicit repair or re-finalization completes.
 Profiles: base
-Verified by: AC-015, AC-016, AC-103, AC-128, AC-154, AC-155, AC-231
+Verified by: AC-015, AC-016, AC-103, AC-107, AC-108, AC-109, AC-110, AC-111, AC-128, AC-154, AC-155, AC-231, AC-313
 
 ### 8.4 Evidence access
 
@@ -1463,22 +1538,37 @@ Verified by: AC-063, AC-067, AC-232
 
 ### 12.1 Allowed scope
 
-The system MAY auto-resolve a typed host or identity token to an existing alias only in **interactive mention-capture flows**, and only when `auto_resolution_confidence = 100`.
+**REQ-03-276**
+Auto-resolution eligibility is owned by this section. In the current profile, the system MAY auto-resolve a typed host or identity token only during interactive mention capture on Timeline relationship cells `timeline.host_refs` and `timeline.identity_refs`, and only during inline commit or interactive clipboard paste where the resulting auto-resolutions belong to the same visible `change_set`. No other workflow is eligible for auto-resolution in the current profile.
+Profiles: base
+Verified by: AC-205, AC-231, AC-388, AC-392, AC-393
 
 ### 12.2 Required confidence conditions
 
-`auto_resolution_confidence = 100` applies only when all of the following are true:
+`auto_resolution_confidence = 100` applies only when all of the requirements in this subsection are satisfied.
 
-- the edited cell determines the expected entity type and candidate matching is limited to that type within the same incident,
-- the token matches exactly one existing alias after deterministic normalization limited to case-folding plus whitespace collapse,
-- the raw token contains no explicit uncertainty marker such as `?`, `~`, `maybe`, or `prob`,
-- the target record is not soft-deleted, merged, retired, or disabled,
-- no competing candidate remains after normalization.
+**REQ-03-277**
+For auto-resolution comparison, the system MUST derive one exact comparison value named `auto_resolution_candidate_text`. This value is derived only and MUST NOT by itself require persisted source-model state in the current profile. The system MUST derive it from the JSON-decoded submitted `raw_text` by applying `mention_token_text_v1` normalization and then locale-independent Unicode case folding for comparison only. Exact alias equality for auto-resolution MUST compare `auto_resolution_candidate_text` to candidate alias text after applying that same `mention_token_text_v1` normalization and the same locale-independent Unicode case folding for comparison only. This comparison substrate MUST NOT alter authoritative alias storage or alias dedupe semantics.
+Profiles: base
+Verified by: AC-205, AC-231, AC-388, AC-389, AC-390, AC-391
+
+**REQ-03-278**
+The current-profile uncertainty suppressor grammar is closed. Auto-resolution MUST NOT occur when either of the following is true after deriving `auto_resolution_candidate_text` under REQ-03-277:
+
+- the submitted token contains ASCII `?` or ASCII `~` anywhere,
+- the submitted token contains one or more whole whitespace-delimited suppressor tokens from exactly this lexical set: `maybe`, `prob`, `probably`, `approx`, `approximately`.
+Profiles: base
+Verified by: AC-231, AC-389, AC-390
+
+**REQ-03-279**
+Auto-resolution MUST NOT depend on punctuation stripping, parenthetical stripping, duplicate-punctuation collapse, token deletion, transliteration, stemming, fuzzy matching, or any locale- or language-specific uncertainty lexicon in the current profile. If exact alias equality would require any such rewrite, the token is not eligible for auto-resolution.
+Profiles: base
+Verified by: AC-231, AC-391
 
 **REQ-03-205**
-Anything below 100 MAY drive ranking or suggestions. It MUST NOT mutate resolution state without explicit analyst selection.
+Anything below 100 MAY drive ranking or suggestions. The system MUST take the ordinary unresolved path whenever any required condition in this subsection is not satisfied, any suppressor match occurs, or exact alias equality would require a forbidden rewrite. In that case the system MUST create or preserve the corresponding `entity_mention` with `resolution_status='unresolved'`, MUST leave `resolved_record_id=null`, MUST create no active resolved `record_link`, MUST emit no `provenance='auto_match'`, and MUST show no auto-resolution disclosure. Suggestions or ranking MAY still be shown, but they MUST remain non-mutating.
 Profiles: base
-Verified by: AC-205, AC-231
+Verified by: AC-205, AC-231, AC-389, AC-390, AC-391
 
 ### 12.3 Required write effects
 
@@ -1500,10 +1590,7 @@ Verified by: AC-205, AC-231
 
 ### 12.4 Allowed and forbidden workflows
 
-Auto-resolution MAY occur only in:
-
-- inline commit of a Timeline Hosts or Identities cell,
-- interactive clipboard paste into those same relationship cells when the auto-resolutions belong to the same visible `change_set`.
+The current profile's allowed workflows are fixed by REQ-03-276.
 
 **REQ-03-208**
 Auto-resolution MUST NOT occur in:
@@ -1516,7 +1603,7 @@ Auto-resolution MUST NOT occur in:
 - asynchronous enrichment or cleanup,
 - any workflow that would create a new canonical host or identity or edit alias rows without explicit confirmation.
 Profiles: base, import
-Verified by: AC-205, AC-231, AC-232
+Verified by: AC-205, AC-231, AC-232, AC-392, AC-393
 
 ### 12.5 Disclosure and undo
 
@@ -1595,6 +1682,18 @@ Relationship cells MUST accept raw typing and MUST NOT require picker-first inte
 Profiles: base
 Verified by: AC-005, AC-043, AC-231
 
+**REQ-03-281**
+When a visible edit to a field bound to `direct_scalar_contract_id=timestamp_instant_v1` fails local validation or authoritative save, the client MUST keep the analyst's typed text as unsaved local state in the active editor, MUST NOT render that typed text as authoritative committed row state, MUST NOT silently coerce it to another persisted value, MUST NOT treat the empty string as an authoritative clear, and MUST require explicit correction, discard, or explicit JSON `null` clear when the bound field declares `clearable=true`. For a bound field that declares `clearable=false`, an attempted clear MUST fail closed and the visible local state MUST remain unsaved until corrected or discarded.
+Profiles: base
+Verified by: AC-231, AC-354
+
+This requirement defines workbook-surface editing consequences only. Core 01 §18A continues to own lexical, normalization, equality, and authoritative clear semantics for `timestamp_instant_v1`.
+
+**REQ-03-280**
+Current-profile manual link actions are scoreless. The workbook MUST NOT require analyst entry of numeric link confidence for ordinary manual linking, and any unsupported attempt to supply one is a validation error rather than a silent downgrade.
+Profiles: base
+Verified by: AC-394, AC-395, AC-396, AC-231
+
 ### 13.2 Required keyboard actions
 
 **REQ-03-220**
@@ -1631,12 +1730,12 @@ Verified by: AC-003, AC-040, AC-231
 ### 14.1 Sort and filter behavior
 
 **REQ-03-223**
-Column-header sort and inline filter chips MUST apply without leaving the sheet. A visible column header MAY initiate sorting only when the active `view_schema` declares that field sortable. Header sort MUST use `header_sort_field_key` when the field registry declares it and otherwise the visible field's own `field_key`. Visible collection or relationship columns not present in the active schema's `sort_fields` MUST NOT initiate a sort.
+Column-header sort and inline filter chips MUST apply without leaving the sheet. A visible column header MAY initiate sorting only when the active `view_schema` declares that field sortable. Header sort MUST use `header_sort_field_key` when the field registry declares it and otherwise the visible field's own `field_key`. Visible collection or relationship columns not present in the active schema's `sort_fields` MUST NOT initiate a sort. The client MUST treat discovery `fields[]`, `sort_fields`, `filter_fields`, `synthetic_filter_predicates[]`, and `grouping_fields` as the authoritative source of field identity and capability.
 Profiles: base
 Verified by: AC-013, AC-014, AC-044, AC-047, AC-124, AC-184, AC-185, AC-231, AC-363
 
 **REQ-03-224**
-Sorting and filtering MUST apply to underlying rows before grouping is computed. Clearing a user sort override MUST return the surface to schema default sort only, represented by omitted `sort` on `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query` and by canonical persisted `query_json.sort=[]` when the state is saved in a saved view.
+Sorting and filtering MUST apply to underlying rows before grouping is computed. Clearing a user sort override MUST return the surface to schema default sort only, represented by omitted `sort` on `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query` and by canonical persisted `query_json.sort=[]` when the state is saved in a saved view. Clearing grouping MUST persist omitted `query_json.group_by`; the client MUST NOT persist JSON `null` for that state. When the server returns canonicalized `meta.query`, the client MUST treat that canonical query contract as authoritative for rendered filter chips, restored saved-view state, and cursor continuation. The client MUST NOT preserve caller-entered order for set-like `values[]`, MUST NOT preserve case-only variants of `prefix.value` as authoritative state, and MUST NOT re-tokenize `full_text` independently of the server contract.
 Profiles: base
 Verified by: AC-013, AC-014, AC-044, AC-047, AC-124, AC-184, AC-185, AC-231, AC-360
 
@@ -1657,16 +1756,16 @@ Verified by: AC-024, AC-025, AC-026, AC-231, AC-364
 ### 14.3 Allowed grouping keys
 
 **REQ-03-226**
-A workbook surface whose active `view_schema` declares `grouping_fields` MUST support `Group: None` plus exactly one active grouping key in the base profile.
+A workbook surface whose active `view_schema` declares `grouping_fields` MUST support `Group: None` plus exactly one active grouping key in the base profile. The grouping control MUST offer exactly `Group: None` plus the active surface's declared `grouping_fields` in the canonical order returned by the active `view_schema`. It MUST NOT offer undeclared keys, visible-label aliases, or implementation-defined extras.
 Profiles: base
 Verified by: AC-024, AC-025, AC-026, AC-231, AC-364
 
 **REQ-03-227**
-For Timeline sheets, the active grouping key MUST be stored as a stable contract value in `query_json.group_by`, not as a visible label. `Group: None` is represented by omitted `group_by` on the public query route and omitted `query_json.group_by` in saved views. The UI MUST NOT send explicit `null` for that state.
+For any workbook surface whose active `view_schema` declares non-empty `grouping_fields`, the active grouping key MUST be stored as a stable contract value in `query_json.group_by`, not as a visible label. `Group: None` is represented by omitted `group_by` on the public query route and omitted `query_json.group_by` in saved views. The UI MUST NOT send explicit `null` for that state.
 Profiles: base
 Verified by: AC-024, AC-025, AC-026, AC-231, AC-360
 
-The allowed grouping keys are exactly:
+For Timeline sheets, the allowed grouping keys are exactly:
 
 - `timeline.occurred_day`,
 - `timeline.recorded_day`,
@@ -1674,19 +1773,19 @@ The allowed grouping keys are exactly:
 - `timeline.has_evidence`,
 - `timeline.has_unresolved_mentions`.
 
-The base-profile whitelist is frozen at these five keys for the current profile. No additional grouping key is permitted in the base profile.
+The base-profile Timeline whitelist is frozen at these five keys for the current profile. No additional Timeline grouping key is permitted in the base profile.
 
 **REQ-03-228**
 `timeline.event_type` MUST NOT be exposed as a base-profile grouping key.
 Profiles: base
 Verified by: AC-024, AC-025, AC-026, AC-231
 
-Grouping by Summary, Hosts, Identities, Tags, arbitrary custom columns, formulas, ad hoc expressions, or visible labels is out of scope for current conformance.
+Grouping by arbitrary custom columns, formulas, ad hoc expressions, or visible labels is out of scope for current conformance. For Timeline sheets, grouping by Summary, Hosts, Identities, or Tags is also out of scope.
 
 ### 14.4 Grouping value rules
 
 **REQ-03-229**
-Grouping keys MUST be scalar contract-backed values. Unless the active `view_schema` explicitly overrides group-order behavior, grouped workbook surfaces sort groups by the grouping key's normal sort comparator in ascending order with null buckets last. The current row sort applies unchanged within each group.
+Grouping keys MUST be scalar contract-backed values. Unless the active `view_schema` explicitly overrides group-order behavior, grouped workbook surfaces sort groups by the grouping key's normal sort comparator in ascending order with null buckets last. In the current profile, no grouped surface other than Timeline defines a group-order override. The current row sort applies unchanged within each group.
 Profiles: base
 Verified by: AC-024, AC-025, AC-026, AC-231, AC-364
 
@@ -1707,7 +1806,7 @@ Profiles: base
 Verified by: AC-025, AC-026, AC-231, AC-364
 
 **REQ-03-232**
-Group headers are derived UI rows only. They:
+Group headers are derived UI rows only. They MUST be derived solely from the active `group_by` key and the corresponding `group_values[group_by]` bucket for the grouped rows. They MUST NOT use manual labels, client heuristics that invent new buckets, subtotal rows, summary rows, spacer rows, or other synthetic rows. They:
 
 - MUST NOT have a `record_id`,
 - MUST NOT accept inline edits,
@@ -1782,8 +1881,8 @@ Verified by: AC-119, AC-120, AC-124, AC-125, AC-188, AC-189, AC-190, AC-191, AC-
 | Summary | `summary` | update `timeline_events.summary` only |
 | Details | `details` | update `timeline_events.details` only |
 | Source Text | `source_text` | update `timeline_events.source_text` only |
-| Hosts | host labels plus unresolved host tokens | if a unique exact normalized alias match qualifies for auto-resolution, insert resolved `entity_mentions` plus `record_links` with `provenance='auto_match'` and `confidence=100`; otherwise insert unresolved `entity_mentions` |
-| Identities | identity labels plus unresolved identity tokens | if a unique exact normalized alias match qualifies for auto-resolution, insert resolved `entity_mentions` plus `record_links` with `provenance='auto_match'` and `confidence=100`; otherwise insert unresolved `entity_mentions` |
+| Hosts | host labels plus unresolved host tokens | if the submitted token qualifies for auto-resolution under §12, insert resolved `entity_mentions` plus `record_links` with `provenance='auto_match'` and `confidence=100`; otherwise insert unresolved `entity_mentions` |
+| Identities | identity labels plus unresolved identity tokens | if the submitted token qualifies for auto-resolution under §12, insert resolved `entity_mentions` plus `record_links` with `provenance='auto_match'` and `confidence=100`; otherwise insert unresolved `entity_mentions` |
 | Evidence | `evidence_count` | create `object_blob`, `evidence_record`, and `record_link` |
 | Tags | `tag_names` | upsert tags and record-tag bindings |
 
@@ -1848,10 +1947,11 @@ The inspector MUST:
 - expose details, relationships, evidence, and history views,
 - keep the main grid visible while open,
 - support mention resolution, dismissal, and restore, indicator observation linking, entity and indicator creation, party create or link or clear flows for requester, collector, source, audience, or attendee fields, indicator lifecycle inspection or editing, evidence inspection, and rollback,
+- for view schemas that declare hidden writable fields, operate against the same canonical full-row state already delivered by query or row-refresh success and MUST NOT depend on an unstated generic record-read fetch to expose or clear those fields,
 - preserve the distinction between raw mention lineage and current canonical links,
 - preserve the distinction between raw indicator observation lineage and current canonical indicator links and lifecycle windows.
 Profiles: base
-Verified by: AC-006, AC-020, AC-023, AC-072, AC-073, AC-074, AC-075, AC-186, AC-187, AC-209, AC-210, AC-231, AC-278, AC-279
+Verified by: AC-006, AC-020, AC-023, AC-072, AC-073, AC-074, AC-075, AC-186, AC-187, AC-209, AC-210, AC-231, AC-278, AC-279, AC-366
 
 **REQ-03-248**
 The inspector is the enrichment surface. It MUST NOT be required for the common path of timeline row creation and editing.
@@ -1859,7 +1959,7 @@ Profiles: base
 Verified by: AC-006, AC-020, AC-023, AC-072, AC-073, AC-074, AC-075, AC-186, AC-187, AC-209, AC-210, AC-231
 
 **REQ-03-249**
-For authorized users, the inspector MUST support explicit host and identity merge initiation. Merge MUST NOT be a bulk grid action in the base profile. The merge UI MUST require explicit survivor and loser selection and a final destructive-action confirmation that identifies both `record_id` values before submission.
+For authorized users, the inspector MUST support explicit host and identity merge initiation. Merge MUST NOT be a bulk grid action in the base profile. The merge UI MUST require explicit survivor and loser selection and a final destructive-action confirmation that identifies both `record_id` values before submission. Before submission, that confirmation MUST show a deterministic plan derived from the currently loaded survivor and loser state, including exact-match identifiers that will be promoted into empty survivor canonical fields, exact-match identifiers that will be preserved on the survivor as additional active `exact_match_reuse` values, suggestion-only aliases that will be copied, and a statement that `provenance_only` values remain preserved on the historical loser and do not affect future reuse. When the selected host or identity has active secondary `exact_match_reuse` values, the inspector MUST show them in a read-only reusable-identifier section that is visually distinct from ordinary aliases. If merge submission fails with `error.code='merge_precondition_failed'` and `error.details.reason_code='carry_forward_identifier_collision'`, the same inspector flow MUST display the returned `identifier_class`, `normalized_value`, and `blocking_record_id`.
 Profiles: base
 Verified by: AC-006, AC-020, AC-023, AC-072, AC-073, AC-074, AC-075, AC-186, AC-187, AC-209, AC-210, AC-231
 
@@ -1898,7 +1998,7 @@ Verified by: AC-018, AC-080, AC-081, AC-082, AC-083, AC-084, AC-121, AC-231
 ### 16.4 Analyst-work coordination surfaces
 
 **REQ-03-255**
-Task requests and decisions MUST remain workbook surfaces rather than separate application modules. The implementation MAY surface them as contract-backed system views or as implementation-owned `scope='system'` saved views bound to the standardized `view_schema_id` for that surface.
+Task requests and decisions MUST remain workbook surfaces rather than separate application modules. In the base profile, the required `Task Requests` and `Decisions` surfaces MUST be the contract-backed system views identified canonically by `cartulary.view.task_requests.v1` and `cartulary.view.decisions.v1`. An implementation MAY additionally expose one or more implementation-owned `scope='system'` saved views over either schema as additive convenience presets. Any such saved view is a distinct saved-view object, MUST NOT be required for conformance, MUST NOT replace the canonical public identity of the required base surface, and MUST NOT be the only discoverable, openable, or startup-targetable surface for that schema.
 Profiles: base
 Verified by: AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-137, AC-138, AC-139, AC-140, AC-141, AC-142, AC-143, AC-144, AC-145, AC-231
 
@@ -1918,12 +2018,12 @@ Profiles: base
 Verified by: AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-137, AC-138, AC-139, AC-140, AC-141, AC-142, AC-143, AC-144, AC-145, AC-231
 
 **REQ-03-258**
-Communications logs, handoffs, status reviews, and lesson artifacts SHOULD be created at milestone, shift-change, or reporting boundaries rather than on every row edit. The workbook surface MAY assist creation from the inspector or a coordination view, but it MUST NOT interrupt ordinary grid editing.
+Communications logs, handoffs, status reviews, and lesson artifacts MUST remain explicit workbook-native actions. The implementation MAY assist creation from the inspector or a coordination view, but it MUST NOT require creation of those artifacts during ordinary row capture or ordinary grid editing, and it MUST NOT interrupt ordinary grid editing to solicit them.
 Profiles: base
 Verified by: AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-137, AC-138, AC-139, AC-140, AC-141, AC-142, AC-143, AC-144, AC-145, AC-231
 
 **REQ-03-259**
-Saved or system views over task requests, decisions, and coordination artifacts MUST support owner queues, blocked-work views, due or next-checkpoint views, workstream views, requester, source-party, or audience views where applicable, external-ticket lookup, and no-owner gap detection where applicable. When the implementation exposes findings, investigative queries, or forensic keywords as workbook surfaces, those surfaces MUST use the same workbook-native queue, filter, and grouping model rather than a separate application module.
+Saved views over task requests, decisions, and coordination artifacts, including implementation-owned `scope='system'` saved views, MUST support owner queues, blocked-work views, due or next-checkpoint views, workstream views, requester, source-party, or audience views where applicable, external-ticket lookup, and no-owner gap detection where applicable. When the implementation exposes findings, investigative queries, or forensic keywords as workbook surfaces, those surfaces MUST use the same workbook-native queue, filter, and grouping model rather than a separate application module. Findings and hypotheses share `cartulary.view.findings.v1`; the current profile defines no separate hypothesis module or `cartulary.view.hypotheses.v1` workbook surface.
 Profiles: base
 Verified by: AC-085, AC-086, AC-087, AC-088, AC-089, AC-090, AC-137, AC-138, AC-139, AC-140, AC-141, AC-142, AC-143, AC-144, AC-145, AC-231, AC-279, AC-281, AC-282, AC-283, AC-284, AC-285, AC-286, AC-287
 

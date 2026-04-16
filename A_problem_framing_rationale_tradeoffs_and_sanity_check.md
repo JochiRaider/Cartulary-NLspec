@@ -59,7 +59,7 @@ Low-friction capture is the make-or-break requirement because IR work is lossy u
    Spreadsheet-style sheets should be projections over disciplined source tables, not the source of truth themselves.
 
 1. **Few built-in sheets, many saved/system views.**
-   The workbook should expose a small set of core tabs. Indicators and assessments can remain contract-backed system views even when backed by first-class records; pack-dependent framework overlays are not standardized workbook surfaces in the current profile, and any future ATT&CK, D3FEND, VERIS, or similar workbook surface belongs in a dedicated extension profile with its own explicit contract.
+   The workbook should expose a small set of core tabs. Indicators and assessments can remain contract-backed system views even when backed by first-class records; required base-profile workbook surfaces, including Task Requests and Decisions, are canonically the standardized `view_schema_id` surfaces, and implementation-owned `scope='system'` saved views remain additive presets only; pack-dependent framework overlays are not standardized workbook surfaces in the current profile, and any future ATT&CK, D3FEND, VERIS, or similar workbook surface belongs in a dedicated extension profile with its own explicit contract.
 
 1. **Reference packs and enrichment are optional overlays.**
    Framework mappings, type registries, and other enrichment datasets must be versioned separately from incident data and cannot sit on the hot capture path.
@@ -86,6 +86,10 @@ Single-user notebooks can be fast and flexible. They also fail the collaboration
 ### Recommended approach: spreadsheet-like grid on top of relational source tables
 
 This is the hardest option to implement well, but it is the only one that attacks the actual problem. It preserves near-spreadsheet entry friction while adding the relational and audit capabilities that justify migration.
+
+### Why the current profile chooses snapshot-stable pagination
+
+Snapshot-stable pagination is the least surprising current-profile choice for a collaborative workbook surface. It preserves stable visible object identity across later pages, prevents silent duplicate or skip behavior when concurrent edits change live order, and avoids turning ordinary analyst activity into forced cursor invalidations. It also keeps live re-evaluation and invalidate-on-change pagination available later as explicit opt-in contracts rather than silent implementation variance behind the same `cursor_token` surface.
 
 ### First-deployment-admin bootstrap: why the current profile chooses a deployment-local manifest
 

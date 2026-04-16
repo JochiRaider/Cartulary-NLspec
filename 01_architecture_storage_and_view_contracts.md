@@ -5,7 +5,7 @@
 **REQ-01-001**
 Cartulary MUST use a **modular monolith** architecture for the base profile.
 Profiles: base
-Verified by: AC-231
+Verified by: AC-231, AC-404
 
 **REQ-01-002**
 The base deployment topology MUST consist of:
@@ -14,12 +14,12 @@ The base deployment topology MUST consist of:
 - one Postgres service as the authoritative structured data store,
 - one S3-compatible object storage service as the authoritative binary evidence store.
 Profiles: base
-Verified by: AC-231
+Verified by: AC-231, AC-404, AC-405
 
 **REQ-01-003**
 The application deployable MUST remain a single deployable unit even when deployed behind a reverse proxy or onto managed infrastructure.
 Profiles: base
-Verified by: AC-231
+Verified by: AC-231, AC-404
 
 Microservice decomposition is out of scope for current conformance.
 
@@ -121,7 +121,7 @@ The browser client MUST provide:
 - a detail and relationship inspector,
 - evidence preview behavior,
 - save/conflict state presentation,
-- a local pending-patch queue for transient network interruptions,
+- a local pending queue for transient network interruptions,
 - real-time presence and live row updates.
 Profiles: base
 Verified by: AC-001, AC-003, AC-004, AC-005, AC-043, AC-044, AC-045, AC-047, AC-231
@@ -196,6 +196,43 @@ The base route family MUST include:
 Profiles: base
 Verified by: AC-123, AC-130, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-231, AC-334, AC-335, AC-336, AC-337, AC-338, AC-339
 
+Contract tables. The tables in §3.3.2 through §3.3.2.2 are the compact owner-local contract for request shape, omission and default behavior, replay, success transport, and family-specific errors. When a table cell and surrounding prose describe the same boundary fact, the table is the quick-reference statement and the surrounding prose supplies algorithmic, lifecycle, and example detail that is not reduced to cells.
+
+**Table 3.3.2-A. Auth route index**
+
+| Route | Auth context | Request contract summary | Omission and default summary | Replay and idempotency | Success response or effect | Primary error codes |
+| --- | --- | --- | --- | --- | --- | --- |
+| `POST /api/v1/auth/login` | Anonymous local-account login | `username`, `password`, optional `second_factor` | Omitted `second_factor` means primary-credentials-only attempt; `client_txn_id` and provider-protocol fields are forbidden | Intentionally non-idempotent; transport retry MAY mint a fresh session | Establishes the server-managed session and returns the same session resource exposed by `GET /api/v1/auth/session` | `invalid_auth_request`, `mfa_required`, `mfa_setup_required`, `invalid_credentials`, `invalid_second_factor` |
+| `POST /api/v1/auth/logout` | Current authenticated session | No route-specific request members are declared in the current profile | No create-time defaults apply | Revokes only the current session; later use of that session fails through ordinary auth | Revokes the current session immediately and emits `session_revoked` to any accepted WebSocket on that session | Ordinary auth failures |
+| `GET /api/v1/auth/session` | Current authenticated session | Singleton read; no body members | Pagination members are rejected with `invalid_pagination_request` and `reason_code=pagination_not_supported` | Read route | Returns one session resource | Ordinary auth failures; `invalid_pagination_request` |
+| `GET /api/v1/auth/credential-state` | Current authenticated session | Singleton read; no body members | Pagination members are rejected; `bootstrap_token` is not allowed on this route | Read route | Returns one safe credential-state resource | Ordinary auth failures; `credential_bootstrap_rejected`; `invalid_pagination_request` |
+| `POST /api/v1/auth/password/change` | Current authenticated session for the addressed current user | Required `client_txn_id`, `current_password`, `new_password`; optional `second_factor` | `second_factor` is optional only when no active TOTP credential exists; omitted or empty `reason` is not part of this route | Route-scoped idempotency within `(actor_user_id, client_txn_id)` | Updates password state, stamps `password.changed_at`, revokes all active sessions for the user, and returns safe success data including `sessions_revoked=true` | `invalid_current_password`, `invalid_second_factor`, `client_txn_conflict`, ordinary malformed-request failures |
+| `POST /api/v1/auth/mfa/totp/begin` | Exactly one of current authenticated session or valid `bootstrap_token` | Required `client_txn_id`; replacement under current-session auth also requires `current_password` and `second_factor` when one active factor already exists | No factor-less replacement path exists when one active TOTP credential is present | Idempotent within the same auth scope and `client_txn_id`; replay returns the original pending enrollment and seed material while pending | Returns `enrollment_id`, `expires_at`, and `totp_setup` with the seed material and fixed TOTP parameters | `credential_bootstrap_rejected`, `invalid_second_factor`, `client_txn_conflict`, ordinary malformed-request failures |
+| `POST /api/v1/auth/mfa/totp/complete` | Exactly one of current authenticated session or valid `bootstrap_token`, matching the begin route auth mode | Required `client_txn_id`, `enrollment_id`, and `code` | First-time bootstrap completion never auto-issues a session | Route-scoped idempotency uses the same auth scope discipline as begin; a stale or different replay fails rather than creating a second activation | Activates the pending TOTP secret, clears pending setup, consumes any bootstrap token used for the flow, and revokes all sessions only when replacing an existing factor | `totp_setup_not_pending`, `credential_bootstrap_rejected`, `client_txn_conflict`, ordinary malformed-request failures |
+
+**Table 3.3.2-B. Login request members**
+
+| Member | Type or contract | Requiredness | Allowed values | Omission and explicit-`null` behavior | Normalization and validation | Replay participation |
+| --- | --- | --- | --- | --- | --- | --- |
+| `username` | `string_contract_id=email_address_v1` | Required | Non-null local-account email address | Omission is invalid; explicit `null` is invalid | Normalized with the same deterministic substrate used for local-user lookup and membership-by-email resolution | Login is intentionally non-idempotent |
+| `password` | JSON string | Required | Non-null, non-empty string | Omission is invalid; explicit `null` is invalid | Compared exactly after JSON decoding; the server MUST NOT trim, case-fold, or Unicode-normalize it | Login is intentionally non-idempotent |
+| `second_factor` | Object | Optional | Present only when attempting MFA satisfaction on this route | Omission means primary-credentials-only attempt; explicit `null` is invalid | Unknown members are invalid | Login is intentionally non-idempotent |
+| `second_factor.kind` | String | Required when `second_factor` is present | Exactly `totp` in the base profile | Omission is invalid when `second_factor` is present; explicit `null` is invalid | Closed vocabulary; any other token fails with `invalid_auth_request` | Login is intentionally non-idempotent |
+| `second_factor.assertion` | Object | Required when `second_factor` is present | Exact TOTP assertion object | Omission is invalid when `second_factor` is present; explicit `null` is invalid | Unknown members are invalid | Login is intentionally non-idempotent |
+| `second_factor.assertion.code` | String | Required when `kind='totp'` | Exactly six ASCII decimal digits | Omission is invalid; explicit `null` is invalid | No spaces or separators are allowed | Login is intentionally non-idempotent |
+
+**Table 3.3.2-C. Login outcome matrix**
+
+| Outcome | Transport | Required condition | Required response detail |
+| --- | --- | --- | --- |
+| Success | Ordinary successful auth response | Primary credentials valid; if MFA is required, a valid `second_factor` is present | Server-managed session created; same session resource as `GET /api/v1/auth/session` |
+| `invalid_auth_request` | `400` | Request shape, types, closed vocabularies, or forbidden fields are invalid | `error.details.field` is present when one member is attributable |
+| `mfa_required` | `401` | Primary credentials are valid, one active TOTP credential exists, and `second_factor` is omitted | `error.details.required_second_factor_kinds=["totp"]` |
+| `mfa_setup_required` | `401` | Primary credentials are valid and no active TOTP credential is enrolled | No session is created; `bootstrap_token` and `bootstrap_expires_at` are returned; `required_setup_kinds=["totp"]` |
+| `invalid_credentials` | `401` | The server is unwilling to acknowledge valid primary credentials | No session and no pre-authenticated state |
+| `invalid_second_factor` | `401` | Primary credentials are valid and a structurally valid TOTP assertion is wrong or expired | No session and no partial session state |
+
+
 **REQ-01-025**
 `POST /api/v1/auth/login` MUST be the base-profile local-account login route. The request body MUST be a JSON object and MUST accept:
 
@@ -236,6 +273,24 @@ Example request body:
 The session routes MUST expose the lifecycle boundaries defined by Core 04 §1.1.1 without requiring client-side token parsing.
 Profiles: base
 Verified by: AC-123, AC-130, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-231
+
+**Table 3.3.2.1-A. Session resource members**
+
+| Field | Presence | Nullability and ordering | Notes |
+| --- | --- | --- | --- |
+| `user_id` | Required | Non-null | Stable internal user identity |
+| `display_name` | Required | Non-null | Safe user-facing display name |
+| `provider_type` | Required | Non-null | Closed vocabulary `local`, `oidc`, `saml` |
+| `mfa_state` | Required | Non-null | Closed vocabulary `not_required`, `satisfied` |
+| `is_deployment_admin` | Required | Non-null | Deployment-scoped capability summary only |
+| `authenticated_at` | Required | Non-null | Session-authentication timestamp |
+| `idle_expires_at` | Required | Non-null | Inspection-only route; reading it does not extend it |
+| `absolute_expires_at` | Required | Non-null | Absolute session boundary |
+| `session_expires_at` | Required | Non-null | Earlier of `idle_expires_at` and `absolute_expires_at` |
+| `memberships[]` | Required | May be empty; ordered by `incident_id asc` | Informational bootstrap state only |
+| `memberships[].incident_id` | Required when `memberships[]` item exists | Non-null | Stable incident identity |
+| `memberships[].role` | Required when `memberships[]` item exists | Non-null | Closed vocabulary `viewer`, `editor`, `reviewer`, `admin` |
+
 
 **REQ-01-027**
 `GET /api/v1/auth/session` MUST return the common success envelope with `data`
@@ -305,6 +360,66 @@ Verified by: AC-123, AC-130, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-
 
 ##### 3.3.2.2 Credential lifecycle and TOTP bootstrap routes
 
+Contract tables. The tables in §3.3.2.2 compact the credential-state, password-change, and TOTP bootstrap surfaces without restating Core 04 session-lifecycle or secret-storage rules.
+
+**Table 3.3.2.2-A. Bootstrap-token contract**
+
+| Property | Requirement |
+| --- | --- |
+| Token family | `bootstrap_token` is a credential-setup token, not a session |
+| Accepted routes | Only `POST /api/v1/auth/mfa/totp/begin` and `POST /api/v1/auth/mfa/totp/complete` |
+| Rejected routes | `GET /api/v1/auth/session`, `GET /api/v1/auth/credential-state`, ordinary incident or record routes, and `/ws/v1/*` |
+| Lifetime | Expires 10 minutes after issuance unless a later profile says otherwise |
+| Single-use and supersession | Consumed by successful `totp/complete`; later bootstrap issuance for the same user, administrator password reset, administrator TOTP reset, or expiry invalidates earlier tokens |
+| Rejection path | Invalid, expired, consumed, superseded, wrong-subject, or wrong-route use fails with `409`, `error.code = credential_bootstrap_rejected`, and a family `reason_code` from §3.3.6.2 |
+
+**Table 3.3.2.2-B. Credential-state resource**
+
+| Field | Presence | Nullability and defaults | Notes |
+| --- | --- | --- | --- |
+| `user_id` | Required | Non-null | Current authenticated user only |
+| `auth_kind` | Required | Non-null | `local` for the base profile |
+| `mfa_required` | Required | Non-null | Safe credential-policy summary |
+| `recovery_model` | Required | Non-null | `admin_assisted` for the base profile |
+| `password.changed_at` | Required | May be `null` | Safe timestamp only |
+| `totp.state` | Required | Non-null | Closed vocabulary `not_enrolled`, `pending`, `active` |
+| `totp.enrolled_at` | Required | May be `null` | Present even when null |
+| `totp.pending_expires_at` | Required | May be `null` | Present even when null |
+| Secret-bearing fields | Forbidden | N/A | `secret_base32`, `otpauth_uri`, password hashes, raw bootstrap tokens, TOTP secret material, and provider assertions MUST NOT appear |
+
+**Table 3.3.2.2-C. Password-change route contract**
+
+| Member or rule | Requirement |
+| --- | --- |
+| Required members | `client_txn_id`, `current_password`, `new_password` |
+| Optional members | `second_factor` |
+| Default and omission rules | `second_factor` is optional only when the current account has no active TOTP credential; omitted or empty `reason` is not part of this route |
+| Validation | `new_password` binds to `local_password_provision_v1`; `current_password` uses the same exact verification substrate as local login |
+| Idempotency | Route-scoped idempotency key is `(actor_user_id, client_txn_id)` |
+| Success effect | Updates `password_hash`, stamps `password.changed_at`, revokes all active sessions for the user including the current one, and returns safe success data with `sessions_revoked=true` |
+| Primary failures | `invalid_current_password`, `invalid_second_factor`, `client_txn_conflict`, plus ordinary malformed-request failures |
+
+**Table 3.3.2.2-D. TOTP begin and complete contract**
+
+| Route | Required members | Additional required conditions | Replay and idempotency | Success summary | Primary failures |
+| --- | --- | --- | --- | --- | --- |
+| `POST /api/v1/auth/mfa/totp/begin` | `client_txn_id` | Exactly one auth mode: current session or valid `bootstrap_token`; current-session replacement requires `current_password` and `second_factor` when one active TOTP credential exists | Replay within the same auth scope and `client_txn_id` returns the original pending enrollment and seed while pending | Returns `enrollment_id`, `expires_at`, and `totp_setup` with `secret_base32`, `otpauth_uri`, `algorithm='SHA1'`, `digits=6`, and `period_seconds=30` | `credential_bootstrap_rejected`, `invalid_second_factor`, `client_txn_conflict`, ordinary malformed-request failures |
+| `POST /api/v1/auth/mfa/totp/complete` | `client_txn_id`, `enrollment_id`, `code` | Exactly one auth mode and it MUST match the begin route auth mode; `code` is exactly six ASCII decimal digits | Same auth-scope discipline as begin; stale or different replay does not create a second activation | Activates the pending TOTP secret, clears pending setup, consumes any bootstrap token used for the flow, and revokes all active sessions only when replacing an existing factor; first-time bootstrap completion never auto-issues a session | `totp_setup_not_pending`, `credential_bootstrap_rejected`, `client_txn_conflict`, ordinary malformed-request failures |
+
+**Table 3.3.2.2-E. Auth-family error and reason summary**
+
+| Condition | Transport | `error.code` | Required details |
+| --- | --- | --- | --- |
+| Malformed login request or forbidden login field | `400` | `invalid_auth_request` | `error.details.field` when one member is attributable |
+| Primary credentials valid and active factor exists but no `second_factor` supplied | `401` | `mfa_required` | `required_second_factor_kinds=["totp"]` |
+| Primary credentials valid and no active factor exists | `401` | `mfa_setup_required` | `required_setup_kinds=["totp"]`, `bootstrap_token`, and `bootstrap_expires_at` |
+| Primary credentials not accepted | `401` | `invalid_credentials` | No session and no pre-authenticated state |
+| Structurally valid TOTP assertion is wrong or expired | `401` | `invalid_second_factor` | No session and no partial session state |
+| Wrong-route, expired, consumed, superseded, or wrong-subject bootstrap token use | `409` | `credential_bootstrap_rejected` | Family `reason_code` from §3.3.6.2 |
+| Password-change current password mismatch | `409` | `invalid_current_password` | Route-local password-change failure |
+| TOTP completion targets no pending enrollment or one that is expired or consumed | `409` | `totp_setup_not_pending` | Family `reason_code` from §3.3.6.2 |
+
+
 **REQ-01-522**
 The base profile MUST expose a bounded public credential-lifecycle contract for local accounts through the routes listed in REQ-01-024. `bootstrap_token` is a credential-setup token, not a session. It MUST be opaque, single-subject, short-lived, and accepted only by `POST /api/v1/auth/mfa/totp/begin` and `POST /api/v1/auth/mfa/totp/complete`. It MUST NOT be accepted by `GET /api/v1/auth/session`, `GET /api/v1/auth/credential-state`, ordinary incident or record routes, or `/ws/v1/*`. Unless a later profile says otherwise, `bootstrap_token` expires 10 minutes after issuance, is single-use, is consumed by successful `totp/complete`, and becomes invalid on later bootstrap issuance for the same user, administrator password reset, administrator TOTP reset, or expiry. A bootstrap token that is expired, consumed, superseded, bound to a different subject, or used on a route outside its allowed family MUST fail with `409` and `error.code = credential_bootstrap_rejected`; `error.details.reason_code` MUST use the registry in §3.3.6.2.
 Profiles: base
@@ -340,31 +455,198 @@ The base-profile route set MUST include stable route families for:
 - deployment-local user account inspection and administration: `GET /api/v1/users`, `POST /api/v1/users`, `GET /api/v1/users/{user_id}`, `PATCH /api/v1/users/{user_id}`, `POST /api/v1/users/{user_id}/password/reset`, `POST /api/v1/users/{user_id}/mfa/totp/reset`, `POST /api/v1/users/{user_id}/sessions/revoke-all`,
 - incident membership inspection and administration: `GET /api/v1/incidents/{incident_id}/memberships`, `POST /api/v1/incidents/{incident_id}/memberships`, `PATCH /api/v1/incidents/{incident_id}/memberships/{user_id}`, `DELETE /api/v1/incidents/{incident_id}/memberships/{user_id}`,
 - view-schema discovery: `GET /api/v1/view-schemas`, `GET /api/v1/view-schemas/{view_schema_id}`,
+- extension-claim discovery: `GET /api/v1/extensions`,
 - saved-view discovery and persistence: `GET /api/v1/incidents/{incident_id}/saved-views`, `POST /api/v1/incidents/{incident_id}/saved-views`, `PATCH /api/v1/incidents/{incident_id}/saved-views/{saved_view_id}`, `DELETE /api/v1/incidents/{incident_id}/saved-views/{saved_view_id}`,
 - workbook-preference discovery and persistence: `GET /api/v1/incidents/{incident_id}/workbook-preferences/me`, `PUT /api/v1/incidents/{incident_id}/workbook-preferences/me`, `GET /api/v1/incidents/{incident_id}/workbook-preferences/default`, `PUT /api/v1/incidents/{incident_id}/workbook-preferences/default`,
 - workbook query and row creation: `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`, `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows`,
 - record mutation, explicit Timeline capture-state actions, soft-delete, restore, history, rollback, and same-field conflict resolution: `PATCH /api/v1/records/{record_id}`, `POST /api/v1/records/{record_id}/mark-reviewed`, `POST /api/v1/records/{record_id}/supersede`, `DELETE /api/v1/records/{record_id}`, `POST /api/v1/records/{record_id}/restore`, `GET /api/v1/records/{record_id}/history`, `POST /api/v1/records/{record_id}/rollback`, `POST /api/v1/records/{record_id}/conflicts/{conflict_token}/resolve`,
 - entity merge initiation: `POST /api/v1/records/{survivor_record_id}/merge`,
-- entity-mention explicit action route and equivalent surface-specific single-mention actions: `POST /api/v1/entity-mentions/{entity_mention_id}/resolve`,
+- entity-mention explicit action route: `POST /api/v1/entity-mentions/{entity_mention_id}/resolve`,
 - blob-slot creation and evidence access: `POST /api/v1/object-blobs`, `POST /api/v1/evidence-records/{record_id}/attach-blob`, `POST /api/v1/evidence-records/{record_id}/preview-handle`, `POST /api/v1/evidence-records/{record_id}/download-handle`, `GET /api/v1/evidence-handles/{handle_token}`,
 - background-job status and cancellation: `GET /api/v1/jobs/{job_id}`, `POST /api/v1/jobs/{job_id}/cancel`.
 The base profile defines no public WebAuthn or passkey routes under `/api/v1/auth/*` or `/api/v1/users/{user_id}/mfa/*`. Registration, assertion, credential enumeration, credential deletion, and reset semantics for WebAuthn or passkeys are reserved for future specification work and MUST NOT be claimed by base-profile implementations.
 Profiles: base
-Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-186, AC-187, AC-231, AC-251, AC-252, AC-253, AC-254, AC-255, AC-340, AC-341, AC-342, AC-334, AC-335, AC-336, AC-337, AC-338, AC-339
+Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-186, AC-187, AC-231, AC-251, AC-252, AC-253, AC-254, AC-255, AC-340, AC-341, AC-342, AC-334, AC-335, AC-336, AC-337, AC-338, AC-339, AC-370, AC-371
 
 **REQ-01-033**
 Implementations that claim an extension profile MUST add that profile's route family under the same versioned root rather than overloading base workbook routes. This includes, at minimum, `/api/v1/import-sessions/*`, `/api/v1/reference-packs/*`, `/api/v1/snapshots/*` and `/api/v1/releases/*`, `/api/v1/incident-bundles/*`, `/api/v1/auth/providers/*`, `/api/v1/auth/oidc/*`, `/api/v1/auth/saml/*`, and `/api/v1/users/{user_id}/auth-bindings*` for the corresponding claimed extension profiles.
 Profiles: base, import, snapshot_reporting, incident_portability, reference_pack, enterprise_authentication
-Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-186, AC-187, AC-231, AC-232, AC-233, AC-234, AC-235, AC-236
+Verified by: AC-175, AC-176, AC-177, AC-178, AC-179, AC-180, AC-186, AC-187, AC-231, AC-232, AC-233, AC-234, AC-235, AC-236, AC-370, AC-371
 
 Core 01 §17 and §20 are the primary owners for the public route inventory, request and response defaults, omitted-versus-`null` behavior, route-scoped idempotency, family-specific error registries, and durable terminal-state representation for those extension families.
+
+**REQ-01-570**
+The current profile defines no public `/api/v1/backups*`, `/api/v1/restores*`, or `/api/v1/restore-verifications*` route family and no corresponding `/ws/v1/*` family. Backup creation, restore execution, and restore verification remain deployment-local operator-facing concerns and MUST NOT be exposed as workbook-surface routes in the current profile.
+Profiles: base
+Verified by: AC-402
+
+##### 3.3.3.1 Runtime extension discovery and reserved-unclaimed extension semantics
+
+**REQ-01-542**
+`GET /api/v1/extensions` MUST be a base-profile deployment-scoped discovery route. It MUST return the common success envelope with `data.extensions[]`. `extensions[]` MUST be ordered by `profile_id asc`. Each `extensions[]` item MUST contain exactly `profile_id`, `claimed`, and `route_families[]`. This route MUST expose only deployment extension-claim state and reserved family roots. It MUST NOT expose provider secrets, provider metadata or claim maps, reference-pack version state, snapshot or release state, incident-bundle state, or other live extension-family payload.
+Profiles: base
+Verified by: AC-370
+
+**REQ-01-543**
+`data.extensions[]` MUST enumerate all current-profile extension identifiers, including unclaimed ones. The current-profile `profile_id` values are exactly:
+
+- `enterprise_authentication`
+- `import`
+- `incident_portability`
+- `reference_pack`
+- `snapshot_reporting`
+
+Clients MUST ignore unknown additive members on each item and MUST ignore unknown future `profile_id` values.
+Profiles: base
+Verified by: AC-370
+
+**REQ-01-544**
+`route_families[]` MUST list reserved family roots rather than full per-route inventories. `route_families[]` MUST be ordered by route-family string asc. The current-profile mapping is exactly:
+
+- `enterprise_authentication`
+  - `/api/v1/auth/oidc`
+  - `/api/v1/auth/providers`
+  - `/api/v1/auth/saml`
+  - `/api/v1/users/{user_id}/auth-bindings`
+- `import`
+  - `/api/v1/import-sessions`
+- `incident_portability`
+  - `/api/v1/incident-bundles`
+- `reference_pack`
+  - `/api/v1/reference-packs`
+- `snapshot_reporting`
+  - `/api/v1/releases`
+  - `/api/v1/snapshots`
+Profiles: base
+Verified by: AC-370, AC-371
+
+**REQ-01-545**
+`GET /api/v1/extensions` is a singleton discovery route. It MUST reject `limit`, `cursor_token`, and pagination aliases with `400`, `error.code = invalid_pagination_request`, and `error.details.reason_code = pagination_not_supported`.
+Profiles: base
+Verified by: AC-370
+
+**REQ-01-546**
+For `GET /api/v1/extensions`, `claimed=true` means the deployment currently claims that extension profile for conformance. `claimed` MUST NOT imply that the corresponding route family currently contains resources or that the current caller is authorized for every route in that family. A claimed extension family with zero current resources or a claimed family route denied by ordinary authorization or family-specific policy MUST use the ordinary claimed-family behavior rather than `extension_profile_not_claimed`.
+Profiles: base
+Verified by: AC-370, AC-371
+
+**REQ-01-547**
+If a request path matches one of the reserved `route_families[]` for a profile whose `claimed=false`, the server MUST return the common error envelope with `404`, `error.code = extension_profile_not_claimed`, `error.retryable = false`, and `error.details` containing at minimum `profile_id` and `route_family`. `error.details.route_family` MUST be the matched family root string from REQ-01-544 rather than the caller's requested path. A request matches a reserved family when its public path is the declared family root itself or a descendant route under that family-root template.
+Profiles: base
+Verified by: AC-371
+
+**REQ-01-548**
+Reserved-extension dispatch MUST use this precedence:
+
+1. a base-profile route match dispatches first,
+2. a claimed extension-family route match dispatches second and uses ordinary claimed-family behavior,
+3. a reserved but unclaimed extension-family match returns `404 error.code = extension_profile_not_claimed` before family-specific authorization or policy evaluation,
+4. ordinary unknown-route handling applies only to paths outside all reserved base and extension families.
+
+For a claimed extension family, the server MUST NOT use `extension_profile_not_claimed` solely because the family has zero current resources or the caller lacks authorization for one route.
+Profiles: base
+Verified by: AC-371
 
 #### 3.3.4 View-shaped read contract
 
 **REQ-01-034**
 The primary hot-path read route for workbook surfaces MUST be `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`.
+
+This subsection owns one canonical view-row wire family reused across workbook query, row-refreshing create or patch success, and replayable collaboration patches:
+
+- `view_row_v1`: the full row object used for query `rows[]`, successful `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows`, successful `PATCH /api/v1/records/{record_id}` row refresh, and any other route that explicitly returns a full workbook row refresh.
+- `view_row_patch_v1`: the sparse row object used for `record_changed.payload.affected_views[].patch_cells` when `change_kind='patch'`.
+
+For this wire family:
+
+- `record_id` and `row_version` MUST remain top-level members and MUST NOT be duplicated inside `cells`,
+- `cells` MUST be a map keyed only by stable `field_key`,
+- each base-profile cell object MUST use exactly `{ "value": <field-read-payload> }`,
+- `cells[field_key].value` MUST reuse the field's existing read contract rather than retyping all fields to one scalar family,
+- `group_values` MUST remain a top-level sibling of `cells` and MUST NOT be treated as a writable cell family,
+- full-row field membership is governed by REQ-01-310,
+- `view_row_patch_v1.cells` MUST contain only changed fields and `view_row_patch_v1.group_values`, when present, MUST contain only changed grouping scalars,
+- clients MUST ignore unknown additive members inside row or cell objects unless a later profile explicitly makes them required.
+
+Illustrative `view_row_v1` shape:
+
+```json
+{
+  "record_id": "rec_01",
+  "row_version": 42,
+  "cells": {
+    "evidence.title": { "value": "EDR package for WS-023" },
+    "evidence.collector_party_text": { "value": "IR Vendor" },
+    "evidence.collector_party_id": { "value": null },
+    "evidence.source_party_text": { "value": "Endpoint team" },
+    "evidence.source_party_id": { "value": "pty_22" }
+  },
+  "group_values": {
+    "timeline.has_evidence": true
+  }
+}
+```
+
+Illustrative `view_row_patch_v1` shape:
+
+```json
+{
+  "record_id": "rec_01",
+  "row_version": 43,
+  "cells": {
+    "evidence.collector_party_id": { "value": null },
+    "evidence.edited_at": { "value": "2026-04-06T11:57:00Z" }
+  },
+  "group_values": {
+    "timeline.has_evidence": false
+  }
+}
+```
 Profiles: base
-Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
+Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-366, AC-367, AC-368
+
+Contract tables. The tables in §3.3.4 through §3.3.4.2 are the compact owner-local contract for query shape, omission and canonicalization behavior, response shape, and record-history paging. Algorithmic comparison, tokenization, and ordering rules remain in the surrounding prose.
+
+**Table 3.3.4-A. View-query route summary**
+
+| Route | Auth context | Request contract summary | Omission and default summary | Response summary | Primary errors |
+| --- | --- | --- | --- | --- | --- |
+| `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query` | Visible incident and visible view schema for the caller | Optional `sort[]`, optional `filters[]`, optional `group_by`, and pagination body members under §3.3.7 | Omitted `sort` or `sort: []` means no user sort override; omitted `filters` or `filters: []` means no filters; omitted `group_by` means grouping inactive; `group_by: null` is invalid | Returns `incident_id`, `view_schema_id`, `rows[]` as full `view_row_v1[]`, `meta.query`, and paging metadata | `invalid_view_query`, `invalid_pagination_request`, ordinary authorization failures |
+
+**Table 3.3.4-B. Query request members**
+
+| Member | Requiredness | Allowed shape | Omission and explicit-`null` behavior | Canonicalization and validation |
+| --- | --- | --- | --- | --- |
+| `sort[]` | Optional | Ordered array of `sort` entries | Omitted or `[]` means no user sort override | At most 8 raw entries; duplicate normalized `field_key` values are invalid; effective applied sort appends default-sort tail and then `record_id asc` when absent |
+| `filters[]` | Optional | Array of filter objects keyed by `field_key` | Omitted or `[]` means no filters | At most 16 raw entries; request order is non-semantic; canonical persisted order is `field_key asc` |
+| `group_by` | Optional | One declared grouping-key string | Omitted means grouping inactive; explicit `null` is invalid | At most one active grouping key in the current profile |
+| `limit` | Optional | Pagination member under §3.3.7 | Body member only; query-parameter form is invalid | Counts serialized `rows[]` entries only |
+| `cursor_token` | Optional | Pagination member under §3.3.7 | Body member only; query-parameter form is invalid | Bound to the normalized view-query contract |
+
+**Table 3.3.4-C. `sort[]` and grouping contract**
+
+| Item | Required members | Closed vocabulary or rule | Canonical behavior |
+| --- | --- | --- | --- |
+| `sort[]` entry | `field_key`, `direction` | `direction` is exactly `asc` or `desc` | `field_key` must be one declared sortable key for the active `view_schema_id`; unknown top-level members are invalid |
+| Effective applied sort | N/A | User list in request order, then remaining schema `default_sort`, then `record_id asc` when absent | User sort overrides matching default-sort entries and extends rather than replaces the default tuple |
+| `group_by` | N/A | One declared grouping key string | Omitted in `meta.query` when grouping is inactive |
+
+**Table 3.3.4-D. Query response and row shape summary**
+
+| Member | Presence | Nullability and canonicalization | Notes |
+| --- | --- | --- | --- |
+| `incident_id` | Required | Non-null | Echoes the addressed incident |
+| `view_schema_id` | Required | Non-null | Echoes the addressed view schema |
+| `rows[]` | Required | May be empty | Each entry is full `view_row_v1` |
+| `rows[].record_id` | Required | Non-null | Top-level technical identifier |
+| `rows[].row_version` | Required | Non-null | Top-level technical concurrency identifier |
+| `rows[].cells` | Required | Includes every schema-declared non-technical field | `{ "value": null }` means authoritative null; omission of a schema-declared non-technical field is invalid |
+| `rows[].group_values` | Conditional | Present only when the schema declares grouping keys | Full current grouping object for the schema |
+| `meta.query.filters[]` | Required | Canonical normalized filter wire shape | Ordered by `field_key asc` |
+| `meta.query.sort[]` | Required | Effective applied sort after default-tail expansion | Always present |
+| `meta.query.group_by` | Conditional | Omitted when grouping inactive | Never serialized as JSON `null` |
+| Paging metadata | Required when §3.3.7 requires it | Cursor contract under §3.3.7 | Transport metadata only |
+
 
 **REQ-01-035**
 A view-query request MUST be view-shaped rather than table-shaped. It MUST accept:
@@ -390,6 +672,10 @@ For `sort[]`:
 - `direction` MUST use the exact closed vocabulary `asc` and `desc`,
 - unknown top-level members in a `sort[]` entry MUST be rejected,
 - duplicate normalized `field_key` entries in one request MUST be rejected,
+- `sort[]` MAY be omitted or empty, but when present it MUST contain at most `8` entries,
+- the count is the raw parsed array length before duplicate-field rejection, per-entry normalization, default-sort tail expansion, or cursor comparison,
+- if `sort[]` exceeds `8`, the server MUST fail with `400`, `error.code = invalid_view_query`, `error.details.reason_code = sort_count_exceeded`, `error.details.field = sort`, `error.details.requested_count = <raw count>`, and `error.details.max_count = 8`,
+- the server MUST NOT truncate or partially honor an oversize `sort[]`,
 - omitted `sort` and `sort: []` mean no user sort override.
 
 `group_by` is optional. Omitted `group_by` means `Group: None`. When present, `group_by` MUST be a non-null string equal to one declared grouping key for the active `view_schema_id`. `group_by: null` is invalid. The current profile allows at most one active grouping key.
@@ -398,23 +684,24 @@ The effective applied sort tuple for this route MUST be computed by taking the n
 
 For `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`, `limit` and `cursor_token` MUST appear only as JSON-body members, not as query parameters. `limit` counts serialized `rows[]` entries only. A malformed pagination member, unsupported pagination alias, or cursor replay against a different bound view-query contract MUST fail with `400`, `error.code=invalid_view_query`, and `error.details.reason_code` equal to `invalid_limit` or `cursor_query_mismatch` from §3.3.6.2, as applicable.
 Profiles: base
-Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-238, AC-239, AC-240, AC-243, AC-359, AC-360, AC-361
+Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-238, AC-239, AC-240, AC-243, AC-359, AC-360, AC-361, AC-372, AC-373, AC-374, AC-375
 
 **REQ-01-036**
 A successful view-query response MUST return the common success envelope with:
 
 - `incident_id`,
 - `view_schema_id`,
-- `rows[]` already shaped for that view,
-- `record_id` and `row_version` on every mutable row,
-- field-key-addressable cell values,
-- scalar `group_values` needed for client-local grouping when grouping is active,
+- `rows[]` serialized as `view_row_v1[]`,
 - `meta.query` containing the normalized applied view-query contract for this response,
 - pagination metadata defined in §3.3.7.
 
+For this route, each `rows[]` entry MUST be a full `view_row_v1`. `rows[].cells` MUST include every schema-declared non-technical field for the active `view_schema_id`, regardless of whether the field is visible, default-hidden, writable, or read-only. The only schema fields not serialized under `cells` are the hidden technical fields `record_id` and `row_version`, which remain top-level. In a full row, a schema-declared non-technical field serialized as `{ "value": null }` means authoritative null. Omission of a schema-declared non-technical field is invalid.
+
+For a schema that declares one or more grouping keys, each full row MUST include the full current `group_values` object for that schema. When a schema declares no grouping keys, `group_values` MUST be omitted.
+
 For this route, `meta.query` MUST always be present. `meta.query.filters[]` MUST use the canonical normalized wire shape defined in §3.3.4.1. `meta.query.sort[]` MUST serialize the effective applied sort tuple after the default-tail expansion defined by REQ-01-035. `meta.query.group_by` MUST be omitted when grouping is inactive.
 Profiles: base
-Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-238, AC-241, AC-243, AC-361
+Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-238, AC-241, AC-243, AC-361, AC-366, AC-367, AC-372, AC-373, AC-374
 
 **REQ-01-037**
 The server MUST NOT serialize group headers or other presentation-only grouping artifacts as writable rows.
@@ -423,10 +710,36 @@ Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-243
 
 ##### 3.3.4.1 Filter predicate wire contract
 
+
+**Table 3.3.4.1-A. Filter operator and argument matrix**
+
+| `op` | Required `arg` shape | Default field-class eligibility | Canonicalization and validation notes |
+| --- | --- | --- | --- |
+| `eq` | Exactly one of `{ "value": <scalar-or-null> }` or `{ "values": [<scalar>, ...] }` | Enum, boolean, timestamp, date, scalar identifier text | `values[]` is set-like, non-empty, and canonicalized to the unique normalized member set in canonical ascending order |
+| `range` | One or more of `gt`, `gte`, `lt`, `lte` | Timestamp and date | At least one bound is required; `gt` and `gte` cannot coexist; `lt` and `lte` cannot coexist; contradictory normalized bounds are invalid |
+| `contains_any` | `{ "values": [<scalar>, ...] }` | Multi-value collection fields | `values[]` is set-like, non-empty, and canonicalized after normalization |
+| `contains_all` | `{ "values": [<scalar>, ...] }` | Multi-value collection fields | `values[]` is set-like, non-empty, and canonicalized after normalization |
+| `prefix` | `{ "value": <string> }` | Scalar identifier text fields | Uses the shared query-time text-comparison substrate; match is anchored at code-point offset `0`; canonical stored form is the comparison-normalized prefix string |
+| `full_text` | `{ "query": <string> }` | Declared synthetic full-text predicate fields | Token order is non-semantic; duplicates coalesce; canonical stored form is the unique normalized token set sorted ascending and joined by one ASCII space |
+
+**Table 3.3.4.1-B. `invalid_view_query` reason summary**
+
+| Condition | Transport | `error.code` | `reason_code` and required detail |
+| --- | --- | --- | --- |
+| `sort[]` raw count exceeds 8 | `400` | `invalid_view_query` | `sort_count_exceeded`; `field=sort`; `requested_count`; `max_count=8` |
+| `filters[]` raw count exceeds 16 | `400` | `invalid_view_query` | `filter_count_exceeded`; `field=filters`; `requested_count`; `max_count=16` |
+| Cursor replay does not match the bound normalized query | `400` | `invalid_view_query` | `cursor_query_mismatch` |
+| Malformed or unsupported body-level pagination member | `400` | `invalid_view_query` | `invalid_limit` or the most specific pagination reason from §3.3.6.2 |
+| Duplicate normalized `field_key`, illegal `op`, empty set-like operand, empty `prefix`, empty `full_text`, or zero full-text tokens after normalization | `400` | `invalid_view_query` | Most specific field-level reason from REQ-01-043 through REQ-01-046; `filter_index` is required and `field_key` is present when available |
+| Contradictory or malformed range bounds | `400` | `invalid_view_query` | Most specific range reason from §3.3.6.2; `filter_index` is required |
+
+
 **REQ-01-038**
 A `filters[]` entry MUST use this shape:
+
+`filters[]` MAY be omitted or empty. When present, it MUST contain at most `16` entries. The count is the raw parsed array length before duplicate-field rejection or operand normalization. If `filters[]` exceeds `16`, the server MUST fail with `400`, `error.code = invalid_view_query`, `error.details.reason_code = filter_count_exceeded`, `error.details.field = filters`, `error.details.requested_count = <raw count>`, and `error.details.max_count = 16`. The server MUST NOT truncate or partially honor an oversize `filters[]`.
 Profiles: base
-Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
+Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-360
 
 ```json
 {
@@ -487,8 +800,48 @@ Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
 Date operands MUST use canonical `YYYY-MM-DD`.
 Timestamp operands MUST use RFC 3339.
 The server MUST apply the field contract's declared normalization before comparison.
+
+For `eq.values[]`, `contains_any.values[]`, and `contains_all.values[]`:
+
+- `values[]` is a logical set, not an ordered list,
+- caller order is non-semantic,
+- duplicate members are allowed on input but MUST coalesce after operator-specific normalization,
+- JSON `null` MUST NOT appear inside any set-like `values[]`; `eq.value = null` is the only null-equality encoding,
+- the canonical normalized form used for `meta.query`, saved-view persistence, and cursor binding MUST serialize the unique normalized member set in canonical ascending order under the field's deterministic comparison semantics.
+
+For `prefix`:
+
+- comparison MUST use the shared query-time text-comparison substrate defined by REQ-01-488,
+- a match exists only when the comparison-normalized field value begins at code-point offset `0` with the comparison-normalized `prefix.value`,
+- `prefix` is not infix search, wildcard search, regex, or token search,
+- the canonical normalized form used for `meta.query`, saved-view persistence, and cursor binding MUST store `arg.value` in that comparison-normalized form.
+
+For `full_text`:
+
+- the declared full-text predicate's source fields MUST be normalized using their bound field contracts, with null source fields treated as empty,
+- tokenization MUST split text into maximal contiguous runs of Unicode letters or Unicode numbers, with every other code point acting as a separator that is discarded,
+- comparison MUST use the same shared query-time text-comparison substrate defined by REQ-01-488,
+- query token order is non-semantic and duplicate query tokens MUST coalesce after normalization,
+- a row matches only when every unique normalized query token appears as an exact token in the union of the predicate's declared source fields,
+- `full_text` is not phrase search, infix search inside a token, wildcard syntax, stemming, fuzzy matching, transliteration, or storage-engine query language,
+- the canonical normalized form used for `meta.query`, saved-view persistence, and cursor binding MUST store `arg.query` as the unique normalized token set sorted ascending and joined by one ASCII space.
 Profiles: base
 Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
+
+**REQ-01-565**
+The current profile defines no public fuzzy, trigram, phrase, wildcard, stemming, accent-insensitive, transliteration, or language-aware operator on `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`. `full_text` remains the exact-token operator defined in this subsection.
+Profiles: base
+Verified by: AC-231, AC-387
+
+**REQ-01-566**
+For the current profile, `full_text` determines row membership only. The applied sort tuple defined by REQ-01-035 continues to determine result order. The route MUST NOT inject relevance scores, implicit ranking, thresholds, or implicit sort override into the response.
+Profiles: base
+Verified by: AC-231, AC-387
+
+**REQ-01-567**
+The current profile defines no generic public discovery route for alias-, mention-, similarity-, or suggestion-based candidate lookup. Any future public discovery surface requires a new operator or a new route family with its own exact contract.
+Profiles: base
+Verified by: AC-231, AC-387
 
 `filters[]` combine by conjunction.
 
@@ -506,8 +859,11 @@ The server MUST reject, using the common error envelope:
 - an `op` not allowed for that field's filter class,
 - duplicate `field_key` entries after normalization,
 - an empty `values[]`,
+- JSON `null` inside any set-like `values[]`,
+- a set-like operand that is empty after operator-specific normalization or duplicate coalescing,
 - an empty `prefix.value` after trimming,
 - an empty `full_text.query` after trimming,
+- a `full_text.query` that tokenizes to zero tokens after normalization,
 - a `range` with no bounds,
 - a `range` that specifies both `gt` and `gte`,
 - a `range` that specifies both `lt` and `lte`,
@@ -531,6 +887,8 @@ Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
 Profiles: base
 Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
 
+For these failures, `reason_code` MUST be `empty_values_after_normalization` when a set-like operand becomes empty only after normalization or duplicate coalescing, MUST be `empty_full_text_after_tokenization` when a non-empty trimmed `full_text.query` yields zero tokens after normalization, and otherwise MUST use the most specific code from §3.3.6.2.
+
 The canonical `invalid_view_query` `error.details.reason_code` registry is defined in §3.3.6.2.
 
 Request order of `filters[]` is not semantically significant.
@@ -539,6 +897,9 @@ Request order of `filters[]` is not semantically significant.
 For saved-view persistence, cursor binding, and `meta.query`, the server MUST normalize the view-query contract as follows:
 
 - `filters[]` MUST use the exact wire shape defined in this subsection and MUST be ordered canonically by `field_key asc`,
+- within `filters[]`, set-like `arg.values[]` MUST serialize the unique normalized member set in canonical ascending order whenever the selected `op` uses `values[]`,
+- within `filters[]`, `prefix.arg.value` MUST serialize the comparison-normalized value defined by REQ-01-042,
+- within `filters[]`, `full_text.arg.query` MUST serialize the canonical normalized token string defined by REQ-01-042,
 - `sort[]` MUST preserve request order after per-entry normalization and duplicate rejection,
 - `group_by` MUST be omitted when grouping is inactive.
 
@@ -581,6 +942,28 @@ Examples:
 ```
 
 ##### 3.3.4.2 Record-history read contract
+
+
+**Table 3.3.4.2-A. Record-history route summary**
+
+| Route | Auth context | Request contract summary | Ordering and paging | Success summary | Primary errors |
+| --- | --- | --- | --- | --- | --- |
+| `GET /api/v1/records/{record_id}/history` | Caller must be able to see the addressed record; otherwise `404` | Record-scoped singleton history read with optional `limit` and `cursor_token` under §3.3.7 | `items[]` is newest-first; pagination is transport-only, preserves order, and the cursor is bound to `record_id`; the full retained logical history remains visible in the current profile | Returns `incident_id`, `record_id`, current `row_version`, `deleted`, and `items[]`; for a soft-deleted record the returned `row_version` is the tombstone concurrency token required for restore | `invalid_pagination_request`, ordinary authorization failures |
+
+**Table 3.3.4.2-B. History item members and rollback availability**
+
+| Member | Presence rule | Notes |
+| --- | --- | --- |
+| `actor_user_id` | Required on every item | Attributed actor of the committed change |
+| `committed_at` | Required on every item | Newest-first committed ordering anchor |
+| `operation` | Required on every item | Displayable history operation label |
+| `diff_summary` | Required on every item | Row-centric summary only |
+| `change_set_id` | Required on every item | Stable change-set anchor |
+| `reversible` | Required on every item | Current reversibility state, not historical omission |
+| `available_rollback_actions[]` | Required on every item | Ordered only as `history_entry`, `change_set`, `row_restore`; empty when `reversible=false` |
+| `history_entry_ref` | Present if and only if the logical history item maps to exactly one mutation target eligible for `target.kind='history_entry'` | Stable opaque reference for the retained-history lifetime of the record in the current deployment |
+| `revision_no` | Present if and only if whole-row restore is legal for that displayed logical history item | Row-restore selector only |
+
 
 **REQ-01-048**
 `GET /api/v1/records/{record_id}/history` MUST return row-centric history for the addressed record. The route is record-scoped, not view-scoped. A caller who lacks visibility to `record_id` MUST receive `404`.
@@ -627,9 +1010,9 @@ Profiles: base
 Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
 
 **REQ-01-054**
-An `items[]` entry MUST include `history_entry_ref` if and only if that logical history item maps to exactly one reversible mutation target. The client MUST treat `history_entry_ref` as opaque. For the lifetime of retained history, the same logical history item MUST keep the same `history_entry_ref` across repeated reads.
+An `items[]` entry MUST include `history_entry_ref` if and only if that logical history item maps to exactly one mutation target eligible for `target.kind='history_entry'` addressing. The client MUST treat `history_entry_ref` as opaque. For the retained-history lifetime of that record in the current deployment, the same logical history item MUST keep the same `history_entry_ref` across repeated reads.
 Profiles: base
-Verified by: AC-124, AC-127, AC-184, AC-185, AC-231
+Verified by: AC-124, AC-127, AC-184, AC-185, AC-231, AC-383, AC-384
 
 **REQ-01-055**
 An `items[]` entry MUST include `revision_no` if and only if whole-row restore is a legal action for that displayed logical history item.
@@ -641,7 +1024,106 @@ The route MUST accept `limit` and `cursor_token` under §3.3.7 whenever more tha
 Profiles: base
 Verified by: AC-124, AC-127, AC-184, AC-185, AC-215, AC-231
 
+**REQ-01-561**
+In the current profile, `GET /api/v1/records/{record_id}/history` MUST return the full retained logical history for the addressed extant record in the current deployment. Pagination is transport-only and MUST NOT be used as retention-based truncation.
+Profiles: base
+Verified by: AC-231, AC-383
+
+**REQ-01-562**
+Incident closure MUST NOT remove previously visible history items, remove previously issued `history_entry_ref` values, or otherwise narrow the `/history` surface or rollback-route contract for extant records.
+Profiles: base
+Verified by: AC-231, AC-383
+
+**REQ-01-563**
+When a previously single-entry-addressable history item later becomes not currently reversible because of dependent later changes, stale target state, or other already-defined rollback-precondition reasons, that item MUST remain present in `items[]`. The route MUST express current legality through `reversible` and `available_rollback_actions[]` rather than by omitting the item or removing `history_entry_ref`.
+Profiles: base
+Verified by: AC-231, AC-384
+
 #### 3.3.5 Mutation contract
+
+
+Contract tables. The tables in §3.3.5 through §3.3.5.5 are the compact owner-local mutation contract. Per-field create defaults, create-time writeability, and omitted-versus-`null` behavior remain owned by the relevant field registries in §7.4 and §19 and are referenced here rather than duplicated.
+
+**Table 3.3.5-A. Mutation route index**
+
+| Route | Target scope | Request contract summary | Replay and idempotency | Success summary | Primary error codes |
+| --- | --- | --- | --- | --- | --- |
+| `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` | View-scoped row create | JSON object with required `client_txn_id` and zero or more create-time `field_key` members allowed by the addressed view | Keyed by `(actor_user_id, incident_id, view_schema_id, client_txn_id)` | First success `201 Created`; replay returns the original committed row refresh | `invalid_mutation_payload`, `client_txn_conflict` |
+| `PATCH /api/v1/records/{record_id}` | Record-scoped partial field mutation | Required `view_schema_id`, `base_row_version`, `client_txn_id`, and non-empty `changes[]` | Keyed by `(actor_user_id, record_id, client_txn_id)`; exact replay wins before fresh row-version evaluation | `200 OK` with original committed row refresh on success or exact replay | `invalid_mutation_payload`, `client_txn_conflict`, `row_version_conflict`, `same_field_conflict` |
+| `POST /api/v1/records/{record_id}/mark-reviewed` | Timeline capture-state action | Required `base_row_version`, `client_txn_id`; optional `reason` | Keyed by `(actor_user_id, record_id, client_txn_id)` | `200 OK` with updated lifecycle state summary | `client_txn_conflict`, `row_version_conflict`, `illegal_transition`, `record_deleted_use_restore` |
+| `POST /api/v1/records/{record_id}/supersede` | Timeline capture-state action | Required `base_row_version`, `client_txn_id`, non-empty `reason`; optional `replacement_record_id` | Keyed by `(actor_user_id, record_id, client_txn_id)` | `200 OK` with updated lifecycle state summary and optional `replacement_record_id` | `client_txn_conflict`, `row_version_conflict`, `illegal_transition`, `record_deleted_use_restore` |
+| `DELETE /api/v1/records/{record_id}` | First-class record soft-delete | Required `base_row_version`, `client_txn_id`; optional `reason` | Keyed by `(actor_user_id, record_id, client_txn_id)` | `200 OK` with record-scoped delete summary | `client_txn_conflict`, `row_version_conflict`, `record_already_deleted` |
+| `POST /api/v1/records/{record_id}/restore` | First-class record restore | Required `base_row_version`, `client_txn_id`; optional `reason` | Keyed by `(actor_user_id, record_id, client_txn_id)` and participates in destructive-operation locking | `200 OK` with record-scoped restore summary | `client_txn_conflict`, `row_version_conflict`, `record_not_deleted`, `record_locked` |
+| `POST /api/v1/records/{record_id}/rollback` | Record-history reversal | Required `base_row_version`, `client_txn_id`, and `target` | Keyed by `(actor_user_id, record_id, client_txn_id)` and participates in destructive-operation locking | `200 OK` with rollback summary for the selected target | `invalid_rollback_request`, `client_txn_conflict`, `row_version_conflict`, `rollback_target_not_found`, `rollback_precondition_failed`, `record_locked` |
+| `POST /api/v1/records/{survivor_record_id}/merge` | Entity merge | Required `loser_record_id`, `survivor_base_row_version`, `loser_base_row_version`, `client_txn_id`; optional `reason` | Keyed by `(actor_user_id, survivor_record_id, loser_record_id, client_txn_id)` and participates in destructive-operation locking | `200 OK` with merge summary and carried-forward identifiers | `client_txn_conflict`, `row_version_conflict`, `merge_precondition_failed`, `record_locked` |
+| `POST /api/v1/entity-mentions/{entity_mention_id}/resolve` | Single mention action | Required `base_mention_row_version`, `client_txn_id`, `action`; optional `resolved_record_id` and `reason` | Keyed by `(actor_user_id, entity_mention_id, client_txn_id)` | `200 OK` with `entity_mention`, `source_record`, and `change_set_id` | `invalid_mutation_payload`, `client_txn_conflict`, `row_version_conflict`, `entity_mention_not_found`, `resolved_record_not_found`, `illegal_transition`, `record_deleted_use_restore` |
+| `POST /api/v1/records/{record_id}/conflicts/{conflict_token}/resolve` | Same-field conflict resolution | Record-scoped conflict-resolver surface | Request and result payload are owned by Core 03 §3.3 | Ordinary conflict-resolution success refresh through the addressed record | Same-field conflict and stale-token semantics are owned by Core 03 §3.3 |
+
+**Table 3.3.5-B. Row-create request members**
+
+| Member | Requiredness | Allowed shape | Omission and explicit-`null` behavior | Validation and replay notes |
+| --- | --- | --- | --- | --- |
+| `client_txn_id` | Required | Stable client transaction token | Omission is invalid; explicit `null` is invalid | Idempotency key component |
+| Top-level create-time `field_key` members | Optional | Only writable create-time fields allowed by the addressed `view_schema_id` | Omission, explicit `null`, and default comparison are owned by the bound field contract in §7.4 or §19 | Unknown or forbidden top-level members are rejected before idempotency comparison |
+| Zero-field create | Conditional | No create-time `field_key` members present | Legal only when the addressed view contract explicitly allows it | Otherwise `invalid_mutation_payload` |
+
+**Table 3.3.5-C. Patch request members**
+
+| Member | Requiredness | Allowed shape | Omission and explicit-`null` behavior | Validation and replay notes |
+| --- | --- | --- | --- | --- |
+| `view_schema_id` | Required | Stable `view_schema_id` | Omission is invalid; explicit `null` is invalid | Participates in normalized replay comparison |
+| `base_row_version` | Required | Integer row version | Omission is invalid; explicit `null` is invalid | Participates in normalized replay comparison |
+| `client_txn_id` | Required | Stable client transaction token | Omission is invalid; explicit `null` is invalid | Idempotency key component |
+| `changes[]` | Required | Non-empty array of `changes[]` entries | `[]` is invalid; explicit `null` is invalid | Raw parsed length is capped at 32; duplicate `field_key` entries are invalid; outer array order is non-semantic and canonicalized by `field_key asc` |
+
+**Table 3.3.5-D. `changes[]` entry contract**
+
+| Member | Requiredness | Rule |
+| --- | --- | --- |
+| `field_key` | Required | One active writable `field_key` for the addressed view and target record |
+| `value` | Conditional | Present if and only if the active field contract is a direct write target |
+| `action_payload` | Conditional | Present if and only if the active field contract is a write-action target |
+| Exactly-one rule | Required | Each entry contains exactly one of `value` or `action_payload` |
+
+**Table 3.3.5-E. `collection_actions_v1` contract**
+
+| Member | Requiredness | Rule |
+| --- | --- | --- |
+| `kind` | Required | Exactly `collection_actions_v1` |
+| `actions[]` | Required | Raw parsed length 1 through 64 inclusive; empty is invalid |
+| `actions[]` order | Required | Semantic and preserved in request order within the field-scoped mutation |
+| Validation | Required | Unknown `op`, unknown members for the declared `op`, invalid or foreign `item_ref`, or a field-op mismatch fail with `invalid_mutation_payload` |
+
+**Table 3.3.5-F. `collection_value_v1` contract**
+
+| Member | Requiredness | Rule |
+| --- | --- | --- |
+| `kind` | Required | Exactly `collection_value_v1` |
+| `ordered` | Required | Boolean |
+| `items[]` | Required | Each item carries stable opaque `item_ref` suitable for later mutation targeting |
+| Serialization order | Required | When `ordered=true`, authoritative collection order; when `ordered=false`, canonical ascending `item_ref` order |
+
+**Table 3.3.5-G. Create and patch replay matrix**
+
+| Route | First successful commit | Exact replay | Same key, different normalized request | No prior hit and stale base version |
+| --- | --- | --- | --- | --- |
+| Row create | `201 Created` with `data.view_schema_id`, `data.change_set_id`, and `data.row` as `view_row_v1` | `200 OK` with the original committed create result, not current mutable row state | `409` with `error.code = client_txn_conflict` | N/A |
+| Patch | `200 OK` with `data.view_schema_id`, `data.change_set_id`, and `data.row` as `view_row_v1` | `200 OK` with the original committed patch result, not current mutable row state | `409` with `error.code = client_txn_conflict`; this wins before fresh row-version evaluation | `409` with `error.code = row_version_conflict` |
+
+**Table 3.3.5-H. Timeline action-route contract**
+
+| Route | Required members | Additional members | Legal current states | Role gate | Success summary | Primary failures |
+| --- | --- | --- | --- | --- | --- | --- |
+| `POST /api/v1/records/{record_id}/mark-reviewed` | `base_row_version`, `client_txn_id` | Optional `reason` | `rough`, `enriched` | `reviewer` or `admin` | `200 OK` with at least `record_id`, `incident_id`, `row_version`, `capture_state`, and `change_set_id` | `client_txn_conflict`, `row_version_conflict`, `illegal_transition`, `record_deleted_use_restore` |
+| `POST /api/v1/records/{record_id}/supersede` | `base_row_version`, `client_txn_id`, non-empty `reason` | Optional `replacement_record_id` | `rough`, `enriched`, `reviewed` | `reviewer` or `admin` | `200 OK` with at least `record_id`, `incident_id`, `row_version`, `capture_state`, `change_set_id`, `reason`, and `replacement_record_id` | `client_txn_conflict`, `row_version_conflict`, `illegal_transition`, `record_deleted_use_restore` |
+
+**Table 3.3.5-I. Delete and restore summary**
+
+| Route | Required members | Role gate | Success summary | Primary failures |
+| --- | --- | --- | --- | --- |
+| `DELETE /api/v1/records/{record_id}` | `base_row_version`, `client_txn_id`; optional `reason` | `editor`, `reviewer`, or `admin` | `200 OK` with at least `record_id`, `incident_id`, `row_version`, `deleted`, `deleted_at`, `deleted_by_user_id`, and `change_set_id` | `client_txn_conflict`, `row_version_conflict`, `record_already_deleted`, `record_deleted_use_restore` for later patch attempts |
+| `POST /api/v1/records/{record_id}/restore` | `base_row_version`, `client_txn_id`; optional `reason` | `reviewer` or `admin` | `200 OK` with at least `record_id`, `incident_id`, `row_version`, `deleted=false`, `deleted_at=null`, `deleted_by_user_id=null`, and `change_set_id` | `client_txn_conflict`, `row_version_conflict`, `record_not_deleted`, `record_locked` |
+
 
 **REQ-01-057**
 New row creation MUST use `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows`. The request body MUST be a JSON object. It MUST include required `client_txn_id` and MAY include zero or more additional top-level members. Every additional top-level member name MUST be a writable `field_key` declared by the addressed `view_schema_id` and not otherwise forbidden for create by that view contract. The route's top-level namespace is therefore closed to `client_txn_id` plus `field_key` members allowed for create by that view. A request with no field-keyed initial values is permitted only when the addressed view contract explicitly allows zero-field create. Row-create idempotency MUST be keyed by `(actor_user_id, incident_id, view_schema_id, client_txn_id)`.
@@ -657,6 +1139,8 @@ Existing-row edits MUST use `PATCH /api/v1/records/{record_id}`. The request MUS
 - required non-empty `changes[]`, with each entry keyed by `field_key` and carrying the intended write value or equivalent action payload.
 
 `changes[]: []` is malformed request shape. It MUST NOT be treated as a no-op.
+
+When present, `changes[]` MUST contain at most `32` entries. The count is the raw parsed array length before duplicate-`field_key` rejection, value normalization, or idempotency comparison.
 
 Patch-route idempotency MUST be keyed by `(actor_user_id, record_id, client_txn_id)`. `view_schema_id` MUST participate in normalized replay comparison for this route, but it MUST NOT widen the idempotency-key scope beyond `(actor_user_id, record_id, client_txn_id)`.
 Profiles: base
@@ -685,7 +1169,7 @@ Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-
 **REQ-01-063**
 A `collection_actions_v1` payload MUST use this shape:
 Profiles: base
-Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
+Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231, AC-299
 
 ```json
 {
@@ -695,6 +1179,8 @@ Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-
   ]
 }
 ```
+
+`actions[]` MUST contain at least one and at most `64` entries. The count is the raw parsed array length before semantic validation, duplicate-add coalescing, or application to the target collection. This limit applies anywhere `collection_actions_v1` is accepted, including create-time field-action values and patch-time `action_payload` values.
 
 **REQ-01-064**
 A writable `collection_review` field returned by a view query, a successful create response, a successful patch response, or a same-field conflict payload MUST use `collection_value_v1` rather than a raw string array or plain delimited text.
@@ -732,14 +1218,18 @@ Profiles: base, snapshot_reporting
 Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231, AC-233
 
 **REQ-01-069**
-The server MUST validate each requested change against the active view contract, enforce per-field writeability and `conflict_resolution_class`, and route the write to the authoritative source field or declared write action without exposing internal table layout. For `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows`, this validation MUST also reject a body that is not a JSON object, a missing required `client_txn_id`, a supplied `null` for a required non-nullable member, any top-level member other than `client_txn_id` and recognized create-time `field_key` members allowed by the addressed view contract, a field not allowed as an initial writable value for create, a malformed direct value, a malformed action payload, an attempted direct client write to a read-only or server-managed field, or a request with no field-keyed initial values when the addressed view contract does not permit zero-field create. If mutation payload validation fails, the server MUST fail with `400 Bad Request` using the common error envelope and `error.code = invalid_mutation_payload`. At minimum, this applies to an unknown payload `kind`, an unknown action `op`, an action not allowed for the active `field_key`, an invalid or foreign `item_ref`, a malformed direct value, or an action object that contains unknown members for its declared `op`. When the failure is attributable to one top-level request member, `error.details.field` MUST identify that member. For `collection_actions_v1`, the server MUST apply `actions[]` atomically and in request order within the parent field mutation. The public API surface MUST NOT require raw comma-delimited strings or blind full-collection replacement for `collection_review` fields. For `PATCH /api/v1/records/{record_id}`, normalized idempotency comparison MUST run only after request-shape validation, authorization, and target-record visibility succeed. `client_txn_id` is the idempotency lookup key and MUST NOT be part of the normalized request. The normalized request MUST include exact `view_schema_id`, exact `base_row_version`, and canonical `changes[]`. Top-level `changes[]` defines one unordered mutation set keyed by `field_key`. Top-level `changes[]` order MUST NOT be semantically significant for validation, acceptance, execution, or idempotency comparison. An empty `changes[]` array is invalid mutation payload and MUST be rejected rather than treated as a no-op. A duplicate `field_key` entry in `changes[]` is invalid mutation payload and MUST be rejected rather than normalized away. Canonicalization MUST sort outer `changes[]` by `field_key asc`; for direct-write fields comparison MUST use the authoritative normalized `value`, and for write-action fields comparison MUST use the semantically validated normalized `action_payload`. When an action payload is inherently ordered, such as `collection_actions_v1.actions[]`, that inner order MUST remain significant. If one requested patch would yield different valid outcomes depending on the client-supplied outer `changes[]` order, the request is ambiguous and MUST fail with `400 Bad Request`, the common error envelope, and `error.code = invalid_mutation_payload` rather than relying on outer-array order. Any behavior that needs ordered multi-step semantics across different writable concerns MUST be modeled either as one field-scoped `action_payload` whose own contract defines order or as a dedicated action route.
+The server MUST validate each requested change against the active view contract, enforce per-field writeability and `conflict_resolution_class`, and route the write to the authoritative source field or declared write action without exposing internal table layout. For `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows`, this validation MUST also reject a body that is not a JSON object, a missing required `client_txn_id`, a supplied `null` for a required non-nullable member, any top-level member other than `client_txn_id` and recognized create-time `field_key` members allowed by the addressed view contract, a field not allowed as an initial writable value for create, a malformed direct value, a malformed action payload, an attempted direct client write to a read-only or server-managed field, or a request with no field-keyed initial values when the addressed view contract does not permit zero-field create. If mutation payload validation fails, the server MUST fail with `400 Bad Request` using the common error envelope and `error.code = invalid_mutation_payload`. At minimum, this applies to an unknown payload `kind`, an unknown action `op`, an action not allowed for the active `field_key`, an invalid or foreign `item_ref`, a malformed direct value, or an action object that contains unknown members for its declared `op`. When the failure is attributable to one top-level request member, `error.details.field` MUST identify that member. For `collection_actions_v1`, the server MUST apply `actions[]` atomically and in request order within the parent field mutation. The public API surface MUST NOT require raw comma-delimited strings or blind full-collection replacement for `collection_review` fields. For `PATCH /api/v1/records/{record_id}`, normalized idempotency comparison MUST run only after request-shape validation, authorization, and target-record visibility succeed. `client_txn_id` is the idempotency lookup key and MUST NOT be part of the normalized request. The normalized request MUST include exact `view_schema_id`, exact `base_row_version`, and canonical `changes[]`. Top-level `changes[]` defines one unordered mutation set keyed by `field_key`. Top-level `changes[]` order MUST NOT be semantically significant for validation, acceptance, execution, or idempotency comparison. An empty `changes[]` array is invalid mutation payload and MUST be rejected rather than treated as a no-op. A duplicate `field_key` entry in `changes[]` is invalid mutation payload and MUST be rejected rather than normalized away. Canonicalization MUST sort outer `changes[]` by `field_key asc`; for direct-write fields comparison MUST use the authoritative normalized `value`, and for write-action fields comparison MUST use the semantically validated normalized `action_payload`. When an action payload is inherently ordered, such as `collection_actions_v1.actions[]`, that inner order MUST remain significant. If one requested patch would yield different valid outcomes depending on the client-supplied outer `changes[]` order, the request is ambiguous and MUST fail with `400 Bad Request`, the common error envelope, and `error.code = invalid_mutation_payload` rather than relying on outer-array order. Any behavior that needs ordered multi-step semantics across different writable concerns MUST be modeled either as one field-scoped `action_payload` whose own contract defines order or as a dedicated action route. For `PATCH /api/v1/records/{record_id}`, a `changes[]` array whose raw parsed length exceeds `32` MUST fail during request-shape validation with `400 Bad Request`, the common error envelope, `error.code = invalid_mutation_payload`, `error.details.reason_code = change_count_exceeded`, `error.details.field = changes`, `error.details.requested_count = <raw count>`, and `error.details.max_count = 32`. For any `collection_actions_v1` payload accepted by `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` or `PATCH /api/v1/records/{record_id}`, an empty `actions[]` array MUST fail during request-shape validation with `400 Bad Request`, the common error envelope, `error.code = invalid_mutation_payload`, `error.details.reason_code = empty_collection_actions`, `error.details.field` identifying the containing member path, and `error.details.field_key` identifying the active collection field. For any such `collection_actions_v1` payload, an `actions[]` array whose raw parsed length exceeds `64` MUST fail during request-shape validation with `400 Bad Request`, the common error envelope, `error.code = invalid_mutation_payload`, `error.details.reason_code = collection_action_count_exceeded`, `error.details.field` identifying the containing member path, `error.details.field_key` identifying the active collection field, `error.details.requested_count = <raw count>`, and `error.details.max_count = 64`. These count failures MUST be evaluated before idempotency replay comparison or write execution, so an oversize mutation never becomes replayable committed state.
 Profiles: base
 Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231, AC-299
 
 **REQ-01-070**
-A successful create or patch response MUST return the authoritative `record_id`, resulting `row_version`, `change_set_id`, and the committed field values needed to refresh the visible row. A first-time successful `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` MUST return `201 Created`. If the same authenticated actor replays the same normalized row-create request within the idempotency scope defined by REQ-01-057, the server MUST return `200 OK` with the originally committed create result rather than current mutable row state. If the same authenticated actor reuses `client_txn_id` within that same scope for a different normalized row-create request, the server MUST fail with `409` and `error.code = client_txn_conflict`; `error.details` MUST include at least `client_txn_id`. The replay response MUST therefore return the original `record_id`, original `row_version`, original `change_set_id`, and the original committed row payload, and MUST create no second record, no second `change_set`, no second revision entry, and no second replayable collaboration event. A first-time successful `PATCH /api/v1/records/{record_id}` MUST return `200 OK` with the originally committed patch result. If the same authenticated actor replays the same normalized patch request within the idempotency scope defined by REQ-01-058, the server MUST return `200 OK` with the originally committed patch result rather than current mutable row state. If the same authenticated actor reuses `client_txn_id` within that same scope for a different normalized patch request, the server MUST fail with `409` and `error.code = client_txn_conflict`; `error.details` MUST include at least `client_txn_id`. The patch replay response MUST therefore return the original `record_id`, original `row_version`, original `change_set_id`, and the original committed row payload, and MUST create no second mutation, no second `change_set`, no second revision entry, and no second replayable collaboration event. Only committed-success patch outcomes are replayable for this route. When a prior committed idempotency hit exists for the same `(actor_user_id, record_id, client_txn_id)`, the server MUST evaluate normalized-request replay before optimistic concurrency. An exact normalized match MUST replay the original success. A different normalized request MUST fail with `409` and `error.code = client_txn_conflict` even when the supplied `base_row_version` is stale. If no prior committed idempotency hit exists and the current `row_version` differs from `base_row_version`, the server MUST fail with `409` and `error.code = row_version_conflict`. The base profile MUST NOT require `Location` for row create and MUST NOT depend on a generic record-read route to make row-create or patch replay deterministic.
+Row-refreshing success responses for `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` and `PATCH /api/v1/records/{record_id}` MUST return the common success envelope with `data.view_schema_id`, `data.change_set_id`, and `data.row`, where `data.row` is exactly `view_row_v1` for the addressed `view_schema_id`. `data.row` is the single authoritative carrier of `record_id` and `row_version` for that refresh. Those two members MUST NOT be duplicated as sibling response members outside `data.row`.
+
+A first-time successful `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` MUST return `201 Created`. If the same authenticated actor replays the same normalized row-create request within the idempotency scope defined by REQ-01-057, the server MUST return `200 OK` with the originally committed create result rather than current mutable row state. If the same authenticated actor reuses `client_txn_id` within that same scope for a different normalized row-create request, the server MUST fail with `409` and `error.code = client_txn_conflict`; `error.details` MUST include at least `client_txn_id`. The replay response MUST therefore return the original `data.view_schema_id`, original `data.change_set_id`, and original committed `data.row`, and MUST create no second record, no second `change_set`, no second revision entry, and no second replayable collaboration event.
+
+A first-time successful `PATCH /api/v1/records/{record_id}` MUST return `200 OK` with the originally committed patch result. If the same authenticated actor replays the same normalized patch request within the idempotency scope defined by REQ-01-058, the server MUST return `200 OK` with the originally committed patch result rather than current mutable row state. If the same authenticated actor reuses `client_txn_id` within that same scope for a different normalized patch request, the server MUST fail with `409` and `error.code = client_txn_conflict`; `error.details` MUST include at least `client_txn_id`. The patch replay response MUST therefore return the original `data.view_schema_id`, original `data.change_set_id`, and the original committed `data.row`, and MUST create no second mutation, no second `change_set`, no second revision entry, and no second replayable collaboration event. Only committed-success patch outcomes are replayable for this route. When a prior committed idempotency hit exists for the same `(actor_user_id, record_id, client_txn_id)`, the server MUST evaluate normalized-request replay before optimistic concurrency. An exact normalized match MUST replay the original success. A different normalized request MUST fail with `409` and `error.code = client_txn_conflict` even when the supplied `base_row_version` is stale. If no prior committed idempotency hit exists and the current `row_version` differs from `base_row_version`, the server MUST fail with `409` and `error.code = row_version_conflict`. The base profile MUST NOT require `Location` for row create and MUST NOT depend on a generic record-read route to make row-create or patch replay deterministic.
 Profiles: base
-Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231, AC-299
+Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231, AC-299, AC-367
 
 **REQ-01-071**
 Soft-delete of a user-visible first-class record MUST use `DELETE /api/v1/records/{record_id}`. Restore of a currently soft-deleted first-class record MUST use `POST /api/v1/records/{record_id}/restore`. Both routes are record-scoped, not view-scoped. They MUST NOT require `incident_id` or `view_schema_id` in the path or request body, because authorization, history, and affected projections derive from the authoritative `record_id`.
@@ -757,7 +1247,7 @@ Profiles: base
 Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
 
 **REQ-01-074**
-`DELETE /api/v1/records/{record_id}` MUST require current incident role `editor`, `reviewer`, or `admin`. `POST /api/v1/records/{record_id}/restore` MUST require current incident role `reviewer` or `admin`. A caller who lacks visibility to the target record MUST receive `404`. A caller who can see the record but lacks sufficient role MUST receive `403`. Soft-delete SHOULD use ordinary optimistic concurrency rather than a hard lock. Ordinary soft-delete is outside the base-profile destructive-operation lock family and remains on the optimistic-concurrency path.
+`DELETE /api/v1/records/{record_id}` MUST require current incident role `editor`, `reviewer`, or `admin`. `POST /api/v1/records/{record_id}/restore` MUST require current incident role `reviewer` or `admin`. A caller who lacks visibility to the target record MUST receive `404`. A caller who can see the record but lacks sufficient role MUST receive `403`.
 Profiles: base
 Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-200, AC-201, AC-202, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-209, AC-210, AC-211, AC-212, AC-213, AC-214, AC-215, AC-216, AC-217, AC-218, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
 
@@ -848,6 +1338,35 @@ Verified by: AC-125, AC-126, AC-181, AC-182, AC-183, AC-188, AC-189, AC-190, AC-
 
 #### 3.3.5.0 Destructive-operation concurrency and rollback contract
 
+
+**Table 3.3.5.0-A. Destructive-operation route table**
+
+| Route | Required request members | Protected-set rule | Success summary |
+| --- | --- | --- | --- |
+| `POST /api/v1/records/{record_id}/restore` | `base_row_version`, `client_txn_id`; optional `reason` | Protected set is exactly the target `record_id` | `200 OK` with record-scoped restore summary |
+| `POST /api/v1/records/{record_id}/rollback` | `base_row_version`, `client_txn_id`, `target`; optional `reason` | Protected set is every first-class `record_id` whose authoritative state would be mutated by the selected rollback target against current state | `200 OK` with rollback summary including `target`, `rollback_change_set_id`, and canonical `affected_record_ids[]` |
+| `POST /api/v1/records/{survivor_record_id}/merge` | `loser_record_id`, `survivor_base_row_version`, `loser_base_row_version`, `client_txn_id`; optional `reason` | Protected set is the survivor, the loser, and every additional first-class `record_id` mutated directly by repointing or deterministic recreation | `200 OK` with merge summary and carried-forward identifier results |
+
+**Table 3.3.5.0-B. Rollback target and whole-row-restore addressing**
+
+| `target.kind` | Required selector | Scope of reversal |
+| --- | --- | --- |
+| `history_entry` | `history_entry_ref` | One single-entry reversible mutation target exposed by `/history` |
+| `change_set` | `change_set_id` | Every reversible mutation entry in the addressed `change_set`, in reverse deterministic entry order |
+| `row_restore` | `restore_to_revision_no` | Only the authoritative row-backed fields of the addressed `record_id`; non-row-backed links, tags, mentions, observations, and evidence associations are not implicitly recreated or deleted |
+
+**Table 3.3.5.0-C. Destructive-operation error summary**
+
+| Condition | Transport | `error.code` | Required detail |
+| --- | --- | --- | --- |
+| Required destructive-operation lock unavailable | `409` | `record_locked` | `error.retryable=true` |
+| Current row version differs from supplied base version | `409` | `row_version_conflict` | Current and base version details for the addressed route |
+| Rollback target does not resolve to a visible history target | `404` | `rollback_target_not_found` | Target selector details as available |
+| Rollback target exists but cannot be reversed safely against current state | `409` | `rollback_precondition_failed` | Family `reason_code` from §3.3.6.2 |
+| Merge precondition other than row-version freshness fails | `409` | `merge_precondition_failed` | Family `reason_code` from §3.3.6.2 |
+| Restore against a record that is not currently soft-deleted | `409` | `record_not_deleted` | Record-scoped restore misuse |
+
+
 **REQ-01-089**
 `POST /api/v1/records/{record_id}/rollback` MUST execute a reviewer-visible history reversal anchored to the row-centric history of `record_id`.
 Profiles: base
@@ -898,9 +1417,9 @@ Profiles: base
 Verified by: AC-215, AC-216, AC-217, AC-218, AC-231
 
 **REQ-01-096**
-Single-entry rollback through `history_entry_ref` MUST be available only when that history item maps to exactly one reversible mutation target.
+Single-entry rollback through `history_entry_ref` MUST be available only when the selected history item both has a valid `history_entry_ref` under REQ-01-054 and is currently reversible under the rollback-precondition rules of this subsection.
 Profiles: base
-Verified by: AC-215, AC-216, AC-217, AC-218, AC-231
+Verified by: AC-215, AC-216, AC-217, AC-218, AC-231, AC-384
 
 **REQ-01-097**
 Whole-`change_set` rollback through `change_set_id` MUST reverse every reversible mutation entry in that `change_set` in reverse deterministic entry order.
@@ -942,7 +1461,7 @@ Profiles: base
 Verified by: AC-215, AC-216, AC-217, AC-218, AC-231
 
 **REQ-01-104**
-The base-profile destructive-operation family is exactly `POST /api/v1/records/{record_id}/restore`, `POST /api/v1/records/{record_id}/rollback`, and `POST /api/v1/records/{survivor_record_id}/merge`. The server MUST use short-lived internal destructive-operation locks for every request in that family. The public contract includes no client-visible lock-acquire route, no lock-holder identity surface, no manual unlock route, and no server-side queueing of destructive requests. The server MUST attempt lock acquisition fail-fast and MUST NOT wait for a held lock to clear and then continue evaluating the same request. Lock acquisition MUST use canonical ascending `record_id` order across the full protected set. If any required lock is unavailable, the route MUST fail immediately with `409`, `error.code = record_locked`, and `error.retryable = true`. Only after the full protected set is acquired MAY the server re-read authoritative current state and evaluate `row_version_conflict`, restore eligibility such as `record_not_deleted`, `rollback_precondition_failed`, or `merge_precondition_failed`. Locks MUST be released on commit, rollback, or request termination. For restore, the protected set is exactly the target `record_id`. For rollback, the protected set is every first-class `record_id` whose authoritative state would be mutated if the selected rollback target were applied against current authoritative state. For merge, the protected set is the survivor record, the loser record, and every additional first-class `record_id` whose authoritative state the merge transaction mutates directly through repointing or deterministic recreation.
+The base-profile destructive-operation family is exactly `POST /api/v1/records/{record_id}/restore`, `POST /api/v1/records/{record_id}/rollback`, and `POST /api/v1/records/{survivor_record_id}/merge`. Ordinary `PATCH`, ordinary `DELETE`, and ordinary soft-delete are outside this family, MUST remain on the ordinary optimistic-concurrency path, and MUST NOT acquire destructive-operation locks in the current profile. The server MUST use short-lived internal destructive-operation locks for every request in that family. The public contract includes no client-visible lock-acquire route, no lock-holder identity surface, no manual unlock route, and no server-side queueing of destructive requests. The server MUST attempt lock acquisition fail-fast and MUST NOT wait for a held lock to clear and then continue evaluating the same request. Lock acquisition MUST use canonical ascending `record_id` order across the full protected set. If any required lock is unavailable, the route MUST fail immediately with `409`, `error.code = record_locked`, and `error.retryable = true`. Only after the full protected set is acquired MAY the server re-read authoritative current state and evaluate `row_version_conflict`, restore eligibility such as `record_not_deleted`, `rollback_precondition_failed`, or `merge_precondition_failed`. Locks MUST be released on commit, rollback, or request termination. For restore, the protected set is exactly the target `record_id`. For rollback, the protected set is every first-class `record_id` whose authoritative state would be mutated if the selected rollback target were applied against current authoritative state. For merge, the protected set is the survivor record, the loser record, and every additional first-class `record_id` whose authoritative state the merge transaction mutates directly through repointing or deterministic recreation.
 Profiles: base
 Verified by: AC-182, AC-187, AC-215, AC-216, AC-217, AC-218, AC-231, AC-353
 
@@ -1265,27 +1784,51 @@ Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
 **REQ-01-142**
-`query_json` MUST be normalized against the owning `view_schema_id` and encode saved-view sort, filter, and grouping state using stable `field_key` values, ordered `sort[]`, ordered `filters[]`, optional `group_by`, and normalized scalar values. It MUST NOT use visible tab labels, visible column labels, presentation-only group-header text, or other display-only identifiers. Persisted `query_json.sort` MUST always be present and MUST use `[]` as the only canonical stored representation of no user sort override. Persisted `query_json.group_by` MUST be omitted when grouping is inactive and MUST NOT be serialized as JSON `null`. Persisted `query_json.sort` MUST store only the normalized user sort override list rather than the effective default-extended sort tuple. `query_json.filters[]` MUST use the exact filter predicate wire shape defined in §3.3.4.1. Persisted normalization MUST preserve the operator-specific `arg` object, normalized scalar values, and canonical `filters[]` ordering by `field_key asc`.
+`query_json` MUST store only persisted saved-view query state and MUST use the closed top-level grammar `{ "sort": [...], "filters": [...], "group_by": "..." }`, where `group_by` is optional and MUST be omitted when grouping is inactive. Persisted `sort` and `filters` MUST always be present arrays. `[]` is the only canonical persisted representation of no user sort override or no filters. Persisted `group_by` MUST be omitted when grouping is inactive and MUST NOT be serialized as JSON `null`. No other top-level members are allowed. Each `sort[]` entry MUST use the exact shape defined in §3.3.4 and preserve declared order. Each `filters[]` entry MUST use the exact filter predicate wire shape defined in §3.3.4.1, persist the canonical normalized `arg` form defined there, and persist canonical `filters[]` ordering by `field_key asc`. Duplicate normalized `field_key` entries in either `sort[]` or `filters[]` are invalid. `sort[].field_key` MUST belong to the owning schema's `sort_fields`. `filters[].field_key` MUST belong to the union of the owning schema's `filter_fields` and `synthetic_filter_predicates[].field_key`. `group_by` MUST belong to the owning schema's `grouping_fields`. `record_id` and `row_version` MUST NOT appear anywhere in `query_json`. `query_json` MUST NOT use visible tab labels, visible column labels, presentation-only group-header text, table names, or storage-specific identifiers. Persisted `query_json.sort` MUST store only the normalized user sort override list rather than the effective default-extended sort tuple.
 Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231, AC-360
 
 **REQ-01-143**
-`layout_json` MAY encode presentation concerns such as column order, hidden fields, widths, inspector openness, and equivalent client layout state. `layout_json` MUST NOT be the authority for `saved_view_id`, `incident_id`, `view_schema_id`, `scope`, ownership, authorization, or startup/default surface selection.
+`layout_json` MUST store only shared portable layout state and MUST use the closed versioned grammar:
+
+```json
+{
+  "layout_schema_id": "cartulary.layout.v1",
+  "column_order": ["timeline.occurred_at", "timeline.summary"],
+  "hidden_field_keys": ["timeline.details"],
+  "column_widths": [
+    { "field_key": "timeline.summary", "width_px": 420 }
+  ]
+}
+```
+
+For `layout_json`:
+
+- `layout_schema_id` MUST be present and MUST equal `cartulary.layout.v1`,
+- `column_order` MUST be present and MUST be a full permutation of the active schema's non-technical `fields[].field_key` values, with each key appearing exactly once,
+- `hidden_field_keys` MUST be present, MUST be unique, MUST use canonical ascending order, and MUST be a subset of `column_order`,
+- `column_widths` MUST be present and MUST be a unique sparse list ordered by `field_key asc`,
+- each `column_widths[]` entry MUST use exactly `field_key` and `width_px`,
+- `width_px` MUST be an integer in the inclusive range `40..4096`,
+- `record_id` and `row_version` MUST NOT appear in `column_order`, `hidden_field_keys`, or `column_widths`,
+- unknown top-level members and unknown nested members are invalid,
+- `layout_json` MUST NOT store selection, scroll position, focused cell, transient popover state, open inspector state, preview state, presence, or other per-session or per-device client state,
+- `layout_json` MUST NOT be the authority for `saved_view_id`, `incident_id`, `view_schema_id`, `scope`, ownership, authorization, or startup/default surface selection.
 Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
 **REQ-01-144**
-`GET /api/v1/incidents/{incident_id}/saved-views` MUST return only the saved-view resources visible to the caller, MUST use the common success envelope with `data.saved_views[]` plus `meta.paging`, MUST order results by `updated_at desc, saved_view_id asc`, and MUST accept only `limit` and `cursor_token` under §3.3.7. This route is authoritative only for saved-view resources. Required base-profile surfaces in the authoritative `view_schema` registry are not discovered by this route unless a distinct saved-view object also exists for them. Pagination failures on this route MUST fail with `400`, `error.code=invalid_pagination_request`, and `error.details.reason_code` from the `invalid_pagination_request` registry in §3.3.6.2.
+`GET /api/v1/incidents/{incident_id}/saved-views` MUST return only the saved-view resources visible to the caller, MUST use the common success envelope with `data.saved_views[]` plus `meta.paging`, MUST order results by `updated_at desc, saved_view_id asc`, and MUST accept only `limit` and `cursor_token` under §3.3.7. This route is authoritative only for saved-view resources. Required base-profile surfaces in the authoritative `view_schema` registry are not discovered by this route unless a distinct saved-view object also exists for them. For clarity, absence of `cartulary.view.task_requests.v1` or `cartulary.view.decisions.v1` from this route MUST NOT be interpreted as absence of the required base surfaces themselves; those surfaces remain discoverable through the authoritative `view_schema` registry and directly addressable by `sheet_ref.kind='view_schema'`. Pagination failures on this route MUST fail with `400`, `error.code=invalid_pagination_request`, and `error.details.reason_code` from the `invalid_pagination_request` registry in §3.3.6.2.
 Profiles: base
 Verified by: AC-127, AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
 **REQ-01-145**
-`POST /api/v1/incidents/{incident_id}/saved-views` MUST accept a JSON object containing required `view_schema_id`, required `display_name`, required `query_json`, optional `layout_json`, and optional `scope`. `display_name` MUST be non-null, MUST satisfy `display_name_line_v1`, and MUST be compared after that normalization for create-time idempotency and no-op detection. `query_json` MUST be non-null. If `layout_json` is omitted, the server MUST default it to `{}`. If `layout_json` is supplied, it MUST be non-null. If `scope` is omitted, the server MUST treat it as `private`. `query_json` MUST be validated and normalized using the same sort, filter, and grouping rules as `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`; within `query_json`, omission of `sort` MUST normalize to `sort=[]`, and explicit `group_by=null` is invalid. No other top-level request members are allowed. The ordinary public create route MUST reject `scope='system'`, any supplied `null` for `display_name`, `query_json`, `layout_json`, or `scope`, and any unknown top-level member with `400` and `error.code = invalid_mutation_payload`.
+`POST /api/v1/incidents/{incident_id}/saved-views` MUST accept a JSON object containing required `view_schema_id`, required `display_name`, required `query_json`, optional `layout_json`, and optional `scope`. `display_name` MUST be non-null, MUST satisfy `display_name_line_v1`, and MUST be compared after that normalization for request-time equality checks. `query_json` MUST be non-null. If `scope` is omitted, the server MUST treat it as `private`. If `layout_json` is omitted or supplied as `{}`, the server MUST normalize it to the canonical schema-derived default `cartulary.layout.v1` object for `view_schema_id`. If `layout_json` is supplied and non-empty, it MUST be non-null and MUST satisfy REQ-01-143. `query_json` MUST be validated and normalized using the same sort, filter, and grouping rules as `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`; within `query_json`, omission of `sort` MUST normalize to `sort=[]`, omission of `filters` MUST normalize to `filters=[]`, and explicit `group_by=null` is invalid. During that validation, a raw parsed `query_json.sort` length greater than `8` or a raw parsed `query_json.filters` length greater than `16` MUST fail with `400`, `error.code = invalid_mutation_payload`, `error.details.reason_code` equal to `sort_count_exceeded` or `filter_count_exceeded`, `error.details.field` equal to `query_json.sort` or `query_json.filters`, `error.details.requested_count = <raw count>`, and `error.details.max_count` equal to `8` or `16` as applicable. The server MUST NOT truncate or partially honor an oversize saved-view query array. No other top-level request members are allowed. The ordinary public create route MUST reject `scope='system'`, any supplied `null` for `display_name`, `query_json`, `layout_json`, or `scope`, any `query_json` or `layout_json` field reference not declared by the addressed `view_schema_id`, any use of `record_id` or `row_version` inside `query_json` or `layout_json`, and any unknown top-level member with `400` and `error.code = invalid_mutation_payload`. When the failure is attributable to one member path, `error.details.field` MUST identify that path, including paths such as `query_json.sort[0].field_key`, `query_json.filters[1].field_key`, and `layout_json.column_widths[0].field_key`. The created saved-view resource MUST expose the normalized `query_json` and canonical `layout_json`; persisted `layout_json` MUST NOT remain `{}` after a conformant write.
 Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231, AC-360
 
 **REQ-01-146**
-`PATCH /api/v1/incidents/{incident_id}/saved-views/{saved_view_id}` MUST accept a JSON object containing required `base_saved_view_version` plus zero or more changed mutable fields only. Mutable fields are `display_name`, `query_json`, `layout_json`, and, when permitted by scope rules, `scope`. Omission of a mutable field means unchanged. `display_name`, `query_json`, and `layout_json` MUST be non-null when supplied, and `display_name` MUST satisfy `display_name_line_v1`. When `query_json` is supplied, the server MUST validate and normalize it using the same sort, filter, and grouping rules as `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/query`; within `query_json`, omission of `sort` MUST normalize to `sort=[]`, and explicit `group_by=null` is invalid. No top-level request members other than `base_saved_view_version` and those mutable fields are allowed. It MUST reject attempted mutation of `incident_id`, `saved_view_id`, or `view_schema_id`. Unknown or forbidden top-level members MUST fail with `400` and `error.code = invalid_mutation_payload`. If the current saved-view version differs from `base_saved_view_version`, the server MUST reject the patch with an explicit conflict status rather than silently overwriting saved-view state. If the request is structurally valid but makes no material change after request-time normalization, including `display_name_line_v1` normalization, the server MUST return `200 OK` with the current saved-view resource and MUST NOT change `saved_view_version` or `updated_at`. Any materially changed successful in-place mutation MUST advance `saved_view_version` and `updated_at` exactly once.
+`PATCH /api/v1/incidents/{incident_id}/saved-views/{saved_view_id}` MUST accept a JSON object containing required `base_saved_view_version` plus zero or more changed mutable fields only. Mutable fields are `display_name`, `query_json`, `layout_json`, and, when permitted by scope rules, `scope`. Omission of a mutable field means unchanged. `display_name`, `query_json`, and `layout_json` MUST be non-null when supplied, and `display_name` MUST satisfy `display_name_line_v1`. When `query_json` is supplied, the server MUST validate and normalize it using REQ-01-142; within `query_json`, omission of `sort` MUST normalize to `sort=[]`, omission of `filters` MUST normalize to `filters=[]`, and explicit `group_by=null` is invalid. During that validation, a raw parsed `query_json.sort` length greater than `8` or a raw parsed `query_json.filters` length greater than `16` MUST fail with `400`, `error.code = invalid_mutation_payload`, `error.details.reason_code` equal to `sort_count_exceeded` or `filter_count_exceeded`, `error.details.field` equal to `query_json.sort` or `query_json.filters`, `error.details.requested_count = <raw count>`, and `error.details.max_count` equal to `8` or `16` as applicable. The server MUST NOT truncate or partially honor an oversize saved-view query array. When `layout_json` is supplied, the server MUST treat `{}` as a legacy-equivalent request for the canonical schema-derived default layout for that `view_schema_id` and otherwise MUST validate and normalize it using REQ-01-143. No top-level request members other than `base_saved_view_version` and those mutable fields are allowed. It MUST reject attempted mutation of `incident_id`, `saved_view_id`, or `view_schema_id`. Unknown or forbidden top-level members, unknown nested members in `query_json` or `layout_json`, invalid `query_json` or `layout_json` field references, any use of `record_id` or `row_version` inside `query_json` or `layout_json`, or explicit `null` for a non-null supplied mutable member MUST fail with `400` and `error.code = invalid_mutation_payload`. When the failure is attributable to one member path, `error.details.field` MUST identify that path. If the current saved-view version differs from `base_saved_view_version`, the server MUST reject the patch with an explicit conflict status rather than silently overwriting saved-view state. If the request is structurally valid but makes no material change after request-time normalization of `display_name`, `query_json`, and `layout_json`, the server MUST return `200 OK` with the current saved-view resource and MUST NOT change `saved_view_version` or `updated_at`. For saved-view no-op comparison, `query_json` and `layout_json` equality MUST be structural equality after normalization rather than textual JSON equality or JSONB byte equality. Any materially changed successful in-place mutation MUST advance `saved_view_version` and `updated_at` exactly once.
 Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231, AC-360
 
@@ -1303,7 +1846,7 @@ Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
 **REQ-01-149**
-Both workbook-preference resources MUST use the stable `sheet_ref` union defined in §3.3.10.1. When the target is the required base `comm_log`, `handoff`, `status_review`, or `lesson` surface itself, the stored `sheet_ref` MUST use the `view_schema` form with the standardized `view_schema_id`; the `saved_view` form remains valid only for a distinct saved-view object over one of those schemas.
+Both workbook-preference resources MUST use the stable `sheet_ref` union defined in §3.3.10.1. When the target is any pack-independent base-profile registry surface listed in REQ-01-307, the stored `sheet_ref` MUST use the `view_schema` form with the standardized `view_schema_id`; the `saved_view` form remains valid only for a distinct saved-view object over that schema.
 Profiles: base
 Verified by: AC-146, AC-147, AC-148, AC-149, AC-150, AC-151, AC-152, AC-153, AC-231
 
@@ -1509,6 +2052,20 @@ Verified by: AC-170, AC-171, AC-172, AC-173, AC-174, AC-211, AC-212, AC-213, AC-
 
 #### 3.3.5.4 Entity-merge contract
 
+
+**Table 3.3.5.4-A. Merge route contract**
+
+| Member or rule | Requirement |
+| --- | --- |
+| Required members | `loser_record_id`, `survivor_base_row_version`, `loser_base_row_version`, `client_txn_id` |
+| Optional members | `reason`, normalized under `reason_note_v1`; omission, explicit `null`, and normalized empty compare equal |
+| Valid target set | Different visible non-deleted records in the same incident, same `record_type`, and that `record_type` is exactly `host` or `identity` |
+| Role gate | Current incident role `reviewer` or `admin` |
+| Idempotency | `(actor_user_id, survivor_record_id, loser_record_id, client_txn_id)` |
+| Success summary | `incident_id`, `record_type`, survivor and loser ids and row versions, `change_set_id`, `merged_into_record_id`, and `merge_summary` with exact-match-class counts and carry-forward counts |
+| Algorithmic detail retained in prose | Deterministic carry-forward of exact-match classes, loser-state preservation, deduplication of repointed links and tags, and collaboration refresh behavior |
+
+
 **REQ-01-181**
 `POST /api/v1/records/{survivor_record_id}/merge` MUST initiate one explicit entity merge.
 Profiles: base
@@ -1589,13 +2146,14 @@ On success, the server MUST commit the merge in one transaction. It MUST:
 - repoint active `entity_mentions.resolved_record_id`, active `record_links`, active assessments, and active tags from loser to survivor in the same `change_set`, or otherwise tombstone and recreate them deterministically,
 - deduplicate duplicate links and tags created by repointing without losing revision history,
 - preserve raw mention text unchanged,
+- evaluate loser-side preserved host or identity identifiers using the same exact-match normalization and comparison substrate used for ordinary create-or-upsert reuse,
 - create one attributed `change_set` plus ordered mutation entries sufficient to reconstruct the pre-merge graph, post-merge graph, and merge fan-out,
 - update or invalidate affected projections before commit returns.
 Profiles: base
 Verified by: AC-023, AC-186, AC-187, AC-209, AC-231
 
 **REQ-01-192**
-In accordance with Core 02 §9, the server SHOULD copy non-conflicting aliases and seed identifiers from loser to survivor. When it does so, it MUST NOT overwrite conflicting survivor-owned values.
+In accordance with Core 02 §9, the server MUST apply the deterministic carry-forward algorithm for loser-side host or identity preserved identifiers and aliases. It MUST NOT overwrite conflicting survivor canonical values, silently drop loser-side `exact_match_reuse` values, or downgrade them to `suggestion_only` behavior.
 Profiles: base
 Verified by: AC-023, AC-186, AC-187, AC-209, AC-231
 
@@ -1609,11 +2167,24 @@ A successful response MUST return `200 OK` using the common success envelope. `d
 - `survivor_row_version`,
 - `loser_row_version`,
 - `change_set_id`,
-- `merged_into_record_id`.
+- `merged_into_record_id`,
+- `merge_summary`.
+
+`merge_summary` MUST include:
+
+- `exact_match_classes[]`,
+- `suggestion_aliases_copied_count`,
+- `suggestion_alias_duplicate_noop_count`,
+- `provenance_only_retained_count`.
+
+`exact_match_classes[]` MUST be ordered by the exact-match precedence order for the merged `record_type` in Core 02 §8.2 and MUST contain one entry for each exact-match class for that `record_type`, even when all counts are zero. Each entry MUST include:
+
+- `identifier_class`,
+- `promoted_count`,
+- `carried_count`,
+- `duplicate_noop_count`.
 Profiles: base
 Verified by: AC-023, AC-186, AC-187, AC-209, AC-231
-
-The server SHOULD also return `merge_summary` with counts for repointed mentions, repointed links, repointed assessments, repointed tags, deduplicated links, deduplicated tags, and copied aliases.
 
 **REQ-01-194**
 A successful merge MUST emit replayable collaboration events through the existing stream. The loser MUST leave ordinary active entity views using `change_kind = remove`. The survivor MUST refresh through `patch` or `invalidate`. Any dependent row whose chips, counts, or linked-record summaries change because of repointing MUST refresh through the ordinary collaboration mechanisms.
@@ -1627,6 +2198,22 @@ Verified by: AC-023, AC-186, AC-187, AC-209, AC-231
 
 
 #### 3.3.5.5 Entity-mention action contract
+
+
+**Table 3.3.5.5-A. Entity-mention action contract**
+
+| Member or rule | Requirement |
+| --- | --- |
+| Required members | `base_mention_row_version`, `client_txn_id`, `action` |
+| Optional members | `resolved_record_id`, `reason` |
+| Closed `action` vocabulary | `resolve_item`, `dismiss_item`, `revert_to_unresolved` |
+| `resolved_record_id` rule | Required if and only if `action='resolve_item'`; forbidden, including JSON `null`, for the other actions |
+| Role gate | Current incident role `editor`, `reviewer`, or `admin` on the source incident |
+| Idempotency | `(actor_user_id, entity_mention_id, client_txn_id)` |
+| Legal transition matrix | `resolve_item`: `unresolved` or `resolved` -> `resolved`; `dismiss_item`: `unresolved` or `resolved` -> `dismissed`; `revert_to_unresolved`: `resolved` or `dismissed` -> `unresolved` |
+| Success summary | `200 OK` with `incident_id`, `entity_mention`, `source_record`, and `change_set_id`; the source record row version advances and ordinary `record_changed` refresh applies |
+| Primary failures | `invalid_mutation_payload`, `client_txn_conflict`, `row_version_conflict`, `entity_mention_not_found`, `resolved_record_not_found`, `illegal_transition`, `record_deleted_use_restore` |
+
 
 **REQ-01-196**
 `POST /api/v1/entity-mentions/{entity_mention_id}/resolve` MUST apply one explicit action to one `entity_mentions` row.
@@ -1646,9 +2233,9 @@ Profiles: base
 Verified by: AC-019, AC-020, AC-021, AC-188, AC-189, AC-190, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
 
 **REQ-01-199**
-This route MUST be the public wire-contract owner for the inspector's explicit mention actions. The legal transition matrix in this subsection MUST also govern single-target `resolve_item`, `dismiss_item`, and `revert_to_unresolved` actions sent through `collection_actions_v1` for `timeline.host_refs` and `timeline.identity_refs`.
+This route MUST be the public wire-contract owner for the inspector's explicit mention actions. The legal transition matrix in this subsection MUST also govern single-target `resolve_item`, `dismiss_item`, and `revert_to_unresolved` actions sent through `collection_actions_v1` for `timeline.host_refs` and `timeline.identity_refs`. The base profile defines no additional standalone public mention-action route family. Workbook-surface single-target mention actions for those fields use the already enumerated `PATCH /api/v1/records/{record_id}` mutation surface and MUST NOT be inventoried or described elsewhere as separate public routes.
 Profiles: base
-Verified by: AC-019, AC-020, AC-021, AC-188, AC-189, AC-190, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
+Verified by: AC-019, AC-020, AC-021, AC-188, AC-189, AC-190, AC-201, AC-221, AC-222, AC-223, AC-224, AC-225, AC-231
 
 **REQ-01-200**
 The request MUST be a JSON object and MUST include:
@@ -1938,7 +2525,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 **REQ-01-234**
 The public API surface defined by this core MUST use the following stable `error.code` tokens for the listed conditions. A route or conformance criterion covered by this registry MUST NOT assign a second stable token to the same condition.
 Profiles: base
-Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231, AC-239, AC-240, AC-245, AC-246, AC-247, AC-249, AC-250, AC-251, AC-252, AC-253, AC-254, AC-255, AC-260, AC-261, AC-293, AC-321, AC-323, AC-324, AC-325, AC-326, AC-328, AC-340, AC-341, AC-342, AC-334, AC-335, AC-336, AC-337, AC-338, AC-339
+Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231, AC-239, AC-240, AC-245, AC-246, AC-247, AC-249, AC-250, AC-251, AC-252, AC-253, AC-254, AC-255, AC-260, AC-261, AC-293, AC-321, AC-323, AC-324, AC-325, AC-326, AC-328, AC-340, AC-341, AC-342, AC-334, AC-335, AC-336, AC-337, AC-338, AC-339, AC-371
 
 | `error.code` | Required `error.status` | Required `error.retryable` | Canonical meaning | Requirement ID | Profiles | Verified by |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1953,6 +2540,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `invalid_rollback_request` | `400` | `false` | A rollback request is malformed, uses an unknown or unsupported `target.kind`, omits the selector required for that `kind`, includes unknown request members, or supplies a selector whose JSON type does not match the declared shape. |  |  |  |
 | `invalid_auth_request` | `400` | `false` | A local-account login request is malformed, omits a required member, includes an unknown or forbidden member, supplies `null` where forbidden, uses an unsupported `second_factor.kind`, or carries an invalid TOTP assertion shape. |  |  |  |
 | `invalid_enterprise_auth_request` | `400` | `false` | An enterprise-auth discovery or initiation request is malformed, omits a required member, includes an unknown or forbidden member, supplies `null` where forbidden, or uses a `return_to` value not allowed by the current profile. |  |  |  |
+| `extension_profile_not_claimed` | `404` | `false` | The request path matches a reserved extension route family for a profile the deployment does not currently claim. `error.details` MUST include `profile_id` and `route_family`. |  |  |  |
 | `auth_provider_not_found` | `404` | `false` | The addressed enterprise-auth `provider_key` does not identify a configured enterprise-auth provider allowed by the active route. |  |  |  |
 | `auth_provider_disabled` | `409` | `false` | The addressed enterprise-auth provider exists but is not currently enabled for interactive sign-in. |  |  |  |
 | `enterprise_auth_transaction_rejected` | `409` | `false` | The current enterprise-auth callback or ACS request cannot use the bound server-side auth transaction because the transaction is missing, expired, already consumed, bound to a different provider, or no longer matches the browser binding context. `error.details.reason_code` MUST use the `enterprise_auth_transaction_rejected` registry in §3.3.6.2. |  |  |  |
@@ -1998,7 +2586,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `last_incident_admin` | `409` | `false` | The requested membership create, patch, or delete would leave the incident without any current `admin` membership. |  |  |  |
 | `merge_precondition_failed` | `409` | `false` | An entity-merge precondition other than row-version freshness failed; `error.details.reason_code` MUST use the merge-precondition registry in §3.3.6.2. | REQ-01-237 | base | AC-126, AC-187, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231 |
 
-| `invalid_import_request` | `400` | `false` | An import-session create, mapping, select, skip, or apply request is malformed, omits a required member, uses `null` where forbidden, supplies an out-of-range row reference, or includes an unknown top-level member. |  |  |  |
+| `invalid_import_request` | `400` | `false` | An import-session create, mapping, select, skip, or apply request is malformed, omits a required member, uses `null` where forbidden, supplies an out-of-range row reference, includes an unknown top-level member, or fails the shared upload-envelope contract for `POST /api/v1/import-sessions`, including unsupported framing, missing or duplicate required parts, unexpected extra parts, invalid metadata encoding or JSON, or invalid part content type. |  |  |  |
 | `import_session_not_found` | `404` | `false` | No visible current import session exists for the supplied `import_session_id`. |  |  |  |
 | `import_unit_not_found` | `404` | `false` | No visible current import unit exists for the supplied `import_unit_id` within the addressed import session. |  |  |  |
 | `import_state_conflict` | `409` | `false` | The addressed import session or unit exists, but its current durable state does not allow the requested mapping, select, skip, or apply action. |  |  |  |
@@ -2012,12 +2600,12 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `release_state_conflict` | `409` | `false` | The addressed release exists, but its current `release_state` does not allow the requested approve, publish, or invalidate action. `error.details.reason_code` MUST use the `release_state_conflict` registry in §3.3.6.2. |  |  |  |
 | `release_approval_rejected` | `409` | `false` | The addressed release exists, but the caller or current artifact tuple does not satisfy the approval requirements for the requested approval action. `error.details.reason_code` MUST use the `release_approval_rejected` registry in §3.3.6.2. |  |  |  |
 | `release_render_failed` | `409` | `false` | A release render request reached the render phase but failed closed because a required template binding or redaction rule was not satisfied. `error.details.reason_code` MUST use the `release_render_failed` registry in §3.3.6.2. |  |  |  |
-| `invalid_reference_pack_request` | `400` | `false` | A reference-pack import, activation, disable, reverify, or refresh request is malformed, omits a required member, uses `null` where forbidden, or includes an unknown top-level member. |  |  |  |
+| `invalid_reference_pack_request` | `400` | `false` | A reference-pack import, activation, disable, reverify, or refresh request is malformed, omits a required member, uses `null` where forbidden, includes an unknown top-level member, or fails the shared upload-envelope contract for `POST /api/v1/reference-packs/import`, including unsupported framing, missing or duplicate required parts, unexpected extra parts, invalid metadata encoding or JSON, or invalid part content type. |  |  |  |
 | `reference_pack_not_found` | `404` | `false` | No visible reference-pack version exists for the supplied `(pack_key, pack_version)` pair. |  |  |  |
 | `reference_pack_state_conflict` | `409` | `false` | The addressed reference-pack version exists, but its current durable state does not allow the requested disable or reverify action. `error.details.reason_code` MUST use the `reference_pack_state_conflict` registry in §3.3.6.2. |  |  |  |
 | `reference_pack_verification_failed` | `409` | `false` | Reference-pack import, refresh, or reverify failed closed because integrity, compatibility, or content-screening checks did not pass. `error.details.reason_code` MUST use the `reference_pack_verification_failed` registry in §3.3.6.2. |  |  |  |
 | `reference_pack_activation_rejected` | `409` | `false` | Activation was rejected because the addressed version is already active or is not in a verified-available condition. `error.details.reason_code` MUST use the `reference_pack_activation_rejected` registry in §3.3.6.2. |  |  |  |
-| `invalid_incident_bundle_request` | `400` | `false` | An incident-bundle export or import request is malformed, omits a required member, uses `null` where forbidden, requests unsupported partial-history or partial-blob modes, or includes an unknown top-level member. |  |  |  |
+| `invalid_incident_bundle_request` | `400` | `false` | An incident-bundle export or import request is malformed, omits a required member, uses `null` where forbidden, requests unsupported partial-history or partial-blob modes, includes an unknown top-level member, or fails the shared upload-envelope contract for `POST /api/v1/incident-bundles/import`, including unsupported framing, missing or duplicate required parts, unexpected extra parts, invalid metadata encoding or JSON, or invalid part content type. |  |  |  |
 | `incident_bundle_not_found` | `404` | `false` | No visible export descriptor exists for the supplied `bundle_id`. |  |  |  |
 | `incident_bundle_export_rejected` | `409` | `false` | Whole-incident export could not materialize a conformant bundle because required structured files or required blobs were unavailable. `error.details.reason_code` MUST use the `incident_bundle_export_rejected` registry in §3.3.6.2. |  |  |  |
 | `incident_bundle_import_rejected` | `409` | `false` | Whole-incident import failed closed because bundle-member validation, integrity validation, incident-identity collision checks, or capability checks did not pass. `error.details.reason_code` MUST use the `incident_bundle_import_rejected` registry in §3.3.6.2. |  |  |  |
@@ -2027,7 +2615,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 **REQ-01-238**
 When the public API or collaboration stream uses a structured `reason_code` family listed below, it MUST use one of the exact tokens shown. A listed `reason_code` family MUST NOT define alternate tokens for the same meaning elsewhere in the core.
 Profiles: base
-Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231, AC-239, AC-240, AC-252, AC-255, AC-260, AC-293, AC-321, AC-322, AC-323, AC-324, AC-325, AC-326, AC-327, AC-328, AC-341, AC-336, AC-337, AC-339
+Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-213, AC-214, AC-218, AC-219, AC-231, AC-239, AC-240, AC-252, AC-255, AC-260, AC-293, AC-321, AC-322, AC-323, AC-324, AC-325, AC-326, AC-327, AC-328, AC-341, AC-336, AC-337, AC-339, AC-375
 
 `invalid_incident_create` `error.details.reason_code` values:
 
@@ -2120,14 +2708,19 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `unknown_filter_field` | `field_key` is not declared filterable for the active `view_schema_id`. |
 | `operator_not_allowed` | `op` is not allowed for that field's declared filter class. |
 | `invalid_filter_operand` | `arg` is malformed, empty after normalization, contradictory, or otherwise invalid for the selected `op`. |
+| `empty_values_after_normalization` | A set-like filter operand normalizes or deduplicates to zero remaining values. |
+| `empty_full_text_after_tokenization` | A `full_text.query` normalizes and tokenizes to zero remaining query tokens. |
 | `duplicate_filter_field` | The request contains more than one normalized filter entry for the same `field_key`. |
+| `filter_count_exceeded` | The request contains more than `16` `filters[]` entries before duplicate-field rejection or operand normalization. |
 | `invalid_sort_entry` | A `sort[]` entry is not a JSON object with exactly `field_key` and `direction`, uses an invalid `direction`, or otherwise fails per-entry validation. |
 | `duplicate_sort_field` | The request contains more than one normalized `sort[]` entry for the same `field_key`. |
 | `sort_field_not_allowed` | `field_key` is not declared in the active `view_schema_id`'s `sort_fields`. |
+| `sort_count_exceeded` | The request contains more than `8` `sort[]` entries before duplicate-field rejection, per-entry normalization, or default-sort tail expansion. |
 | `invalid_group_by` | `group_by` is malformed, uses `null`, or otherwise fails scalar validation. |
 | `group_by_not_allowed` | `group_by` is not one of the grouping keys declared by the active `view_schema_id`. |
 | `invalid_limit` | The request supplies `limit` with a non-integer JSON type, a value less than `1`, a value greater than `500`, or an unsupported page-size alias such as `page`, `offset`, `block_size`, or `page_size`. |
 | `cursor_query_mismatch` | The supplied `cursor_token` does not match the current normalized view-query contract, including the effective `limit`. |
+| `cursor_snapshot_unavailable` | The supplied `cursor_token` is well-formed for the current normalized view-query contract, but the server no longer has the bound snapshot required to continue that cursor chain. Restart the route without `cursor_token` to obtain current live results. |
 
 `invalid_pagination_request` `error.details.reason_code` values:
 
@@ -2135,6 +2728,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | --- | --- |
 | `invalid_limit` | The request supplies `limit` with a non-integer JSON type, a value less than `1`, a value greater than `500`, or an unsupported pagination alias such as `page`, `offset`, `block_size`, or `page_size`. |
 | `cursor_query_mismatch` | The supplied `cursor_token` does not match the current normalized route contract, including any bound route-scoping identifier, normalized sort or filter or grouping contract when present, or the effective `limit`. |
+| `cursor_snapshot_unavailable` | The supplied `cursor_token` is well-formed for the current normalized route contract, but the server no longer has the bound snapshot required to continue that cursor chain. Restart the route without `cursor_token` to obtain current live results for that route. |
 | `pagination_not_supported` | The addressed route is not declared pageable and therefore rejects `limit`, `cursor_token`, and pagination aliases. |
 
 `credential_bootstrap_rejected` `error.details.reason_code` values:
@@ -2165,6 +2759,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `unsupported_record_type` | The requested `record_type` is not mergeable through the base-profile public route. |
 | `survivor_not_mergeable` | The nominated survivor is deleted, already merged away, or otherwise not eligible to survive the merge. |
 | `loser_not_mergeable` | The nominated loser is deleted, already merged away, or otherwise not eligible to lose the merge. |
+| `carry_forward_identifier_collision` | A loser-side `exact_match_reuse` value could not be preserved on the survivor because it would create an active exact match with a third same-incident record; `error.details` MUST include `identifier_class`, `normalized_value`, and `blocking_record_id`. |
 
 `rollback_precondition_failed` `error.details.reason_code` values:
 
@@ -2206,6 +2801,13 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `missing_required_field` | A required import-route field is absent. |
 | `field_not_nullable` | The request supplies `null` for a non-nullable import-route field. |
 | `unknown_field` | The request includes a top-level member not declared by the import-route contract. |
+| `unsupported_upload_envelope` | The request is not `multipart/form-data` with a required `boundary`, or otherwise uses an unsupported upload envelope. |
+| `missing_required_part` | One of the required multipart parts `metadata` or `file` is absent. |
+| `duplicate_part` | The multipart envelope contains more than one `metadata` part or more than one `file` part. |
+| `unexpected_part` | The multipart envelope contains a part name outside the closed two-part contract. |
+| `invalid_part_content_type` | The addressed multipart part has a content type outside the allowed set for that part and route. |
+| `invalid_metadata_encoding` | The `metadata` part is not valid UTF-8, includes a BOM, or declares an unsupported JSON charset. |
+| `malformed_metadata_json` | The `metadata` part cannot be parsed as JSON or contains duplicate object member names. |
 | `invalid_row_reference` | `header_row_ref` or `data_start_row_ref` is not a positive 1-based row coordinate within `source_rect_a1`. |
 | `invalid_selected_unit_ids` | `selected_unit_ids[]` is empty, contains duplicates, or references units outside the addressed session. |
 | `unsupported_assistant_profile` | `assistant_profile` is not `phase2_workbook_import_v1` in the current profile. |
@@ -2271,6 +2873,7 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `missing_required_field` | A required release-create field is absent. |
 | `field_not_nullable` | The request supplies `null` for a non-nullable release-create field. |
 | `unknown_field` | The request includes a top-level member not declared by the release-create contract. |
+| `invalid_release_scope` | The supplied `release_scope` is not one of the current-profile release-scope tokens. |
 | `version_selector_required` | The request omitted `template_version` or `redaction_profile_version`, or otherwise attempted implicit latest-version selection. |
 
 `release_render_failed` `error.details.reason_code` values:
@@ -2304,8 +2907,18 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `missing_required_field` | A required reference-pack route field is absent. |
 | `field_not_nullable` | The request supplies `null` for a non-nullable reference-pack route field. |
 | `unknown_field` | The request includes a top-level member not declared by the reference-pack route contract. |
+| `unsupported_upload_envelope` | The request is not `multipart/form-data` with a required `boundary`, or otherwise uses an unsupported upload envelope. |
+| `missing_required_part` | One of the required multipart parts `metadata` or `file` is absent. |
+| `duplicate_part` | The multipart envelope contains more than one `metadata` part or more than one `file` part. |
+| `unexpected_part` | The multipart envelope contains a part name outside the closed two-part contract. |
+| `invalid_part_content_type` | The addressed multipart part has a content type outside the allowed set for that part and route. |
+| `invalid_metadata_encoding` | The `metadata` part is not valid UTF-8, includes a BOM, or declares an unsupported JSON charset. |
+| `malformed_metadata_json` | The `metadata` part cannot be parsed as JSON or contains duplicate object member names. |
+| `invalid_activation_policy` | `activation_policy` is present but is not the exact current-profile scalar request form. |
 | `pack_version_required` | The requested action requires an exact `pack_version` rather than implicit latest-version selection. |
 | `auto_activation_not_supported` | The request attempted auto-activation instead of the staged-only current-profile import contract. |
+| `invalid_pack_keys` | `pack_keys[]` is not an array of exact visible `pack_key` strings, or it contains one or more unknown, non-visible, or non-string members. |
+| `empty_pack_keys` | `pack_keys[]` is present and empty. |
 
 `reference_pack_verification_failed` `error.details.reason_code` values:
 
@@ -2345,6 +2958,16 @@ Verified by: AC-126, AC-203, AC-204, AC-205, AC-206, AC-207, AC-208, AC-211, AC-
 | `missing_required_field` | A required incident-bundle route field is absent. |
 | `field_not_nullable` | The request supplies `null` for a non-nullable incident-bundle route field. |
 | `unknown_field` | The request includes a top-level member not declared by the incident-bundle route contract. |
+| `unsupported_upload_envelope` | The request is not `multipart/form-data` with a required `boundary`, or otherwise uses an unsupported upload envelope. |
+| `missing_required_part` | One of the required multipart parts `metadata` or `file` is absent. |
+| `duplicate_part` | The multipart envelope contains more than one `metadata` part or more than one `file` part. |
+| `unexpected_part` | The multipart envelope contains a part name outside the closed two-part contract. |
+| `invalid_part_content_type` | The addressed multipart part has a content type outside the allowed set for that part and route. |
+| `invalid_metadata_encoding` | The `metadata` part is not valid UTF-8, includes a BOM, or declares an unsupported JSON charset. |
+| `malformed_metadata_json` | The `metadata` part cannot be parsed as JSON or contains duplicate object member names. |
+| `invalid_reference_pack_mode` | The supplied `reference_pack_mode` is not one of the current-profile incident-bundle export tokens. |
+| `invalid_optional_sections` | `optional_sections[]` is not an array of current-profile optional-section tokens, or it contains one or more unknown or non-string members. |
+| `invalid_required_capabilities` | `required_capabilities[]` is not an array of current-profile capability tokens, or it contains one or more unknown or non-string members. |
 | `history_mode_not_supported` | The request attempted to set `history_mode` to anything other than the fixed current-profile `full` behavior. |
 | `blob_mode_not_supported` | The request attempted to set `blob_mode` to anything other than the fixed current-profile `full` behavior. |
 
@@ -2388,6 +3011,48 @@ The envelope for paged responses MUST include `meta.paging.limit`, `meta.paging.
 Profiles: base
 Verified by: AC-116, AC-127, AC-151, AC-171, AC-175, AC-178, AC-215, AC-231, AC-238, AC-239, AC-241, AC-242
 
+**REQ-01-554**
+The current profile defines exactly one cursor-continuation mode: `snapshot_stable`. For any pageable route, page 2 and every later page in the same cursor chain MUST mean the next slice of the same result-set snapshot established by the first successful request in that chain without `cursor_token`. That first successful request MUST establish one opaque snapshot bound to the contract in REQ-01-241 plus one server-chosen snapshot anchor. Every `meta.paging.next_cursor` derived from that response MUST continue against that same snapshot anchor until the chain terminates or continuation fails under REQ-01-559. Under the same `cursor_token` contract, the server MUST NOT silently re-run continuation against live current state and MUST NOT silently switch to invalidate-on-change semantics.
+Profiles: base
+Verified by: AC-231, AC-372, AC-373, AC-374, AC-375
+
+**REQ-01-555**
+For one cursor chain, result membership, row ordering, and grouping membership MUST be fixed at snapshot creation time. Later inserts, deletes, restores, sort-key edits, grouping-key edits, filter-relevant edits, or equivalent committed mutations that would change live current results MUST NOT change the meaning of any later page in that chain. The current profile requires these observable outcomes:
+
+| Intervening committed change after page 1 | Continuation with `meta.paging.next_cursor` from the existing chain | Fresh request without `cursor_token` |
+| --- | --- | --- |
+| Matching insert or restore of a row that was absent from the snapshot | MUST NOT appear in the existing chain | MUST reflect the row if the live current route contract matches it |
+| Delete of a row that was present in the snapshot | MUST preserve the row's membership and original snapshot position in the existing chain | MUST reflect current live visibility |
+| Sort-, group-, or filter-relevant edit of a row that was present in the snapshot | MUST preserve the row's original snapshot order and grouping membership in the existing chain | MUST reflect current live order and grouping |
+
+Profiles: base
+Verified by: AC-231, AC-372, AC-373, AC-374
+
+**REQ-01-556**
+Across one complete cursor chain, each row that belongs to the bound snapshot and matches the bound route contract MUST appear at most once and MUST appear in snapshot order. A row absent from that snapshot MUST NOT appear in any later page of that chain. A conformant continuation therefore MUST NOT silently skip a snapshot row because of an intervening change and MUST NOT surface the same snapshot row twice.
+Profiles: base
+Verified by: AC-231, AC-372, AC-373
+
+**REQ-01-557**
+When a pageable route returns full row objects or equivalent current-row payload, the serialized row state, including `row_version` when present, MUST reflect authoritative state as of the bound snapshot rather than fetch-time live state. A row that later becomes deleted, restored, regrouped, re-sorted, or otherwise edited still continues with its snapshot-state payload when it is reached by that chain. Reading a row through a snapshot does not reserve later write success; ordinary later writes still use current live optimistic-concurrency and authorization rules.
+Profiles: base
+Verified by: AC-231, AC-373, AC-374
+
+**REQ-01-558**
+Live collaboration and cursor continuation are intentionally decoupled. Replayable `record_changed` messages, `invalidate`, `remove`, presence updates, and other live collaboration events continue to report current live state. They MUST NOT rewrite the meaning of an already-issued cursor and MUST NOT silently splice fresh live rows into an existing cursor chain. A caller that wants current live membership, current live ordering, or current live field values after intervening change MUST start a fresh pageable request without `cursor_token`.
+Profiles: base
+Verified by: AC-231, AC-374
+
+**REQ-01-559**
+The server MAY discard snapshot runtime state, but a snapshot-bound cursor chain MUST remain reusable for at least `10 minutes` of inactivity measured from initial snapshot issuance or the most recent successful continuation in that same chain. The deployment MUST NOT define a public or deployment-configurable override that reduces this minimum reuse window. For this paragraph, a continuation cursor is `otherwise valid` only when the caller's current session and route authorization still validate, the cursor is syntactically well-formed, the route-scoping identifiers still match the issuing chain, and the bound normalized query contract, including effective `sort`, `filters`, `group_by`, and `limit`, still matches that chain. In this failure mode, only the server-held snapshot runtime state is unavailable; the failure does not itself mutate incident data, cursor syntax, or route binding. When a continuation cursor is otherwise valid but the bound snapshot is no longer available, the server MUST fail closed rather than silently re-running live. View-query routes MUST fail with `400`, `error.code='invalid_view_query'`, and `error.details.reason_code='cursor_snapshot_unavailable'`. Other pageable public routes MUST fail with `400`, `error.code='invalid_pagination_request'`, and `error.details.reason_code='cursor_snapshot_unavailable'`. Authorization and session validity still re-derive at continuation time; a cursor does not preserve access after session expiry, revocation, or loss of route visibility.
+Profiles: base
+Verified by: AC-231, AC-375
+
+**REQ-01-560**
+Alternative continuation models such as live re-evaluation, duplicate-suppressed live pagination, or invalidate-on-change pagination are out of scope for the current profile. A later profile or major-version surface MAY define such a model only through a new explicit contract such as a new route family, a new major-version root, or a clearly opt-in request member. Implementations claiming the current profile MUST NOT vary continuation semantics behind the same `cursor_token` contract.
+Profiles: base
+Verified by: AC-231, AC-372, AC-373, AC-374, AC-375
+
 #### 3.3.8 Evidence and blob routes
 
 **REQ-01-243**
@@ -2419,7 +3084,7 @@ When finalization targets an existing evidence record through `POST /api/v1/evid
 
 Attach idempotency for this route MUST be keyed by `(actor_user_id, record_id, client_txn_id)`. Normalized request comparison for this route MUST include exact `object_blob_id` and exact `base_row_version`. Because the base profile defines no nullable request members for this route, omission-versus-`null` equivalence does not apply. A first-time successful attach MUST return `200 OK`. If the same authenticated actor replays the same normalized attach request with the same key, the server MUST return `200 OK` with the original committed attach result and MUST create no second attach or replacement transition. If the same actor reuses that key with a different normalized attach request, the server MUST fail with `409` and `error.code = client_txn_conflict`. If the current evidence-row version differs from `base_row_version`, the route MUST fail with `409` and `error.code = row_version_conflict`.
 
-Fresh attach requests with a new `client_txn_id` MUST still enforce the blob and evidence lifecycle bridge owned by Core 02 §13 and Core 03 §8. A pending, failed, missing, incident-mismatched, or otherwise non-attachable blob MUST fail closed rather than partially mutating evidence state. A successful attach response MUST use the common success envelope and return the authoritative evidence-refresh payload needed to repaint the visible row, including at minimum `record_id`, `incident_id`, `row_version`, `object_blob_id`, `evidence_lifecycle_state`, `upload_state`, and `change_set_id`.
+Fresh attach requests with a new `client_txn_id` MUST still enforce the blob and evidence lifecycle bridge owned by Core 02 §13 and Core 03 §8. A pending, failed, missing, incident-mismatched, or otherwise non-attachable blob MUST fail closed rather than partially mutating evidence state. A successful attach response MUST use the common success envelope and return `data.view_schema_id='cartulary.view.evidence.v1'`, `data.change_set_id`, `data.object_blob_id`, and `data.row`, where `data.row` is exactly `view_row_v1` for the addressed evidence row. Dependent Timeline, Host, Identity, or other rows affected by that attach MUST refresh only through ordinary replayable `record_changed` `patch` or `invalidate` messages rather than extra inline row payloads on this route.
 Profiles: base
 Verified by: AC-015, AC-016, AC-102, AC-103, AC-128, AC-154, AC-155, AC-231, AC-321
 
@@ -2591,7 +3256,7 @@ or
 ```
 
 **REQ-01-262**
-When `sheet_ref.kind = view_schema`, `sheet_ref.id` MUST carry the `view_schema_id`. When `sheet_ref.kind = saved_view`, `sheet_ref.id` MUST carry the `saved_view_id`. For the required base coordination surfaces `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`, `sheet_ref.kind = saved_view` always refers to a distinct saved-view object over that schema and MUST NOT be used as the canonical public identity of the required base surface itself. `field_key` MUST be present only when the client is focused on a concrete writable field and `mode = editing`.
+When `sheet_ref.kind = view_schema`, `sheet_ref.id` MUST carry the `view_schema_id`. When `sheet_ref.kind = saved_view`, `sheet_ref.id` MUST carry the `saved_view_id`. For any pack-independent base-profile registry surface listed in REQ-01-307, `sheet_ref.kind = saved_view` always refers to a distinct saved-view object over that schema and MUST NOT be used as the canonical public identity of the required base surface itself. `field_key` MUST be present only when the client is focused on a concrete writable field and `mode = editing`.
 Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231
 
@@ -2616,7 +3281,7 @@ Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231
 
 **REQ-01-265**
-`presence_snapshot.payload.presences[]` MUST contain zero or more current presence records for the subscribed incident. Each presence record MUST include `connection_id`, `user_id`, `display_name`, `sheet_ref`, `mode`, `observed_at`, and `expires_at`, and MAY include `record_id` and `field_key`. At most one current presence record MAY exist per `connection_id` within one incident.
+`presence_snapshot.payload.presences[]` MUST always be present. It MAY be empty. It MUST contain zero or more current presence records for the subscribed incident after expired presence records are pruned. Each presence record MUST include `connection_id`, `user_id`, `display_name`, `sheet_ref`, `mode`, `observed_at`, and `expires_at`, and MAY include `record_id` and `field_key`. `presence_snapshot.payload.presences[]` is a canonical keyed collection keyed by exact `connection_id`; it is not a recency list and not a display-order list. Within one incident, duplicate current `connection_id` values are forbidden on the wire. The server MUST serialize `presence_snapshot.payload.presences[]` in ascending lexicographic order of the exact `connection_id` string, with no locale-sensitive collation, no case folding, and no additional normalization. Array position in `presence_snapshot.payload.presences[]` has no client meaning. The same canonicalization MUST apply to the initial snapshot after `hello`, the fresh snapshot after `resume_ack.status='replayed'`, and the fresh snapshot after `resume_ack.status='reset_required'`.
 Profiles: base, snapshot_reporting
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231, AC-233
 
@@ -2626,9 +3291,9 @@ Profiles: base
 Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231
 
 **REQ-01-267**
-`record_changed.payload` MUST include `record_id`, `row_version`, `change_set_id`, `actor_user_id`, `changed_field_keys[]`, and `affected_views[]`. Each `affected_views[]` entry MUST include `view_schema_id` and `change_kind`. `change_kind` MUST be one of `patch`, `invalidate`, or `remove`. When `change_kind = patch`, the entry MUST include `patch_cells`, and `patch_cells` MUST be a view-shaped object containing `record_id`, `row_version`, and field-key-addressable cell values for that view. `affected_views[]` MUST be keyed by base `view_schema_id` values, not by visible tab labels, row order, or client-local filter state. For lifecycle actions such as record soft-delete or record restore, `changed_field_keys[]` MUST be present and MAY be empty. A restored row that may re-enter a view MUST surface as `invalidate`; `/ws/v1/` MUST NOT introduce a distinct insert-like `change_kind` for that case within the v1 contract.
+`record_changed.payload` MUST include `record_id`, `row_version`, `change_set_id`, `actor_user_id`, `changed_field_keys[]`, and `affected_views[]`. `changed_field_keys[]` MUST always be present. `changed_field_keys[]` is a canonical set of exact `field_key` identifiers. Duplicate `field_key` values are forbidden on the wire. The server MUST serialize `changed_field_keys[]` in ascending lexicographic order of the exact `field_key` string, with no locale-sensitive collation, no case folding, and no additional normalization. `changed_field_keys[]` MAY be empty only when the emitted `record_changed` reflects an effect on the addressed record for which no public `field_key` changed; in the current profile, soft-delete and restore are required examples. In every other current-profile case, `changed_field_keys[]` MUST be non-empty. `affected_views[]` MUST always be present and MUST NOT be empty. `affected_views[]` is a canonical keyed collection keyed by base `view_schema_id`. Duplicate `view_schema_id` values are forbidden on the wire. The server MUST serialize `affected_views[]` in ascending lexicographic order of the exact `view_schema_id` string, with no locale-sensitive collation, no case folding, and no additional normalization. Array position in `affected_views[]` has no client meaning; clients locate the relevant entry by `view_schema_id`. Each `affected_views[]` entry MUST include `view_schema_id` and `change_kind`. `change_kind` MUST be one of `patch`, `invalidate`, or `remove`. When `change_kind = patch`, the entry MUST include `patch_cells`, and `patch_cells` MUST be `view_row_patch_v1` for that view: top-level `record_id` and `row_version`, `cells` containing only changed fields, and optional `group_values` containing only changed grouping scalars. In `view_row_patch_v1`, omission of a cell or grouping scalar means unchanged, and an included cell with `{ "value": null }` means authoritative null when that field contract admits null. If the server cannot safely express the committed result for that view as `view_row_patch_v1`, it MUST use `change_kind = invalidate` rather than guessing a sparse patch. `affected_views[]` MUST be keyed by base `view_schema_id` values, not by visible tab labels, row order, or client-local filter state. For replayable `record_changed` messages, live emission and replay emission of semantically identical `changed_field_keys[]` and `affected_views[]` content MUST preserve identical canonical array order. A restored row that may re-enter a view MUST surface as `invalidate`; `/ws/v1/` MUST NOT introduce a distinct insert-like `change_kind` for that case within the v1 contract.
 Profiles: base
-Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231
+Verified by: AC-129, AC-131, AC-132, AC-133, AC-134, AC-135, AC-136, AC-156, AC-157, AC-158, AC-159, AC-160, AC-161, AC-162, AC-163, AC-231, AC-368
 
 **REQ-01-268**
 `job_progress.payload` MUST include `job_id`, `scope`, `status`, `progress`, and `updated_at`, and MAY include `cancelable`, `message`, `result_summary`, `error_summary`, or `retained_until`. `status`, `progress`, `cancelable`, `result_summary`, `error_summary`, and `retained_until` MUST use the exact semantics defined for the HTTP job resource in §3.3.9.1. When `scope.kind = incident`, `scope.incident_id` MUST match the envelope `incident_id`. Deployment-scoped jobs MUST NOT emit on the incident-scoped stream.
@@ -2703,7 +3368,7 @@ Postgres MUST store:
 - reference-pack manifests and integrity metadata,
 - snapshot metadata, canonical export-model metadata, versioned template-contract metadata, versioned redaction-profile metadata, redaction manifests, and artifact release records when the Snapshot and Reporting Extension Profile is implemented.
 Profiles: base, snapshot_reporting, reference_pack
-Verified by: AC-231, AC-233, AC-234
+Verified by: AC-231, AC-233..AC-234, AC-405
 
 ### 4.2 Object storage
 
@@ -2713,7 +3378,7 @@ S3-compatible object storage MUST store:
 - binary evidence payloads,
 - optionally, generated export artifacts when the Snapshot and Reporting Extension Profile is implemented.
 Profiles: base, snapshot_reporting
-Verified by: AC-231, AC-233
+Verified by: AC-231, AC-233, AC-405
 
 The object store implementation MAY be MinIO in flyaway or on-prem deployments. Cloud deployments MAY use native S3, GCS, or Azure Blob behind an equivalent abstraction.
 
@@ -2722,7 +3387,7 @@ The object store implementation MAY be MinIO in flyaway or on-prem deployments. 
 **REQ-01-280**
 Large binary evidence MUST NOT be stored inline in Postgres.
 Profiles: base
-Verified by: AC-231
+Verified by: AC-231, AC-405
 
 **REQ-01-281**
 A filesystem-backed blob adapter MAY be used for development or very small laboratories. It MUST NOT replace S3-compatible storage as the default production target.
@@ -2796,17 +3461,96 @@ Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-124, AC-125, AC-231
 
 **REQ-01-288**
-A base-profile implementation MUST expose the structured base-profile view-schema registry for conformance inspection through stored `view_schema` rows, the public discovery routes named in REQ-01-032, or an equivalent structured export. `GET /api/v1/view-schemas` MUST return the common success envelope with `data.view_schemas[]` plus `meta.paging`, MUST order results by `view_schema_id asc`, and MUST accept only `limit` and `cursor_token` under §3.3.7. `GET /api/v1/view-schemas/{view_schema_id}` MUST return one structured view-schema resource and MUST reject pagination members with `400`, `error.code=invalid_pagination_request`, and `error.details.reason_code=pagination_not_supported`. Conformance MUST NOT depend on scraping visible tab labels, column labels, or interactive UI behavior alone.
+A base-profile implementation MUST expose the structured base-profile view-schema registry for conformance inspection through stored `view_schema` rows, the public discovery routes named in REQ-01-032, or an equivalent structured export. `GET /api/v1/view-schemas` MUST return the common success envelope with `data.view_schemas[]` plus `meta.paging`, MUST order results by `view_schema_id asc`, and MUST accept only `limit` and `cursor_token` under §3.3.7. `GET /api/v1/view-schemas/{view_schema_id}` MUST return one structured `view_schema_resource_v1` and MUST reject pagination members with `400`, `error.code=invalid_pagination_request`, and `error.details.reason_code=pagination_not_supported`. Conformance MUST NOT depend on scraping visible tab labels, column labels, or interactive UI behavior alone.
+
+For public discovery, `view_schema_resource_v1` MUST expose the semantic workbook contract and MUST NOT require clients to infer structure from prose. The required members are:
+
+- `view_schema_id`,
+- `surface_kind`,
+- `title`,
+- `source_record_types`,
+- `technical_fields`,
+- `required_reference_pack_keys`,
+- `default_sort`,
+- `sort_fields`,
+- `filter_fields`,
+- `synthetic_filter_predicates`,
+- `grouping_fields`,
+- `fields`.
+
+For `view_schema_resource_v1`:
+
+- `surface_kind` MUST use the closed vocabulary `built_in_sheet` and `system_view`,
+- `title` MUST be a non-authoritative server-default-locale display hint,
+- `technical_fields` MUST be the exact ordered array `["record_id","row_version"]`,
+- `default_sort` MUST preserve declared tuple order,
+- `fields[]` MUST preserve the authoritative field-registry order for that `view_schema_id`,
+- `source_record_types`, `required_reference_pack_keys`, `sort_fields`, `filter_fields`, and `grouping_fields` are set-like members and MUST use canonical ascending order,
+- `filter_fields` MUST contain only keys also present in `fields[].field_key`,
+- filter-only synthetic predicate keys MUST appear only in `synthetic_filter_predicates[]`,
+- `synthetic_filter_predicates[]` MUST use canonical ascending `field_key` order,
+- clients MUST ignore unknown additive response members they do not use.
+
+Each `default_sort[]` entry MUST use exactly:
+
+```json
+{
+  "field_key": "timeline.sort_ts",
+  "direction": "asc"
+}
+```
+
+Each `synthetic_filter_predicates[]` entry MUST use exactly:
+
+```json
+{
+  "field_key": "note.full_text",
+  "label": "Full Text",
+  "filter_ops": ["full_text"]
+}
+```
+
+Each `fields[]` entry MUST be `view_field_entry_v1` and MUST contain these required members:
+
+- `field_key`,
+- `label`,
+- `default_hidden`,
+- `sortable`,
+- `header_sort_field_key`,
+- `filter_ops`,
+- `groupable`,
+- `read_kind`,
+- `write_kind`,
+- `conflict_resolution_class`,
+- `entity_binding_mode`,
+- `string_contract_id`,
+- `direct_scalar_contract_id`,
+- `direct_reference_contract_id`,
+- `clearable`,
+- `enum_values`.
+
+For `view_field_entry_v1`:
+
+- `field_key` MUST be the stable field identity from the authoritative registry,
+- `label` MUST be a non-authoritative server-default-locale display hint,
+- `default_hidden`, `sortable`, `groupable`, and `clearable` MUST be booleans,
+- `header_sort_field_key` MUST be either `null` or one key declared in `sort_fields`,
+- `filter_ops` MUST use canonical operator order from §3.3.4.1 and MUST be `[]` when the field is not filterable,
+- `read_kind` MUST use the closed vocabulary `text`, `number`, `boolean`, `timestamp`, `date`, `enum`, and `collection`,
+- `write_kind` MUST use the closed vocabulary `read_only`, `direct_value`, and `action_payload`,
+- `conflict_resolution_class` MUST be `null` when `write_kind='read_only'` and otherwise MUST use the closed vocabulary defined by Core 03 §3.3.3,
+- `entity_binding_mode`, `string_contract_id`, `direct_scalar_contract_id`, and `direct_reference_contract_id` MUST be explicit `null` when not applicable,
+- `enum_values` MUST be an explicit ordered array of tokens when the field is governed by a closed vocabulary and `null` otherwise.
 Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-124, AC-125, AC-127, AC-231
 
 **REQ-01-289**
-View behavior MUST bind to `view_schema_id`, not to the visible tab label, column header text, or any other display label.
+View behavior MUST bind to `view_schema_id`, not to the visible tab label, column header text, or any other display label. `title` and field `label` values exposed by discovery are non-authoritative display hints only. The public discovery resource MUST describe semantic workbook behavior and MUST NOT expose `base_projection`, storage-table names, internal write targets, or other storage-realization details.
 Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-124, AC-125, AC-231
 
 **REQ-01-290**
-If a visible column header or tab label changes, filter behavior, write-back behavior, and export semantics MUST remain unchanged unless the underlying `view_schema_id` changes.
+If a visible column header, field label, or tab label changes, filter behavior, write-back behavior, and export semantics MUST remain unchanged unless the underlying `view_schema_id` changes. Changing only `title` or field `label` is non-breaking. Breaking changes to field membership, field meaning, writeability, `conflict_resolution_class`, `entity_binding_mode`, `sort_fields`, `filter_fields`, `synthetic_filter_predicates`, or `grouping_fields`, or any change that would reinterpret persisted `query_json`, MUST use a new `view_schema_id`. Breaking changes to shared-layout semantics MUST use a new `layout_schema_id`.
 Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-124, AC-125, AC-231
 
@@ -2940,28 +3684,38 @@ Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231, AC-281, AC-282, AC-283, AC-284
 
 **REQ-01-308**
-These fourteen entries are the contract-backed surfaces required by §7.1 and §7.2 plus the coordination-artifact closure in REQ-01-302. For `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`, the registry entry is the canonical public workbook-surface identity; a saved-view object over the same schema is additive and non-canonical. In the current profile, no reference-pack-dependent framework overlay surface is a standardized workbook surface unless this core explicitly defines its `view_schema_id` and exhaustive contract. Implementations MUST NOT expose ATT&CK, D3FEND, VERIS, or other framework-specific pack overlays as workbook-discoverable `view_schema` resources in the base profile or the current Reference Pack Extension Profile. The only additional current-profile standardized workbook `view_schema_id` values beyond the fourteen pack-independent registry entries are, when implemented, `cartulary.view.findings.v1`, `cartulary.view.investigative_queries.v1`, and `cartulary.view.forensic_keywords.v1`. Later profiles MAY define additional standardized workbook surfaces, but they MUST NOT change the membership or semantics of the base-profile registry defined in this subsection.
+These fourteen entries are the authoritative required workbook surfaces of the base profile. Each pack-independent registry entry listed in REQ-01-307 is the canonical public workbook-surface identity for that surface. A saved-view object over the same schema is additive and non-canonical. In the current profile, no reference-pack-dependent framework overlay surface is a standardized workbook surface unless this core explicitly defines its `view_schema_id` and exhaustive contract. Implementations MUST NOT expose ATT&CK, D3FEND, VERIS, or other framework-specific pack overlays as workbook-discoverable `view_schema` resources in the base profile or the current Reference Pack Extension Profile. The only additional current-profile standardized workbook `view_schema_id` values beyond the fourteen pack-independent registry entries are, when implemented, `cartulary.view.findings.v1`, `cartulary.view.investigative_queries.v1`, and `cartulary.view.forensic_keywords.v1`. Later profiles MAY define additional standardized workbook surfaces, but they MUST NOT change the membership or semantics of the base-profile registry defined in this subsection.
 Profiles: base, reference_pack
 Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231, AC-234, AC-285, AC-286, AC-287
 
 **REQ-01-309**
-Each schema subsection below, together with the addenda in §19, is an exhaustive per-field registry for its `view_schema_id`, not an illustrative example. In particular, §7.4.2 through §7.4.4 close the base-profile interface contract for the built-in Hosts, Identities, and Evidence sheets, and §19 closes the Parties, coordination-artifact, and standardized optional artifact-backed surface contracts. Implementations MUST NOT invent alternate base-profile or standardized optional writable `field_key` strings, write targets or actions, `conflict_resolution_class` assignments, or `entity_binding_mode` values for those schemas.
+Each schema subsection below, together with the addenda in §19, is an exhaustive per-field registry for its `view_schema_id`, not an illustrative example. In particular, §7.4.2 through §7.4.4 close the base-profile interface contract for the built-in Hosts, Identities, and Evidence sheets, and §19 closes the Parties, coordination-artifact, and standardized optional artifact-backed surface contracts. Core 02 §10.4.4A MAY inventory the closed tagged-variant family for artifact-backed notes, coordination artifacts, and structured findings, but that registry is not a second owner for exhaustive field membership, create-time behavior, omitted-versus-`null` behavior, defaults, write targets or actions, or discovery metadata. These sections are also the sole authoritative source for populating public `view_schema_resource_v1`, `view_field_entry_v1`, and `synthetic_filter_predicates[]` discovery output. Implementations MUST NOT invent alternate base-profile or standardized optional writable `field_key` strings, write targets or actions, `conflict_resolution_class` assignments, `entity_binding_mode` values, or discovery metadata that conflicts with this registry. Surface `title` and field `label` values remain non-authoritative display hints only and MAY change without changing `view_schema_id` when field semantics do not change.
 Profiles: base
-Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231, AC-281, AC-282, AC-283, AC-284, AC-285, AC-286, AC-287
+Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231, AC-281, AC-282, AC-283, AC-284, AC-285, AC-286, AC-287, AC-410
 
 **REQ-01-310**
 Unless explicitly overridden below:
 
 - `required_reference_pack_keys` MUST be `[]`,
-- `record_id` and `row_version` MUST be present as hidden technical fields,
+- `record_id` and `row_version` MUST be present as hidden technical fields and are the only schema fields not serialized under `cells`,
+- full `view_row_v1.cells` membership MUST be determined solely by the active schema's exhaustive field registry,
+- every schema-declared non-technical field MUST appear in full `view_row_v1.cells` regardless of whether the field is visible, default-hidden, writable, or read-only,
+- visibility and default-hidden state affect presentation only,
+- writeability affects mutation eligibility only,
+- hidden writable fields still serialize in full rows,
+- in full `view_row_v1`, omission of a schema-declared non-technical field is invalid and `{ "value": null }` is the only authoritative null representation when the bound field admits null,
 - the ordered default sort tuple is normative and MUST end with `record_id asc`,
 - `sort_fields` MUST be an explicit whitelist of the stable `field_key` values that clients MAY use in `sort[]`; sortability MUST NOT be inferred from visibility, filterability, or writeability,
 - only keys listed in `sort_fields` are client-sortable; `record_id` remains the mandatory server tiebreak and MUST NOT appear in `sort_fields`,
 - hidden synthetic sort keys are allowed,
 - when a visible field entry omits `header_sort_field_key`, column-header sort uses that field's own `field_key`; when `header_sort_field_key` is present, it MUST point to a key declared in `sort_fields`,
-- current-profile sort comparison is type-driven and deterministic: timestamp and date fields sort chronologically, numeric fields sort numerically, boolean fields sort `false` then `true`, enum fields sort by their declared closed-vocabulary order, and text fields sort case-insensitively after the bound field contract's normalization,
+- current-profile sort comparison is type-driven and deterministic: timestamp and date fields sort chronologically, numeric fields sort numerically, boolean fields sort `false` then `true`, enum fields sort by their declared closed-vocabulary order, and text fields sort using the shared query-time text-comparison substrate defined by REQ-01-488,
 - user-specified sorts place `null` values last in both directions,
-- filter semantics MUST be type-driven unless a schema below explicitly overrides them: enum and boolean fields use exact-match inclusion, timestamp and date fields use exact or range predicates, scalar identifier text uses case-insensitive exact or prefix matching, multi-value collections use `contains_any` and `contains_all`, and declared full-text predicates use case-insensitive token search,
+- `filter_fields` MUST list only schema-declared non-technical field keys from the exhaustive field registry; filter-only synthetic predicate keys are declared separately and MUST NOT appear in `fields[]`,
+- filter semantics MUST be type-driven unless a schema below explicitly overrides them: enum and boolean fields use exact-match inclusion, timestamp and date fields use exact or range predicates, scalar identifier text uses exact or prefix matching on the shared query-time text-comparison substrate defined by REQ-01-488, multi-value collections use `contains_any` and `contains_all`, and declared full-text predicates use the exact-token `full_text` contract from §3.3.4.1 on that same substrate,
+- for public discovery, `default_hidden` MUST equal membership in the schema's default-hidden field set, `sortable` MUST equal membership in `sort_fields`, `groupable` MUST equal membership in `grouping_fields`, `filter_ops` MUST equal the field's allowed operator set under this registry and §3.3.4.1, and `write_kind` MUST be `direct_value` for a declared write target, `action_payload` for a declared write action, and `read_only` otherwise,
+- for public discovery, `read_kind` MUST be `collection` for `collection_value_v1` fields, `timestamp` or `date` for temporal scalars, `boolean` for booleans, `number` for numeric scalars, `enum` for closed-vocabulary scalars with `enum_values` in declared token order, and `text` otherwise,
+- the canonical schema-derived default layout object MUST use `layout_schema_id='cartulary.layout.v1'`, `column_order` equal to the authoritative field-registry order of every schema-declared non-technical field, `hidden_field_keys` equal to the schema's default-hidden non-technical fields in canonical ascending order, and `column_widths=[]`,
 - every writable field entry MUST declare `field_key`, read model, write target or write action, and `conflict_resolution_class`,
 - every entity-bearing writable field entry MUST declare `entity_binding_mode`,
 - every human-authored writable string field entry, and every writable string-bearing action member explicitly closed by §18, MUST declare `string_contract_id`,
@@ -2975,7 +3729,7 @@ Unless explicitly overridden below:
 - fields not declared writable are read-only,
 - per-user hide/show or reordering MAY change presentation but MUST NOT change field identity, filter semantics, or write-back semantics.
 Profiles: base, reference_pack
-Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-231, AC-234, AC-281, AC-282, AC-283, AC-284, AC-285, AC-286, AC-287, AC-300, AC-301, AC-302, AC-303, AC-362, AC-363, AC-365
+Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-184, AC-185, AC-231, AC-234, AC-281, AC-282, AC-283, AC-284, AC-285, AC-286, AC-287, AC-300, AC-301, AC-302, AC-303, AC-362, AC-363, AC-365, AC-366, AC-367, AC-368
 
 **REQ-01-311**
 Base-profile relationship mutations surfaced by these view contracts or their adjacent inspector or row-context actions MUST follow these routing rules:
@@ -2997,6 +3751,11 @@ Base-profile relationship mutations surfaced by these view contracts or their ad
 Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-125, AC-196, AC-231, AC-281, AC-282, AC-283, AC-284, AC-331, AC-332
 
+**REQ-01-569**
+The current profile defines no client-writable `confidence` member on any relationship mutation route, field action payload, or adjacent inspector or row-context relationship action. A request that supplies `confidence` for a relationship mutation MUST fail with `400` and `error.code = invalid_mutation_payload`. The server MUST NOT ignore, coerce, or persist that member.
+Profiles: base
+Verified by: AC-396
+
 #### 7.4.1 `cartulary.view.timeline.v1`
 
 **REQ-01-312**
@@ -3015,8 +3774,8 @@ Verified by: AC-116, AC-117, AC-118, AC-119, AC-120, AC-121, AC-122, AC-124, AC-
   - `timeline.summary`: read `summary`; write target `timeline_events.summary`; `conflict_resolution_class=text_compare_merge`
   - `timeline.details`: read `details`; write target `timeline_events.details`; `conflict_resolution_class=text_compare_merge`
   - `timeline.source_text`: read `source_text`; write target `timeline_events.source_text`; `conflict_resolution_class=text_compare_merge`
-  - `timeline.host_refs`: read resolved host chips plus unresolved host mentions; write action insert, update, or dismiss `entity_mentions` and resolved host `record_links` under `entity_binding_mode=mention_origin`; `conflict_resolution_class=collection_review`
-  - `timeline.identity_refs`: read resolved identity chips plus unresolved identity mentions; write action insert, update, or dismiss `entity_mentions` and resolved identity `record_links` under `entity_binding_mode=mention_origin`; `conflict_resolution_class=collection_review`
+  - `timeline.host_refs`: read resolved host chips plus unresolved host mentions; write action insert, update, or dismiss `entity_mentions` and resolved host `record_links` under `entity_binding_mode=mention_origin`; `conflict_resolution_class=collection_review`; `add_token.raw_text` and `add_resolved_ref.raw_text` use `string_contract_id=mention_token_text_v1`
+  - `timeline.identity_refs`: read resolved identity chips plus unresolved identity mentions; write action insert, update, or dismiss `entity_mentions` and resolved identity `record_links` under `entity_binding_mode=mention_origin`; `conflict_resolution_class=collection_review`; `add_token.raw_text` and `add_resolved_ref.raw_text` use `string_contract_id=mention_token_text_v1`
   - `timeline.tags`: read `tag_names`; write action upsert tags and `record_tags`; `conflict_resolution_class=collection_review`
 - read-only projection-backed or system-managed fields: `timeline.evidence_count`, `timeline.capture_state`, `timeline.replacement_record_id`, `timeline.edited_at`, `timeline.sort_ts`, `timeline.occurred_day`, `timeline.recorded_day`, `timeline.has_evidence`, `timeline.has_unresolved_mentions`
 - `timeline.capture_state` is the system-managed persisted workflow state defined by Core 03 §6. Clients MUST NOT supply `timeline.capture_state` as an initial writable value in `POST /api/v1/incidents/{incident_id}/views/{view_schema_id}/rows` or as a `changes[].field_key` in `PATCH /api/v1/records/{record_id}`. Any attempted direct client write to `timeline.capture_state` through create or patch MUST fail closed under §3.3.5 and §3.3.6 rather than being silently ignored. Transitions to `reviewed` and `superseded` MUST use the dedicated record-scoped action routes defined in §3.3.5, and automatic transitions to `enriched` MUST be applied server-side with the committed Timeline mutation that triggered them.
@@ -3066,16 +3825,18 @@ Verified by: AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-
 **REQ-01-315**
 `add_token` MUST use:
 Profiles: base
-Verified by: AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-231
+Verified by: AC-118, AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-231, AC-388, AC-389, AC-390, AC-391
 
 ```json
 { "op": "add_token", "raw_text": "WS-023?" }
 ```
 
+For both `timeline.host_refs` and `timeline.identity_refs`, `add_token.raw_text` MUST bind to `string_contract_id=mention_token_text_v1`.
+
 **REQ-01-316**
 `add_resolved_ref` MUST use:
 Profiles: base
-Verified by: AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-231
+Verified by: AC-118, AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-195, AC-196, AC-197, AC-198, AC-231, AC-388, AC-389, AC-390, AC-391
 
 ```json
 {
@@ -3084,6 +3845,8 @@ Verified by: AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-
   "raw_text": "WS-023"
 }
 ```
+
+For both `timeline.host_refs` and `timeline.identity_refs`, `add_resolved_ref.raw_text` MUST bind to `string_contract_id=mention_token_text_v1`.
 
 **REQ-01-317**
 `resolve_item` MUST use:
@@ -3121,6 +3884,8 @@ Verified by: AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-
   "item_ref": "entity_mention:<entity_mention_id>"
 }
 ```
+
+The current-profile action objects above are closed to the listed members and intentionally omit any client-supplied `confidence` member.
 
 **REQ-01-320**
 For these two fields:
@@ -3183,7 +3948,7 @@ Verified by: AC-119, AC-124, AC-125, AC-184, AC-191, AC-192, AC-193, AC-194, AC-
 - writable fields:
   - `host.display_name`: read the canonical host display field; write target the canonical host display field on the underlying `host` record; `entity_binding_mode=entity_origin`; `string_contract_id=display_name_line_v1`; `conflict_resolution_class=atomic_replace`
   - `host.hostname`: read `hostname`; write target the canonical hostname field on the underlying `host` record; `entity_binding_mode=entity_origin`; `conflict_resolution_class=atomic_replace`
-  - `host.aliases`: read projected alias chips; write action upsert or remove `entity_aliases`; `entity_binding_mode=entity_origin`; `conflict_resolution_class=collection_review`
+  - `host.aliases`: read projected `suggestion_only` alias chips; write action upsert or remove `suggestion_only` alias values only; `entity_binding_mode=entity_origin`; `conflict_resolution_class=collection_review`
   - `host.location`: read `location`; write target the `location` field on the underlying `host` record; `conflict_resolution_class=atomic_replace`
   - `host.os_platform`: read `os_platform`; write target the `os_platform` field on the underlying `host` record; `conflict_resolution_class=atomic_replace`
   - `host.business_owner`: read `business_owner`; write target the `business_owner` field on the underlying `host` record; `conflict_resolution_class=atomic_replace`
@@ -3221,7 +3986,8 @@ Verified by: AC-097, AC-118, AC-124, AC-125, AC-231
 ```
 
 **REQ-01-325**
-- The server MUST derive any base-profile alias classification and storage routing from `field_key`; the client MUST NOT send table names, `alias_type`, or storage-specific routing metadata.
+- `host.aliases` MUST operate only on `suggestion_only` alias values in the base profile. It MUST NOT create, remove, or retag `exact_match_reuse` or `provenance_only` values.
+- The server MUST derive any base-profile alias or reusable-identifier classification and storage routing from `field_key` and the active view contract; the client MUST NOT send table names, `alias_type`, classification flags, or storage-specific routing metadata.
 - Alias rename in the base profile MUST be expressed as `remove_alias` plus `add_alias`. The public API surface MUST NOT require in-place alias-row update semantics.
 - `alias_text` in `add_alias` MUST use `string_contract_id=alias_text_v1`.
 - Duplicate alias adds for the same canonical record and normalized `alias_text` under `alias_text_v1` MUST coalesce to one surviving alias row.
@@ -3246,7 +4012,7 @@ Verified by: AC-097, AC-118, AC-124, AC-125, AC-231
   - `identity.upn`: read `upn`; write target the canonical UPN field on the underlying `identity` record; `entity_binding_mode=entity_origin`; `conflict_resolution_class=atomic_replace`
   - `identity.email`: read `email`; write target the canonical email field on the underlying `identity` record; `entity_binding_mode=entity_origin`; `conflict_resolution_class=atomic_replace`
   - `identity.sam_account_name`: read `sam_account_name`; write target the canonical `sam_account_name` field on the underlying `identity` record; `entity_binding_mode=entity_origin`; `conflict_resolution_class=atomic_replace`
-  - `identity.aliases`: read projected alias chips; write action upsert or remove `entity_aliases`; `entity_binding_mode=entity_origin`; `conflict_resolution_class=collection_review`
+  - `identity.aliases`: read projected `suggestion_only` alias chips; write action upsert or remove `suggestion_only` alias values only; `entity_binding_mode=entity_origin`; `conflict_resolution_class=collection_review`
   - `identity.privilege_level`: read `privilege_level`; write target the `privilege_level` field on the underlying `identity` record; `conflict_resolution_class=atomic_replace`
   - `identity.mfa_state`: read `mfa_state`; write target the `mfa_state` field on the underlying `identity` record; `conflict_resolution_class=atomic_replace`
   - `identity.reset_status`: read `reset_status`; write target the `reset_status` field on the underlying `identity` record; `conflict_resolution_class=atomic_replace`
@@ -3255,7 +4021,7 @@ Profiles: base
 Verified by: AC-098, AC-118, AC-124, AC-125, AC-231
 
 **REQ-01-327**
-`identity.aliases` MUST use the same `collection_value_v1` item shape and `collection_actions_v1` action vocabulary as `host.aliases`, except the active `field_key` is `identity.aliases`.
+`identity.aliases` MUST use the same `collection_value_v1` item shape, `collection_actions_v1` action vocabulary, and `suggestion_only`-only semantics as `host.aliases`, except the active `field_key` is `identity.aliases`.
 Profiles: base
 Verified by: AC-098, AC-118, AC-124, AC-125, AC-231
 
@@ -3267,6 +4033,7 @@ Verified by: AC-098, AC-118, AC-124, AC-125, AC-231
 - base projection: `evidence_grid_projection`
 - `default_visible_fields`: `evidence.title`, `evidence.lifecycle_state`, `evidence.requested_at`, `evidence.received_at`, `evidence.storage_ref`, `evidence.blob_hash`, `evidence.collector_party_text`, `evidence.source_party_text`, `evidence.upload_state`, `evidence.linked_record_count`, `evidence.edited_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `evidence.collector_party_id`, `evidence.source_party_id`
+- these default-hidden direct-reference fields remain part of every full `view_row_v1.cells` object for this schema; default-hidden affects presentation only
 - `default_sort`: `evidence.requested_at desc`, `record_id asc`
 - `sort_fields`: `evidence.title`, `evidence.lifecycle_state`, `evidence.requested_at`, `evidence.received_at`, `evidence.storage_ref`, `evidence.blob_hash`, `evidence.collector_party_text`, `evidence.source_party_text`, `evidence.upload_state`, `evidence.linked_record_count`, `evidence.edited_at`
 - `filter_fields`: `evidence.lifecycle_state`, `evidence.upload_state`, `evidence.requested_at`, `evidence.received_at`, `evidence.collector_party_text`, `evidence.source_party_text`, `evidence.storage_ref`, `evidence.blob_hash`
@@ -3301,8 +4068,9 @@ Verified by: AC-100, AC-118, AC-124, AC-125, AC-128, AC-231, AC-278, AC-279, AC-
 - `default_hidden_fields`: `record_id`, `row_version`, `note.created_by_user_id`
 - `default_sort`: `note.updated_at desc`, `record_id asc`
 - `sort_fields`: `note.title`, `note.body`, `note.linked_record_count`, `note.updated_at`, `note.created_by_user_id`
-- `filter_fields`: `note.tags`, `note.created_by_user_id`, `note.updated_at`, `note.full_text`
-- `note.full_text` is a filter-only synthetic predicate key declared by this view schema. It applies case-insensitive token search over `note.title` and `note.body`. It is not a writable field and need not be a visible column.
+- `filter_fields`: `note.tags`, `note.created_by_user_id`, `note.updated_at`
+- `synthetic_filter_predicates`: `note.full_text`
+- `note.full_text` is a filter-only synthetic predicate key declared by this view schema. It binds to the generic `full_text` operator contract in §3.3.4.1 over the union of the normalized `note.title` and `note.body` fields. It supports only `filter_ops=[full_text]`, is not a writable field, and need not be a visible column.
 - inline create: zero-field create is forbidden
 - minimum create signal: inline create from the sheet itself MUST commit only when at least one of `note.title` or `note.body` is non-empty after create-time normalization; whitespace-only text MUST be treated as absent
 - the server MUST fill `artifact_type='note'`, timestamps, and attribution on first commit
@@ -3415,6 +4183,8 @@ Verified by: AC-018, AC-080, AC-081, AC-082, AC-083, AC-084, AC-118, AC-121, AC-
 { "op": "remove_record_ref", "item_ref": "record_ref:<linked_record_id>" }
 ```
 
+The current-profile action objects above are closed to the listed members and intentionally omit any client-supplied `confidence` member. Schemas that reuse this same collection contract inherit that same omission.
+
 **REQ-01-334**
 - The server MUST derive any base-profile `link_type` and storage routing from `field_key`; the client MUST NOT send `link_type`, table names, or storage-specific routing metadata.
 - Duplicate adds for the same patched `record_id`, `linked_record_id`, and field-derived link type MUST coalesce to one surviving logical reference binding.
@@ -3430,11 +4200,12 @@ Verified by: AC-018, AC-080, AC-081, AC-082, AC-083, AC-084, AC-118, AC-121, AC-
 #### 7.4.8 `cartulary.view.task_requests.v1`
 
 **REQ-01-336**
-- surface: contract-backed `Task Requests` system view
+- surface: required workbook-native contract-backed `Task Requests` system view with canonical public identity `cartulary.view.task_requests.v1`; any saved view over this same `view_schema_id` is a distinct saved-view object rather than the required base surface
 - source record types: `task_request`
 - base projection: `task_request_grid_projection`
 - `default_visible_fields`: `task.title`, `task.status`, `task.owner_user_id`, `task.priority`, `task.task_kind`, `task.workstream`, `task.due_at`, `task.requester_party_text`, `task.blocked_reason`, `task.completed_at`, `task.external_ticket_ref`, `task.linked_record_count`, `task.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `task.requester_party_id`, `task.closure_summary`, `task.linked_record_ids`, `task.decision_record_id`, `task.no_owner`
+- these default-hidden fields remain part of every full `view_row_v1.cells` object for this schema; default-hidden affects presentation only
 - `default_sort`: `task.updated_at desc`, `record_id asc`
 - `sort_fields`: `task.title`, `task.status`, `task.owner_user_id`, `task.priority`, `task.task_kind`, `task.workstream`, `task.due_at`, `task.requester_party_text`, `task.blocked_reason`, `task.completed_at`, `task.external_ticket_ref`, `task.linked_record_count`, `task.updated_at`, `task.no_owner`
 - `filter_fields`: `task.status`, `task.owner_user_id`, `task.priority`, `task.task_kind`, `task.workstream`, `task.due_at`, `task.requester_party_text`, `task.blocked_reason`, `task.completed_at`, `task.external_ticket_ref`, `task.no_owner`
@@ -3477,7 +4248,7 @@ Verified by: AC-085, AC-118, AC-124, AC-137, AC-138, AC-139, AC-140, AC-145, AC-
 #### 7.4.9 `cartulary.view.decisions.v1`
 
 **REQ-01-339**
-- surface: contract-backed `Decisions` system view
+- surface: required workbook-native contract-backed `Decisions` system view with canonical public identity `cartulary.view.decisions.v1`; any saved view over this same `view_schema_id` is a distinct saved-view object rather than the required base surface
 - source record types: `decision`
 - base projection: `decision_grid_projection`
 - `default_visible_fields`: `decision.summary`, `decision.status`, `decision.owner_user_id`, `decision.decision_type`, `decision.decided_at`, `decision.rationale`, `decision.support_refs`, `decision.affected_record_count`, `decision.supersedes_record_id`, `decision.updated_at`
@@ -3572,12 +4343,12 @@ Every projection row exposed to the client MUST carry:
 - the stable `record_id` of the underlying mutation target,
 - the current `row_version` required for optimistic writes.
 Profiles: base
-Verified by: AC-231
+Verified by: AC-124, AC-125, AC-231
 
 **REQ-01-350**
 The client MUST NOT infer mutation targets from row position, displayed values, group headers, or transient selection state.
 Profiles: base
-Verified by: AC-231
+Verified by: AC-013, AC-125, AC-231
 
 ### 8.3 Projection maintenance
 
@@ -3621,7 +4392,7 @@ Profiles: base
 Verified by: AC-015, AC-016, AC-017, AC-045, AC-053, AC-054, AC-100, AC-128, AC-210, AC-231
 
 **REQ-01-358**
-Projection rows for hot workbook sheets and workbook-native contract-backed system views MUST carry the scalar fields required for interactive sort, filter, grouping, selection anchoring, and evidence badges in the visible viewport. For the Timeline sheet, this MUST include at least `sort_ts`, day buckets equivalent to `timeline.occurred_day` and `timeline.recorded_day`, `capture_state`, `has_evidence`, `has_unresolved_mentions`, and `evidence_count`. For the coordination-artifact and standardized optional artifact-backed surfaces defined by REQ-01-503 through REQ-01-509 when those surfaces are present, this MUST include the projection-backed scalar or derived fields needed for `comm_log.comm_type`, `comm_log.timestamp_day`, `comm_log.next_report_day`, `comm_log.audience`, `comm_log.channel_or_meeting`, `handoff.timestamp_day`, `handoff.outgoing_owner_user_id`, `handoff.incoming_owner_user_id`, `handoff.ack_state`, `status_review.timestamp_day`, `status_review.review_owner_user_id`, `status_review.next_report_day`, `lesson.closure_state`, `lesson.owner_user_id`, `lesson.timestamp_day`, `finding.state`, `finding.owner_user_id`, `finding.confidence_band`, `investigative_query.platform`, `investigative_query.created_by_user_id`, `investigative_query.created_day`, `forensic_keyword.match_mode`, `forensic_keyword.case_sensitive`, and `forensic_keyword.created_day`.
+Projection rows for hot workbook sheets and workbook-native contract-backed system views MUST carry the scalar fields required for interactive sort, filter, grouping, selection anchoring, and evidence badges in the visible viewport. For the Timeline sheet, this MUST include at least `sort_ts`, day buckets equivalent to `timeline.occurred_day` and `timeline.recorded_day`, `capture_state`, `has_evidence`, `has_unresolved_mentions`, and `evidence_count`. For the coordination-artifact and standardized optional artifact-backed surfaces defined by REQ-01-503 through REQ-01-509 when those surfaces are present, this MUST include the projection-backed scalar or derived fields needed for `comm_log.comm_type`, `comm_log.timestamp_day`, `comm_log.next_report_day`, `comm_log.audience`, `comm_log.channel_or_meeting`, `handoff.timestamp_day`, `handoff.outgoing_owner_user_id`, `handoff.incoming_owner_user_id`, `handoff.ack_state`, `status_review.timestamp_day`, `status_review.review_owner_user_id`, `status_review.next_report_day`, `lesson.closure_state`, `lesson.owner_user_id`, `lesson.timestamp_day`, `finding.kind`, `finding.state`, `finding.owner_user_id`, `finding.confidence_band`, `investigative_query.platform`, `investigative_query.created_by_user_id`, `investigative_query.created_day`, `forensic_keyword.match_mode`, `forensic_keyword.case_sensitive`, and `forensic_keyword.created_day`.
 Profiles: base
 Verified by: AC-015, AC-016, AC-017, AC-045, AC-053, AC-054, AC-100, AC-128, AC-210, AC-231, AC-281, AC-282, AC-283, AC-284, AC-285, AC-286, AC-287
 
@@ -3805,7 +4576,7 @@ Profiles: snapshot_reporting
 Verified by: AC-057, AC-059, AC-060, AC-061, AC-062, AC-071, AC-091, AC-113, AC-114, AC-115, AC-233, AC-333
 
 **REQ-01-380**
-Direct-source text-bearing blocks first materialized from ad hoc note artifacts, `task_request` records, `decision` records, `comm_log` artifacts, `handoff` artifacts, `status_review` artifacts, and `lesson` artifacts:
+Direct-source text-bearing blocks first materialized from ad hoc note artifacts, structured finding rows where `finding.kind='hypothesis'`, `task_request` records, `decision` records, `comm_log` artifacts, `handoff` artifacts, `status_review` artifacts, and `lesson` artifacts:
 
 - MUST default to `content_class='working_material'` when first materialized into the canonical export model,
 - MUST receive that default during snapshot and export-model derivation, before template rendering,
@@ -4213,30 +4984,73 @@ Only the affected overlay labels, enrichment semantics, non-canonical analytical
 
 ### 12.1 Backup
 
-A deployable implementation SHOULD support:
+Operational backup and restore remain deployment-local recovery behavior. They are distinct from whole-incident portability.
 
-- Postgres base backup plus WAL archiving,
-- object-store bucket snapshotting or versioning.
+**REQ-01-571**
+Each successful operational backup MUST produce one retained `backup_set` bound to exactly one declared `consistency_point_at`. A coherent restore of one `backup_set` means that, after projection rebuild, the restored deployment contains all authoritative structured source rows as of that `consistency_point_at`, all required blob bytes for any blob whose authoritative state at that point requires durable object bytes, and no evidence/blob invariant violations introduced by the restore. Projections, search indexes, sessions, presigned URLs, temporary work files, client-local drafts, export artifacts, and other deployment-local caches are not part of the authoritative backup set.
+Profiles: base
+Verified by: AC-398, AC-399
 
-Equivalent backup mechanisms are permitted if they preserve restore semantics.
+**REQ-01-572**
+A `backup_set` counts as successful only when all of the following are durably captured for the same `consistency_point_at`:
+
+1. one Postgres restore artifact set or restore anchor sufficient to restore authoritative structured state to that point,
+2. one object-store restore artifact set or restore anchor sufficient to restore every required blob byte for that same point,
+3. one durable `backup_attestation` record containing at least `backup_set_id`, `consistency_point_at`, `postgres_restore_anchor`, `object_store_restore_anchor`, `created_at`, `retained_until`, `verification_state`, and `last_verified_restore_at`.
+
+At creation time, `verification_state` MUST be `unverified`. `verification_state` MUST use exactly `unverified`, `verified`, or `failed`. `last_verified_restore_at` MAY be `null` only while `verification_state='unverified'`.
+Profiles: base
+Verified by: AC-398, AC-401
+
+**REQ-01-573**
+The base profile MUST retain at least one successful retained `backup_set` whose `consistency_point_at` is no older than 24 hours, and each successful `backup_set` plus its restoreable artifacts MUST be retained for at least 30 days before disposal.
+Profiles: base
+Verified by: AC-398
+
+**REQ-01-574**
+Postgres base backup plus WAL archiving together with object-store bucket snapshotting or versioning is the RECOMMENDED realization. Another mechanism is conformant only if it produces a durable named `backup_set`, defines one declared `consistency_point_at` across Postgres and object storage, restores authoritative structured state and required blob bytes for that same point, preserves the same retention floor, passes the restore-verification contract in §12.2, and does not depend on projections as authoritative state. A live copy of the Postgres data directory without consistent snapshot semantics and a live object namespace without versioning, immutable snapshot semantics, or another independent restore anchor are not equivalent.
+Profiles: base
+Verified by: AC-398, AC-399, AC-401
 
 ### 12.2 Restore
 
+**REQ-01-575**
+A restore operation MUST select exactly one retained `backup_set` and MUST restore Postgres and object-store contents from that same `backup_set` and its declared `consistency_point_at`.
+Profiles: base
+Verified by: AC-399, AC-400
+
 **REQ-01-423**
-Restore MUST occur in this order:
+Restore MUST occur in this order for the selected `backup_set`:
 
 1. restore Postgres,
 2. restore object-store contents,
 3. rebuild projections.
 Profiles: base
-Verified by: AC-231
+Verified by: AC-399
 
 **REQ-01-424**
-Projection rebuild MUST be part of restore readiness when projection contents are not restored directly.
+Projection rebuild MUST be part of restore readiness when projection contents are not restored directly. Projection tables remain disposable caches and MUST NOT be required authoritative restore inputs.
 Profiles: base
-Verified by: AC-231
+Verified by: AC-399
+
+**REQ-01-576**
+If the selected `backup_set` is missing a required Postgres artifact, required object-store artifact, or required checksum or integrity proof for the deployment's chosen backup mechanism, restore MUST fail before the environment is exposed as ready.
+Profiles: base
+Verified by: AC-400
+
+**REQ-01-577**
+The base profile MUST be able to restore the latest successful retained `backup_set`. A deployment MAY additionally support restore of an earlier retained `backup_set` or another retained `consistency_point_at`, but any such optional capability MUST restore Postgres and object-store contents to the same retained point and satisfy the same verification contract. The current profile does not require arbitrary cross-store point-in-time restore to an operator-supplied timestamp.
+Profiles: base
+Verified by: AC-399
+
+**REQ-01-578**
+A successful retained `backup_set` MUST undergo full restore verification in an isolated environment at least every 7 days and after any change to the backup mechanism, `roots.database_storage` binding, `roots.object_storage` binding, or `roots.backup_storage` binding. A successful verification MUST restore the selected `backup_set`, rebuild projections, satisfy authoritative evidence/blob lifecycle invariants, and, when the restored set contains incident data, successfully open at least one incident and execute at least one built-in workbook query. A successful verification MUST set `verification_state='verified'` and update `last_verified_restore_at`. A failed verification MUST set `verification_state='failed'` and update `last_verified_restore_at`.
+Profiles: base
+Verified by: AC-401
 
 ### 12.3 Incident portability
+
+Operational backup and restore, `backup_set`, `backup_attestation`, restore anchors, and restore-verification state are deployment-local operational state. They are not incident-portability content.
 
 Whole-incident export/import beyond operational backup and restore belongs to the **Incident Portability Extension Profile**.
 
@@ -4249,6 +5063,11 @@ Verified by: AC-164, AC-165, AC-166, AC-167, AC-168, AC-169, AC-236
 Import into an existing incident, incident cloning with identifier remapping, and partial bundle merge semantics are out of scope for this profile. A conformant import MUST preserve the exported `incident_id`, `record_id`, `row_version`, change-set identifiers, and blob hashes.
 Profiles: incident_portability
 Verified by: AC-164, AC-165, AC-166, AC-167, AC-168, AC-169, AC-236
+
+**REQ-01-564**
+A portability bundle MUST preserve enough authoritative history substrate for the importing deployment to materialize conformant `GET /api/v1/records/{record_id}/history` results and conformant rollback behavior for imported records. Exact byte preservation of opaque `history_entry_ref` values is not part of the portability contract. The importing deployment MAY reissue `history_entry_ref` values, but once issued there they MUST be stable for the retained-history lifetime of the imported record in that deployment.
+Profiles: incident_portability
+Verified by: AC-236, AC-386
 
 #### 12.3.1 Logical bundle contract
 
@@ -4319,6 +5138,7 @@ Verified by: AC-164, AC-167, AC-236
 **REQ-01-432**
 A portability bundle MUST NOT include:
 
+- backup artifacts, `backup_attestation` records, restore anchors, restore-verification state, or other deployment-local operational recovery metadata,
 - projection tables or search indexes,
 - live presence state,
 - client-local draft queues or same-field-conflict queues,
@@ -4686,10 +5506,22 @@ If an implementation claims the Import Extension Profile, Snapshot and Reporting
 Profiles: import, snapshot_reporting, incident_portability, reference_pack
 Verified by: AC-262, AC-263, AC-264, AC-265, AC-266, AC-267, AC-268, AC-269, AC-270, AC-271, AC-272, AC-273, AC-274, AC-275, AC-276
 
+Contract tables. The tables in §17 are the compact owner-local route-family contract for extension parity. They do not introduce new runtime behavior. They make route inventory, omission and default rules, idempotency scope, durable resource shape, and family-owned terminal results inspectable without requiring the reader to reconstruct them from long prose.
+
+**Table 17.1-A. Extension-family parity table**
+
+| Family | Reserved root(s) | Mutating routes require `client_txn_id` | Upload envelope | Long-running completion | Family-owned durable outputs |
+| --- | --- | --- | --- | --- | --- |
+| Import | `/api/v1/import-sessions` | Yes | Yes for `POST /api/v1/import-sessions` | Discovery and apply use the common job resource | `import_session` resource |
+| Snapshot and Reporting | `/api/v1/snapshots`, `/api/v1/releases` | Yes | No | Snapshot create and release create use the common job resource; release approve, publish, and invalidate are synchronous | `snapshot` and `release` resources |
+| Reference Pack | `/api/v1/reference-packs` | Yes | Yes for `POST /api/v1/reference-packs/import` | Import, reverify, and refresh are background jobs; activate and disable may be sync or backgrounded | `reference_pack_version` resource |
+| Incident Portability | `/api/v1/incident-bundles` | Yes | Yes for `POST /api/v1/incident-bundles/import` | Export and import use the common job resource | `incident_bundle` export descriptor on export; imported `incident` on success |
+
+
 **REQ-01-467**
 Any extension-family action in this section that performs long-running work MUST return `202 Accepted` with the common job resource defined in §3.3.9 and §3.3.9.1. The public job-status vocabulary for those routes remains exactly `queued`, `running`, `cancel_requested`, `succeeded`, `failed`, and `canceled`. Durable family resources and durable family state fields MUST remain separate from that six-token job-status vocabulary.
 Profiles: import, snapshot_reporting, incident_portability, reference_pack
-Verified by: AC-262, AC-264, AC-266, AC-267, AC-268, AC-270, AC-271, AC-273, AC-274, AC-275, AC-309
+Verified by: AC-262, AC-264, AC-266, AC-267, AC-268, AC-270, AC-271, AC-273, AC-274, AC-275, AC-309, AC-369
 
 **REQ-01-468**
 Extension-family list routes defined in this section MUST use the common cursor-pagination contract in §3.3.7. Extension-family singleton reads and extension-family action routes defined in this section MUST reject `limit`, `cursor_token`, and pagination aliases with `400`, `error.code = invalid_pagination_request`, and `error.details.reason_code = pagination_not_supported` rather than silently ignoring them.
@@ -4697,19 +5529,66 @@ Profiles: import, snapshot_reporting, incident_portability, reference_pack
 Verified by: AC-263, AC-266, AC-270, AC-274
 
 **REQ-01-469**
-For the JSON request bodies and JSON metadata parts defined in this section, omission means the exact declared default only when this section explicitly declares a default. Otherwise a required member is missing and explicit JSON `null` is invalid unless this section explicitly allows `null` for that member. Versioned identifiers such as `template_version`, `redaction_profile_version`, and `pack_version` MUST use exact values; extension routes in this section MUST NOT accept `latest`, `current`, display-label resolution, or equivalent implicit version selectors.
+For the JSON request bodies and JSON metadata parts defined in this section, omission means the exact declared default only when this section explicitly declares a default. Otherwise a required member is missing and explicit JSON `null` is invalid unless this section explicitly allows `null` for that member. Every optional member declared by a route family in this section MUST also declare its omission meaning, explicit-`null` behavior, empty-array behavior when the member is an array, duplicate handling when the member is an array, whether array order is semantic, and the canonical normalization used for idempotency comparison. When omission resolves dynamically from current incident or reference-pack state, the server MUST resolve that omission once at route admission to one concrete value or one concrete value set and MUST reuse that resolved value for idempotency comparison, replay, and any durable resource or descriptor later emitted by that route family. Versioned identifiers such as `template_version`, `redaction_profile_version`, and `pack_version` MUST use exact values; extension routes in this section MUST NOT accept `latest`, `current`, display-label resolution, or equivalent implicit version selectors.
 Profiles: import, snapshot_reporting, incident_portability, reference_pack
-Verified by: AC-262, AC-263, AC-264, AC-266, AC-267, AC-268, AC-270, AC-271, AC-273, AC-274, AC-275, AC-305, AC-308
+Verified by: AC-262, AC-263, AC-264, AC-266, AC-267, AC-268, AC-270, AC-271, AC-273, AC-274, AC-275, AC-305, AC-308, AC-369
 
 **REQ-01-470**
 Every mutating extension-family control-plane route defined in this section MUST require `client_txn_id` and MUST apply route-scoped idempotency keyed by the authenticated actor, the addressed family resource identity or incident scope, and the normalized request contract for that route.
 Profiles: import, snapshot_reporting, incident_portability, reference_pack
-Verified by: AC-262, AC-264, AC-266, AC-267, AC-268, AC-270, AC-271, AC-273, AC-275, AC-305, AC-308
+Verified by: AC-262, AC-264, AC-266, AC-267, AC-268, AC-270, AC-271, AC-273, AC-275, AC-305, AC-308, AC-369
 
 **REQ-01-471**
 Extension-family routes in this section MUST use only the family-specific `error.code` tokens and `reason_code` registries added to §3.3.6.1 and §3.3.6.2 for that family. Successful terminal `result_summary.code` values for those routes are family-owned and MUST be declared in the owning family subsection below. Canceled terminal job summaries for those routes MUST use the common `job_canceled` code from §3.3.9.1 rather than family-specific or ad hoc worker strings.
 Profiles: import, snapshot_reporting, incident_portability, reference_pack
 Verified by: AC-265, AC-269, AC-272, AC-276, AC-307, AC-310
+
+#### 17.1.1 Shared upload-envelope contract for upload-style extension routes
+
+
+**Table 17.1.1-A. Shared upload-envelope contract**
+
+| Envelope concern | Requirement |
+| --- | --- |
+| Media type | Only `multipart/form-data` with required `boundary` |
+| Required parts | Exactly one `metadata` part and exactly one `file` part; part order is non-semantic |
+| `metadata` part | `Content-Disposition: form-data; name="metadata"`; `Content-Type` is `application/json` or `application/json; charset=utf-8`; UTF-8 and BOM-free; parses as exactly one JSON object; duplicate JSON member names are rejected |
+| `file` part | `Content-Disposition: form-data; name="file"`; exactly one uploaded payload; advisory filename has no semantic effect |
+| Media-type allowlist for `file` part | Route-local and byte-validation remains authoritative; a missing or unsupported file `Content-Type` fails with the family `invalid_part_content_type` reason |
+| Early-fail behavior | Missing required part, duplicate part, unexpected part, nested multipart, malformed metadata JSON, or invalid metadata encoding fail before durable resource creation, idempotency commit, or job creation |
+| Shared `reason_code` subset | `unsupported_upload_envelope`, `missing_required_part`, `duplicate_part`, `unexpected_part`, `invalid_part_content_type`, `invalid_metadata_encoding`, `malformed_metadata_json` |
+
+
+**REQ-01-549**
+`POST /api/v1/import-sessions`, `POST /api/v1/reference-packs/import`, and `POST /api/v1/incident-bundles/import` are the only current-profile upload-style extension routes. Each of those routes MUST accept only `multipart/form-data` with a required `boundary` parameter. No alternate v1 upload framing is valid for those routes, including raw binary request bodies with metadata headers, JSON bodies containing base64 file content, JSON-only metadata bodies, or nested multipart bodies. Part order is non-semantic. Each request MUST contain exactly two leaf parts named `metadata` and `file`. `metadata` MUST appear exactly once. `file` MUST appear exactly once. Any missing required part, duplicate required part, unexpected extra part, unsupported upload envelope, or nested multipart body MUST fail closed before durable resource creation, idempotency commit, or background-job creation.
+Profiles: import, incident_portability, reference_pack
+Verified by: AC-262, AC-270, AC-275
+
+**REQ-01-550**
+For those routes, the `metadata` part MUST use `Content-Disposition: form-data; name="metadata"`. Its `Content-Type` MUST be `application/json` with no parameters, or `application/json` plus exactly one `charset` parameter whose value after ASCII case-folding is `utf-8`. Metadata bytes MUST be UTF-8 and BOM-free. The part MUST parse as exactly one JSON object. Duplicate JSON member names MUST be rejected. A syntactically valid JSON value that is not an object MUST fail through the existing family `request_not_object` path. An optional multipart `filename` parameter on the `metadata` part is ignored and has no semantic effect.
+Profiles: import, incident_portability, reference_pack
+Verified by: AC-262, AC-270, AC-275
+
+**REQ-01-551**
+For those routes, the `file` part MUST use `Content-Disposition: form-data; name="file"` and MUST carry exactly one uploaded payload. Any multipart `filename` parameter on the `file` part is advisory only. The server MAY preserve a normalized original filename where the owning route already exposes it, but multipart boundary text, part order, advisory filename, part-header order, and other non-semantic part headers or parameters MUST NOT participate in normalized idempotency comparison and MUST NOT establish file-kind trust. File-kind validation remains route-local and byte-based.
+Profiles: import, incident_portability, reference_pack
+Verified by: AC-262, AC-270, AC-275
+
+**REQ-01-552**
+For file-part media-type matching on those routes, the server MUST compare the `Content-Type` media type after ASCII case-folding of the type and subtype and after discarding any parameters. A missing `Content-Type`, or a media type outside the route-local allowlist below, MUST fail with the family's `invalid_part_content_type` reason.
+
+| Route | Allowed `file` part media types |
+| --- | --- |
+| `POST /api/v1/import-sessions` | `text/csv`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `application/octet-stream` |
+| `POST /api/v1/reference-packs/import` | `application/zip`, `application/x-tar`, `application/gzip`, `application/x-gzip`, `application/octet-stream` |
+| `POST /api/v1/incident-bundles/import` | `application/zip`, `application/x-tar`, `application/gzip`, `application/x-gzip`, `application/octet-stream` |
+Profiles: import, incident_portability, reference_pack
+Verified by: AC-262, AC-270, AC-275
+
+**REQ-01-553**
+These routes MUST use the existing family `invalid_*_request` codes for upload-envelope failures rather than introducing a new top-level error code. The shared upload-envelope `reason_code` subset is exactly `unsupported_upload_envelope`, `missing_required_part`, `duplicate_part`, `unexpected_part`, `invalid_part_content_type`, `invalid_metadata_encoding`, and `malformed_metadata_json`. When one named part is implicated, `error.details.part_name` MUST be present and MUST equal exactly `metadata` or `file`. For `invalid_part_content_type`, `error.details.received_content_type` MUST echo the received header value or JSON `null` when absent. If `part_name='metadata'`, `error.details.allowed_content_types[]` MUST equal `['application/json', 'application/json; charset=utf-8']` in that canonical order. If `part_name='file'`, `error.details.allowed_content_types[]` MUST list the exact route-local file allowlist from REQ-01-552 in canonical ascending order. After metadata JSON parsing succeeds, route-local validation continues to use existing family reasons such as `request_not_object`, `missing_required_field`, `field_not_nullable`, and `unknown_field` rather than creating upload-specific aliases.
+Profiles: import, incident_portability, reference_pack
+Verified by: AC-262, AC-265, AC-270, AC-272, AC-275, AC-276
 
 ### 17.2 Import Extension Profile public contract
 
@@ -4728,8 +5607,44 @@ The Import Extension Profile MUST expose exactly this minimum public route surfa
 Profiles: import
 Verified by: AC-262, AC-263, AC-264
 
+**Table 17.2-A. Import route inventory**
+
+| Route | Request contract summary | Success resource or body | Long-running | Primary family errors |
+| --- | --- | --- | --- | --- |
+| `POST /api/v1/import-sessions` | Shared upload envelope with metadata `incident_id`, `client_txn_id`, and optional `assistant_profile` defaulting to `phase2_workbook_import_v1` | Common job resource; terminal success emits one `import_session` ref | Yes | `invalid_import_request`, `import_source_unsupported`, `import_source_rejected` |
+| `GET /api/v1/import-sessions/{import_session_id}` | Singleton read | `import_session` resource | No | `import_session_not_found`, `invalid_pagination_request` |
+| `GET /api/v1/import-sessions/{import_session_id}/units` | List read under common paging | `{ import_units[] }` plus `meta.paging` | No | `import_session_not_found` |
+| `GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}` | Singleton read | `import_unit` resource | No | `import_session_not_found`, `import_unit_not_found` |
+| `GET /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/preview` | Singleton read | `import_preview` resource | No | `import_session_not_found`, `import_unit_not_found` |
+| `PUT /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/mapping` | JSON object with required `client_txn_id`, target mapping metadata, and exhaustive `source_columns[]` | `import_unit` resource | No | `invalid_import_request`, `import_state_conflict` |
+| `POST /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/select` | JSON object with required `client_txn_id` | `{ import_session_id, session_status, selected_unit_ids[], unit }` | No | `import_state_conflict` |
+| `POST /api/v1/import-sessions/{import_session_id}/units/{import_unit_id}/skip` | JSON object with required `client_txn_id`; optional `reason` | `{ import_session_id, session_status, selected_unit_ids[], unit }` | No | `import_state_conflict` |
+| `POST /api/v1/import-sessions/{import_session_id}/apply` | JSON object with required `client_txn_id` and optional `selected_unit_ids[]`; omitted `selected_unit_ids[]` means the session's persisted `selected_unit_ids[]` | Common job resource; terminal success emits one `import_session` ref | Yes | `invalid_import_request`, `import_apply_blocked`, `import_state_conflict` |
+
+**Table 17.2-B. Import durable resources**
+
+| Resource | Required members or properties |
+| --- | --- |
+| `import_session` | `import_session_id`, `incident_id`, `created_by_user_id`, `created_at`, `source_file_kind`, `original_filename`, `source_content_sha256`, `parser_profile_id`, `parser_version`, `assistant_profile`, `session_status`, `selected_unit_ids[]`, `blocking_diagnostics[]`, `nonblocking_warning_codes[]` |
+| `import_unit` | `import_unit_id`, `import_session_id`, `locator_kind`, `locator`, `source_rect_a1`, `header_row_ref`, `data_start_row_ref`, `inferred_row_count`, `inferred_column_count`, `warning_codes[]`, `unit_status`, optional `mapping_fingerprint`, optional `approved_mapping` |
+| `approved_mapping` | `target_view_schema_id`, `unknown_column_policy`, exhaustive ordered `source_columns[]`; `field_key = null` means intentionally unmapped |
+| `import_preview` | Top-level session and unit identity plus `columns[]`, `preview_rows[]`, and `truncated`; preview returns at most the first 50 data rows in source order |
+
+**Table 17.2-C. Import terminal results and primary error registries**
+
+| Route or condition | Required code or registry |
+| --- | --- |
+| Discovery success | `result_summary.code='import_session_discovered'` and exactly one `import_session` ref |
+| Apply success with `session_status='applied'` | `result_summary.code='import_session_applied'` and exactly one `import_session` ref |
+| Apply success with `session_status='partially_applied'` | `result_summary.code='import_session_partially_applied'` and exactly one `import_session` ref |
+| Invalid request registry | `invalid_import_request` with shared upload-envelope reasons plus the import-specific malformed-request reasons in REQ-01-475 |
+| Source unsupported registry | `import_source_unsupported` with `encrypted_or_unparseable_workbook`, `unsupported_named_range`, and `formula_cached_value_missing` |
+| Source rejected registry | `import_source_rejected` with size and archive-limit reasons owned by REQ-01-475 |
+| Apply blocked registry | `import_apply_blocked` with `overlapping_units`, `duplicate_apply_blocked`, and `unit_not_ready` |
+
+
 **REQ-01-473**
-`POST /api/v1/import-sessions` MUST accept exactly one uploaded source file plus one JSON metadata object. The source file MUST be CSV or XLSX. The metadata object MUST include required `incident_id` and required `client_txn_id`. It MAY include optional `assistant_profile`, which defaults to `phase2_workbook_import_v1` when omitted and MUST use that exact value when supplied in the current profile. Before `import_session` creation or discovery-job creation, the server MUST compare uploaded source bytes against `limits.imports.max_csv_source_bytes` for CSV and `limits.imports.max_xlsx_source_bytes` for XLSX. A CSV source that exceeds its ceiling MUST fail with `413`, `error.code='import_source_rejected'`, and `error.details.reason_code='csv_source_too_large'`. An XLSX source that exceeds its ceiling MUST fail with `413`, `error.code='import_source_rejected'`, and `error.details.reason_code='xlsx_source_too_large'`. Those rejections MUST create no durable `import_session` and no discovery job. For an accepted source, the route MUST compute `source_content_sha256` from the exact uploaded file bytes, create or replay exactly one durable `import_session`, and start discovery as a background job. Normalized request comparison for idempotency MUST include `incident_id`, normalized `assistant_profile`, and the computed `source_content_sha256` from the uploaded bytes.
+`POST /api/v1/import-sessions` MUST use the shared upload-envelope contract in §17.1.1. Within that contract, metadata MUST include required `incident_id` and required `client_txn_id`. Metadata MAY include optional `assistant_profile`, which defaults to `phase2_workbook_import_v1` when omitted and MUST use that exact value when supplied in the current profile. For this route, the `file` part media type MUST be one of the exact values declared for `POST /api/v1/import-sessions` in REQ-01-552. Those media-type values are necessary but not sufficient: the server MUST still determine CSV versus XLSX from the exact uploaded bytes and MUST enforce the route's byte-based parser and source-limit rules. Before `import_session` creation or discovery-job creation, the server MUST compare uploaded source bytes against `limits.imports.max_csv_source_bytes` for CSV and `limits.imports.max_xlsx_source_bytes` for XLSX. A CSV source that exceeds its ceiling MUST fail with `413`, `error.code='import_source_rejected'`, and `error.details.reason_code='csv_source_too_large'`. An XLSX source that exceeds its ceiling MUST fail with `413`, `error.code='import_source_rejected'`, and `error.details.reason_code='xlsx_source_too_large'`. Those rejections MUST create no durable `import_session`, no idempotency commit, and no discovery job. For an accepted source, the route MUST compute `source_content_sha256` from the exact uploaded file bytes, create or replay exactly one durable `import_session`, and start discovery as a background job. Normalized request comparison for idempotency MUST include `incident_id`, normalized `assistant_profile`, and the computed `source_content_sha256` from the exact uploaded file bytes. Multipart boundary text, part order, advisory filename, and non-semantic part headers or parameters MUST NOT affect normalized comparison.
 Profiles: import
 Verified by: AC-262, AC-323
 
@@ -4884,7 +5799,7 @@ Verified by: AC-263, AC-264, AC-324, AC-325
 **REQ-01-475**
 The import route family MUST use only `invalid_import_request`, `import_session_not_found`, `import_unit_not_found`, `import_state_conflict`, `import_source_unsupported`, `import_source_rejected`, and `import_apply_blocked`.
 
-`invalid_import_request` MUST use only:
+`invalid_import_request` MUST use only the shared upload-envelope reasons from REQ-01-553 plus:
 
 - `request_not_object`,
 - `missing_required_field`,
@@ -4929,6 +5844,47 @@ The Snapshot and Reporting Extension Profile MUST expose exactly this minimum pu
 Profiles: snapshot_reporting
 Verified by: AC-266, AC-267, AC-268
 
+**Table 17.3-A. Snapshot and release route inventory**
+
+| Route | Request contract summary | Success resource or body | Long-running | Primary family errors |
+| --- | --- | --- | --- | --- |
+| `POST /api/v1/snapshots` | JSON object with required `incident_id`, required `client_txn_id`, and optional `source_change_set_high_watermark` resolved once at job admission when omitted | Common job resource; terminal success emits one `snapshot` ref | Yes | `invalid_snapshot_request` |
+| `GET /api/v1/snapshots/{snapshot_id}` | Singleton read | `snapshot` resource | No | `snapshot_not_found`, `invalid_pagination_request` |
+| `POST /api/v1/releases` | JSON object with required snapshot, template, redaction-profile, output-kind, and `client_txn_id`; optional `release_scope` defaulting to `internal_draft` | Common job resource; terminal success emits one `release` ref | Yes | `invalid_release_request`, `release_render_failed` |
+| `GET /api/v1/releases/{release_id}` | Singleton read | `release` resource | No | `release_not_found`, `invalid_pagination_request` |
+| `POST /api/v1/releases/{release_id}/approve` | JSON object with required `client_txn_id` and optional `reason` | `200 OK` with `data.release` and `approval_progress` | No | `invalid_release_request`, `release_state_conflict`, `release_approval_rejected` |
+| `POST /api/v1/releases/{release_id}/publish` | JSON object with required `client_txn_id` and optional `reason` | `200 OK` with `data.release` | No | `invalid_release_request`, `release_state_conflict` |
+| `POST /api/v1/releases/{release_id}/invalidate` | JSON object with required `client_txn_id` and optional `reason` | `200 OK` with `data.release` | No | `invalid_release_request`, `release_state_conflict` |
+
+**Table 17.3-B. Snapshot and release durable resources**
+
+| Resource | Required members or properties |
+| --- | --- |
+| `snapshot` | `snapshot_id`, `incident_id`, `created_by_user_id`, `created_at`, `snapshot_at`, `source_change_set_high_watermark`, `derivation_version`, `export_model_sha256` |
+| `release` | `release_id`, `incident_id`, `snapshot_id`, `snapshot_at`, `source_change_set_high_watermark`, `derivation_version`, `export_model_sha256`, `template_id`, `template_version`, `redaction_profile_id`, `redaction_profile_version`, `output_kind`, `release_scope`, `output_sha256`, `release_state`, `created_by_user_id`, `created_at`, `approved_at`, `invalidated_at`, `published_at`, `invalidation_reason` |
+| `release_scope` omission rule | Omitted `release_scope` resolves to `internal_draft`; explicit `null` is invalid; omission and explicit `internal_draft` compare equal for idempotency |
+| `release_state` vocabulary | Exactly `pending_approval`, `approved`, `invalidated`, `published`; worker-phase tokens are forbidden |
+
+**Table 17.3-C. Release action summary**
+
+| Action route | Legal current state | Success summary |
+| --- | --- | --- |
+| `approve` | `pending_approval` only | Records one approval for the exact immutable release tuple; success returns `approval_progress` with `approval_recorded`, `approval_requirements_satisfied`, and `resulting_release_state` |
+| `publish` | `approved` only | Marks the release published and returns the post-commit `release` resource |
+| `invalidate` | `pending_approval`, `approved`, or `published` | Marks the release invalidated and returns the post-commit `release` resource |
+
+**Table 17.3-D. Snapshot and release terminal results and primary errors**
+
+| Route or condition | Required code or registry |
+| --- | --- |
+| Snapshot-create success | `result_summary.code='snapshot_created'` and exactly one `snapshot` ref |
+| Release-create success | `result_summary.code='release_created'` and exactly one `release` ref |
+| Invalid release request registry | `invalid_release_request` for malformed create or action bodies |
+| Release render failure registry | `release_render_failed` with `missing_redaction_rule`, `undeclared_template_binding`, and `missing_required_field` |
+| Release state conflict registry | `release_state_conflict` with `not_approved`, `already_approved`, `already_published`, and `already_invalidated` |
+| Release approval rejection registry | `release_approval_rejected` with `approval_requirements_not_met` |
+
+
 **REQ-01-477**
 `GET /api/v1/snapshots/{snapshot_id}` MUST return `data = <snapshot resource>`.
 
@@ -4949,7 +5905,7 @@ For `snapshot resource` serialization:
 - `source_change_set_high_watermark` MUST always serialize as the resolved committed boundary token, even when `POST /api/v1/snapshots` omitted it;
 - the `snapshot resource` MUST NOT include `template_id`, `template_version`, `redaction_profile_id`, `redaction_profile_version`, `release_state`, approval data, redaction manifests, or rendered-output bytes.
 
-`POST /api/v1/snapshots` MUST accept a JSON object with required `incident_id` and required `client_txn_id`. It MAY include optional `source_change_set_high_watermark`; omission means the current committed incident head. `POST /api/v1/releases` MUST accept a JSON object with required `snapshot_id`, required `template_id`, required `template_version`, required `redaction_profile_id`, required `redaction_profile_version`, required `output_kind`, and required `client_txn_id`. It MAY include optional `release_scope`, which defaults to `internal_draft` when omitted. Both routes MUST run as background jobs. The release-create route MUST fail closed if the request omits either version selector or otherwise attempts implicit latest-version resolution.
+`POST /api/v1/snapshots` MUST accept a JSON object with required `incident_id` and required `client_txn_id`. It MAY include optional `source_change_set_high_watermark`. For this member, omission means the current committed incident head resolved once at snapshot-job admission, explicit JSON `null` is invalid, and any supplied value MUST be one exact committed source-boundary token for the addressed incident. Omission and explicit transmission of that same resolved committed boundary MUST compare equal for idempotency and replay. Exact replay of a previously committed snapshot-create request MUST reuse the originally resolved committed boundary token rather than re-resolving a later incident head. `POST /api/v1/releases` MUST accept a JSON object with required `snapshot_id`, required `template_id`, required `template_version`, required `redaction_profile_id`, required `redaction_profile_version`, required `output_kind`, and required `client_txn_id`. It MAY include optional `release_scope`. For this member, omission means `internal_draft`, explicit JSON `null` is invalid, the allowed current-profile values are exactly `internal_draft`, `internal_review`, and `external_release`, and omission and explicit `internal_draft` MUST compare equal for idempotency and replay. The durable `release resource` MUST always serialize the resolved `release_scope`. Both routes MUST run as background jobs. The release-create route MUST fail closed if the request omits either version selector, attempts implicit latest-version resolution, or supplies a `release_scope` outside the closed current-profile vocabulary.
 
 For terminal common-job summaries produced by this family:
 
@@ -5016,6 +5972,42 @@ The Reference Pack Extension Profile MUST expose exactly this minimum public rou
 Profiles: reference_pack
 Verified by: AC-270, AC-271
 
+**Table 17.4-A. Reference-pack route inventory**
+
+| Route | Request contract summary | Success resource or body | Long-running | Primary family errors |
+| --- | --- | --- | --- | --- |
+| `GET /api/v1/reference-packs` | List read under common paging | `{ pack_versions[] }` plus `meta.paging` | No | `reference_pack_not_found` only when a concrete pack version is addressed elsewhere |
+| `GET /api/v1/reference-packs/{pack_key}/{pack_version}` | Singleton read | `reference_pack_version` resource | No | `reference_pack_not_found`, `invalid_pagination_request` |
+| `POST /api/v1/reference-packs/import` | Shared upload envelope with required `client_txn_id`; optional `activation_policy` defaulting to `staged_only` and auto-activation forbidden | Common job resource; terminal success emits one `reference_pack_version` ref | Yes | `invalid_reference_pack_request`, `reference_pack_verification_failed` |
+| `POST /api/v1/reference-packs/{pack_key}/{pack_version}/activate` | JSON object with required `client_txn_id` and optional `reason` | Either inline `200 OK` with `data.pack_version` or common job resource | Maybe | `reference_pack_activation_rejected`, `reference_pack_state_conflict` |
+| `POST /api/v1/reference-packs/{pack_key}/{pack_version}/disable` | JSON object with required `client_txn_id` and optional `reason` | Either inline `200 OK` with `data.pack_version` or common job resource | Maybe | `reference_pack_state_conflict` |
+| `POST /api/v1/reference-packs/{pack_key}/{pack_version}/reverify` | JSON object with required `client_txn_id` and optional `reason` | Common job resource | Yes | `reference_pack_state_conflict`, `reference_pack_verification_failed` |
+| `POST /api/v1/reference-packs/refresh` | JSON object with required `client_txn_id` and optional `pack_keys[]`; omitted `pack_keys[]` resolves once at admission to all visible imported pack keys | Common job resource | Yes | `invalid_reference_pack_request`, `reference_pack_verification_failed` |
+
+**Table 17.4-B. `reference_pack_version` resource summary**
+
+| Member group | Requirement |
+| --- | --- |
+| Identity and type | `pack_key`, `pack_kind`, `pack_version` |
+| Integrity and provenance | `manifest_sha256`, canonical `payload_sha256`, `verification_method`, `verification_result`, `source_identifier`, `signer_key_id` |
+| Lifecycle state | `condition`, derived `active`, `previous_active_version` |
+| Attribution | `imported_by_user_id`, `imported_at`, `activated_by_user_id`, `activated_at` |
+| Current-profile durable condition vocabulary | Exactly `staged`, `verified_available`, `disabled`, `failed`, `missing`; `active` is derived from the activation pointer and is not an additional stored condition token |
+
+**Table 17.4-C. Reference-pack terminal results and primary errors**
+
+| Route or condition | Required code or registry |
+| --- | --- |
+| Import success | `result_summary.code='reference_pack_imported'` and exactly one `reference_pack_version` ref |
+| Long-running activate success | `result_summary.code='reference_pack_activated'` and exactly one `reference_pack_version` ref |
+| Long-running disable success | `result_summary.code='reference_pack_disabled'` and exactly one `reference_pack_version` ref |
+| Reverify success | `result_summary.code='reference_pack_reverified'` and exactly one `reference_pack_version` ref |
+| Refresh success | `result_summary.code='reference_packs_refreshed'`; `resource_refs[]` may be empty or non-exhaustive `reference_pack_version` refs sorted by `route asc` |
+| Invalid request registry | `invalid_reference_pack_request` with shared upload-envelope reasons plus the request-shape and selector reasons in REQ-01-482 |
+| Verification failure registry | `reference_pack_verification_failed` with checksum, signature, integrity-metadata, contract, path, content, payload, and archive-limit reasons |
+| Activation rejection and state conflict registries | `reference_pack_activation_rejected` with `already_active` or `not_verified_available`; `reference_pack_state_conflict` with `already_disabled`, `not_disableable`, or `verification_pending` |
+
+
 **REQ-01-481**
 `GET /api/v1/reference-packs` MUST return the common success envelope with `data.pack_versions[]` plus `meta.paging` under §3.3.7. `GET /api/v1/reference-packs/{pack_key}/{pack_version}` MUST return `data = <reference_pack_version resource>`. Every item in `data.pack_versions[]` and every `data.pack_version` member returned by inline `200 OK` success from `activate` or `disable` MUST use the exact `reference_pack_version resource` shape defined here.
 
@@ -5054,7 +6046,7 @@ For `reference_pack_version resource` serialization:
 
 `data.pack_versions[]` MUST be exhaustive over pack versions visible to the caller for this route family and MUST sort by `pack_key asc`, then exact `pack_version asc`.
 
-`POST /api/v1/reference-packs/import` MUST accept exactly one offline pack bundle plus one JSON metadata object containing required `client_txn_id`. It MAY include optional `activation_policy`, which defaults to `staged_only` when omitted. The current profile MUST reject any request that attempts auto-activation at import time. `POST /api/v1/reference-packs/{pack_key}/{pack_version}/activate`, `disable`, and `reverify` MUST require an exact path `pack_version`; the current profile defines no implicit latest-version action route. Each of those action routes MUST accept only a JSON object with required `client_txn_id` and optional `reason`. If present, `reason` MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. For idempotency comparison, omission, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` MUST compare equal. Unknown top-level members, a non-object body, missing `client_txn_id`, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_reference_pack_request`. Route-scoped idempotency for these three action routes MUST be keyed by `(actor_user_id, pack_key, pack_version, action_route, client_txn_id)` and MUST compare the exact action route plus normalized `reason`. Exact replay of a previously committed success or accepted job MUST return the original committed result before any fresh state evaluation runs. Reuse of the same route-scoped key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. `activate` is legal only when the addressed version is in durable condition `verified_available` and is not currently active for its `pack_key`. `disable` is legal only when the addressed version is in durable condition `verified_available`; the action remains legal whether or not that version is currently active through the activation pointer. `reverify` is legal only when the addressed version is in durable condition `verified_available`, `disabled`, `failed`, or `missing`; it is not legal while still `staged`. `POST /api/v1/reference-packs/refresh` MUST accept required `client_txn_id` and optional `pack_keys[]`; omitted `pack_keys[]` means all currently imported pack keys visible to the caller. Import, reverify, and refresh MUST enforce `limits.reference_packs.max_extracted_bytes`, `limits.archives.max_compression_ratio`, and `limits.archives.max_members` before a candidate version can remain or become `verified_available` or before refresh can keep or move the active pointer. A breach of any of those limits MUST fail closed using `reference_pack_verification_failed` and the exact corresponding archive-limit `reason_code`. Import, reverify, and refresh MUST run as background jobs. `activate` and `disable` MAY complete synchronously with `200 OK` using the common success envelope and `data.pack_version` equal to the post-commit durable `reference_pack_version resource`; if either action performs long-running work, it MUST return `202 Accepted` with the common job resource. `reverify` MUST always return `202 Accepted` with the common job resource. When a reverify job reaches a terminal state, its public result or error summary MUST use the same family-specific stable codes rather than ad hoc worker strings. The durable version conditions exposed to the public surface remain exactly `staged`, `verified_available`, `disabled`, `failed`, and `missing`. `active` MUST remain a derived boolean obtained from the activation pointer for `(pack_key, pack_version)`, not an additional stored version-state token.
+`POST /api/v1/reference-packs/import` MUST use the shared upload-envelope contract in §17.1.1. Within that contract, metadata MUST contain required `client_txn_id`. It MAY include optional `activation_policy`. For this route, the `file` part media type MUST be one of the exact values declared for `POST /api/v1/reference-packs/import` in REQ-01-552. Those media-type values are envelope gates only; bundle integrity, content screening, and archive validation remain byte-based and continue to use the route's existing verification rules. Route-scoped normalized request comparison for idempotency MUST include normalized `activation_policy` and SHA-256 of the exact uploaded file bytes. Multipart boundary text, part order, advisory filename, and non-semantic part headers or parameters MUST NOT affect normalized comparison. For this member, omission means `staged_only`, explicit JSON `null` is invalid, omission and explicit `staged_only` MUST compare equal for idempotency and replay, and the only accepted current-profile non-null token is `staged_only`. The current profile MUST reject any request that attempts auto-activation at import time. A non-null string token other than `staged_only` MUST fail with `400`, `error.code = invalid_reference_pack_request`, and `error.details.reason_code = auto_activation_not_supported`; any other malformed non-null form for `activation_policy` MUST fail with `reason_code = invalid_activation_policy`. `POST /api/v1/reference-packs/{pack_key}/{pack_version}/activate`, `disable`, and `reverify` MUST require an exact path `pack_version`; the current profile defines no implicit latest-version action route. Each of those action routes MUST accept only a JSON object with required `client_txn_id` and optional `reason`. If present, `reason` MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. For idempotency comparison, omission, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` MUST compare equal. Unknown top-level members, a non-object body, missing `client_txn_id`, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_reference_pack_request`. Route-scoped idempotency for these three action routes MUST be keyed by `(actor_user_id, pack_key, pack_version, action_route, client_txn_id)` and MUST compare the exact action route plus normalized `reason`. Exact replay of a previously committed success or accepted job MUST return the original committed result before any fresh state evaluation runs. Reuse of the same route-scoped key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. `activate` is legal only when the addressed version is in durable condition `verified_available` and is not currently active for its `pack_key`. `disable` is legal only when the addressed version is in durable condition `verified_available`; the action remains legal whether or not that version is currently active through the activation pointer. `reverify` is legal only when the addressed version is in durable condition `verified_available`, `disabled`, `failed`, or `missing`; it is not legal while still `staged`. `POST /api/v1/reference-packs/refresh` MUST accept required `client_txn_id` and optional `pack_keys[]`. For this member, omission means all currently imported `pack_key` values visible to the caller resolved once at refresh-job admission, explicit JSON `null` is invalid, explicit `[]` is invalid and MUST use `reason_code = empty_pack_keys`, and any supplied `pack_keys[]` value MUST be an array of exact visible `pack_key` strings. `pack_keys[]` is a set-like selector: caller order is non-semantic, duplicate members coalesce by exact token equality, and the canonical normalized form used for idempotency and replay is the unique exact-token set sorted by `pack_key asc`; omission MUST compare using the resolved admission-time set rather than later visibility state. If omitted `pack_keys[]` resolves to zero visible imported pack keys, refresh MUST still be admitted and MUST complete as a deterministic no-op background job rather than fail. Any non-string, unknown, or non-visible supplied `pack_key` MUST fail with `400`, `error.code = invalid_reference_pack_request`, and `reason_code = invalid_pack_keys`. Import, reverify, and refresh MUST enforce `limits.reference_packs.max_extracted_bytes`, `limits.archives.max_compression_ratio`, and `limits.archives.max_members` before a candidate version can remain or become `verified_available` or before refresh can keep or move the active pointer. A breach of any of those limits MUST fail closed using `reference_pack_verification_failed` and the exact corresponding archive-limit `reason_code`. Import, reverify, and refresh MUST run as background jobs. `activate` and `disable` MAY complete synchronously with `200 OK` using the common success envelope and `data.pack_version` equal to the post-commit durable `reference_pack_version resource`; if either action performs long-running work, it MUST return `202 Accepted` with the common job resource. `reverify` MUST always return `202 Accepted` with the common job resource. When a reverify job reaches a terminal state, its public result or error summary MUST use the same family-specific stable codes rather than ad hoc worker strings. The durable version conditions exposed to the public surface remain exactly `staged`, `verified_available`, `disabled`, `failed`, and `missing`. `active` MUST remain a derived boolean obtained from the activation pointer for `(pack_key, pack_version)`, not an additional stored version-state token.
 
 For every `reference_pack_version` ref emitted by this family, `kind` MUST be `reference_pack_version` and both `id` and `route` MUST equal the canonical `/api/v1/reference-packs/{pack_key}/{pack_version}` path.
 
@@ -5068,10 +6060,10 @@ For terminal common-job summaries produced by this family:
 
 These success-code rules apply only when the route completes through the common job resource. Inline `200 OK` `activate` or `disable` success continues to use `data.pack_version` equal to the exact `reference_pack_version resource` defined here.
 Profiles: reference_pack
-Verified by: AC-270, AC-271, AC-308, AC-309, AC-326
+Verified by: AC-270, AC-271, AC-308, AC-309, AC-326, AC-369
 
 **REQ-01-482**
-The reference-pack route family MUST use only `invalid_reference_pack_request`, `reference_pack_not_found`, `reference_pack_state_conflict`, `reference_pack_verification_failed`, and `reference_pack_activation_rejected`. `reference_pack_verification_failed` MUST use only `checksum_mismatch`, `signature_mismatch`, `missing_integrity_metadata`, `contract_incompatible`, `path_traversal`, `disallowed_content`, `payload_missing`, `archive_extracted_bytes_exceeded`, `archive_compression_ratio_exceeded`, and `archive_member_count_exceeded`. `reference_pack_activation_rejected` MUST use only `already_active` and `not_verified_available`, and it is reserved for `activate`. `reference_pack_state_conflict` MUST use only `already_disabled`, `not_disableable`, and `verification_pending`.
+The reference-pack route family MUST use only `invalid_reference_pack_request`, `reference_pack_not_found`, `reference_pack_state_conflict`, `reference_pack_verification_failed`, and `reference_pack_activation_rejected`. `invalid_reference_pack_request` MUST use only the shared upload-envelope reasons from REQ-01-553 plus `request_not_object`, `missing_required_field`, `field_not_nullable`, `unknown_field`, `invalid_activation_policy`, `pack_version_required`, `auto_activation_not_supported`, `invalid_pack_keys`, and `empty_pack_keys`. `reference_pack_verification_failed` MUST use only `checksum_mismatch`, `signature_mismatch`, `missing_integrity_metadata`, `contract_incompatible`, `path_traversal`, `disallowed_content`, `payload_missing`, `archive_extracted_bytes_exceeded`, `archive_compression_ratio_exceeded`, and `archive_member_count_exceeded`. `reference_pack_activation_rejected` MUST use only `already_active` and `not_verified_available`, and it is reserved for `activate`. `reference_pack_state_conflict` MUST use only `already_disabled`, `not_disableable`, and `verification_pending`.
 Profiles: reference_pack
 Verified by: AC-272, AC-310, AC-326
 
@@ -5086,18 +6078,47 @@ The Incident Portability Extension Profile MUST expose exactly this minimum publ
 Profiles: incident_portability
 Verified by: AC-273, AC-274, AC-275
 
+**Table 17.5-A. Incident-bundle route inventory**
+
+| Route | Request contract summary | Success resource or body | Long-running | Primary family errors |
+| --- | --- | --- | --- | --- |
+| `POST /api/v1/incident-bundles/export` | JSON object with required `incident_id` and `client_txn_id`; optional `reference_pack_mode`, `optional_sections[]`, and `required_capabilities[]`; `history_mode` and `blob_mode` are forbidden user inputs | Common job resource; terminal success emits one `incident_bundle` ref | Yes | `invalid_incident_bundle_request`, `incident_bundle_export_rejected` |
+| `GET /api/v1/incident-bundles/{bundle_id}` | Singleton read | Durable export descriptor | No | `incident_bundle_not_found`, `invalid_pagination_request` |
+| `POST /api/v1/incident-bundles/import` | Shared upload envelope with required `client_txn_id` in metadata | Common job resource; terminal success emits one imported `incident` ref | Yes | `invalid_incident_bundle_request`, `incident_bundle_import_rejected` |
+
+**Table 17.5-B. Export descriptor and import metadata summary**
+
+| Contract element | Requirement |
+| --- | --- |
+| `reference_pack_mode` omission rule | Omitted means `refs_only`; explicit `null` is invalid; omission and explicit `refs_only` compare equal |
+| `optional_sections[]` omission rule | Omitted means `[]`; explicit `null` is invalid; explicit `[]` compares equal to omission; allowed tokens are exactly `snapshots` and `reference_packs`; order is non-semantic and canonicalized ascending |
+| `required_capabilities[]` omission rule | Omitted means `[]`; explicit `null` is invalid; explicit `[]` compares equal to omission; allowed tokens are exactly `snapshots` and `reference_packs`; order is non-semantic and canonicalized ascending |
+| Durable export descriptor | `bundle_id`, `incident_id`, `exported_at`, `manifest_sha256`, `reference_pack_mode`, `optional_sections[]`, `required_capabilities[]`, fixed `history_mode='full'`, fixed `blob_mode='full'` |
+| Import boundary | No durable import resource exists in the current profile; import is create-only into an empty incident namespace |
+
+**Table 17.5-C. Incident-bundle terminal results and primary errors**
+
+| Route or condition | Required code or registry |
+| --- | --- |
+| Export success | `result_summary.code='incident_bundle_exported'` and exactly one `incident_bundle` ref |
+| Import success | `result_summary.code='incident_bundle_imported'` and exactly one imported `incident` ref |
+| Invalid request registry | `invalid_incident_bundle_request` with shared upload-envelope reasons plus the export and import request-shape reasons in REQ-01-486 |
+| Export rejection registry | `incident_bundle_export_rejected` with `missing_required_file` and `missing_required_blob` |
+| Import rejection registry | `incident_bundle_import_rejected` with member-path, member-type, integrity, blob-hash, duplicate-incident, capability, remote-fetch, and archive-limit reasons |
+
+
 **REQ-01-484**
-`POST /api/v1/incident-bundles/export` MUST accept a JSON object with required `incident_id` and required `client_txn_id`. It MAY include optional `reference_pack_mode`, optional `optional_sections[]`, and optional `required_capabilities[]`. `reference_pack_mode` defaults to `refs_only` when omitted. `optional_sections[]` defaults to `[]` when omitted. `required_capabilities[]` defaults to `[]` when omitted. The current profile MUST NOT expose user-tunable partial-history or partial-blob request modes; if `history_mode` or `blob_mode` is supplied, the route MUST fail closed. Export MUST run as a background job. The durable export descriptor under `GET /api/v1/incident-bundles/{bundle_id}` MUST exist only after successful export, MUST reject pagination, and MUST expose at minimum `bundle_id`, `incident_id`, `exported_at`, `manifest_sha256`, `reference_pack_mode`, `optional_sections[]`, `required_capabilities[]`, fixed `history_mode='full'`, and fixed `blob_mode='full'`. On successful export, the terminal common-job summary MUST use `result_summary.code='incident_bundle_exported'` and MUST emit exactly one `resource_refs[]` item `{ kind: 'incident_bundle', id: <bundle_id>, route: '/api/v1/incident-bundles/{bundle_id}' }`.
+`POST /api/v1/incident-bundles/export` MUST accept a JSON object with required `incident_id` and required `client_txn_id`. It MAY include optional `reference_pack_mode`, optional `optional_sections[]`, and optional `required_capabilities[]`. For `reference_pack_mode`, omission means `refs_only`, explicit JSON `null` is invalid, omission and explicit `refs_only` MUST compare equal for idempotency and replay, and the allowed current-profile values are exactly `refs_only` and `embedded`. For `optional_sections[]`, omission means `[]`, explicit JSON `null` is invalid, explicit `[]` compares equal to omission, the allowed current-profile tokens are exactly `snapshots` and `reference_packs`, caller order is non-semantic, duplicate members coalesce by exact token equality, and the canonical normalized form is the unique exact-token set sorted ascending. For `required_capabilities[]`, omission means `[]`, explicit JSON `null` is invalid, explicit `[]` compares equal to omission, the allowed current-profile tokens are exactly `snapshots` and `reference_packs`, caller order is non-semantic, duplicate members coalesce by exact token equality, and the canonical normalized form is the unique exact-token set sorted ascending. Unknown tokens in either array or any `reference_pack_mode` value outside the closed current-profile vocabulary are invalid and MUST NOT be silently ignored or dropped at export admission. The current profile MUST NOT expose user-tunable partial-history or partial-blob request modes; if `history_mode` or `blob_mode` is supplied, the route MUST fail closed. Export MUST run as a background job. The durable export descriptor under `GET /api/v1/incident-bundles/{bundle_id}` MUST exist only after successful export, MUST reject pagination, and MUST expose at minimum `bundle_id`, `incident_id`, `exported_at`, `manifest_sha256`, `reference_pack_mode`, `optional_sections[]`, `required_capabilities[]`, fixed `history_mode='full'`, and fixed `blob_mode='full'`. The durable export descriptor and the emitted `manifest.json` MUST both serialize the resolved `reference_pack_mode` and the canonicalized `optional_sections[]` and `required_capabilities[]` values rather than caller order. On successful export, the terminal common-job summary MUST use `result_summary.code='incident_bundle_exported'` and MUST emit exactly one `resource_refs[]` item `{ kind: 'incident_bundle', id: <bundle_id>, route: '/api/v1/incident-bundles/{bundle_id}' }`.
 Profiles: incident_portability
 Verified by: AC-273, AC-274
 
 **REQ-01-485**
-`POST /api/v1/incident-bundles/import` MUST accept exactly one bundle file plus one JSON metadata object containing required `client_txn_id`. Import MUST run as a background job. The current profile defines no durable import resource; on success the terminal job result summary MUST use `result_summary.code='incident_bundle_imported'` and MUST emit exactly one `resource_refs[]` item `{ kind: 'incident', id: <incident_id>, route: '/api/v1/incidents/{incident_id}' }`. Import remains create-only into an empty incident namespace. The current profile MUST reject clone, merge, identifier-remap, remote-fetch, or equivalent alternative import modes.
+`POST /api/v1/incident-bundles/import` MUST use the shared upload-envelope contract in §17.1.1. Within that contract, metadata MUST contain required `client_txn_id`. For this route, the `file` part media type MUST be one of the exact values declared for `POST /api/v1/incident-bundles/import` in REQ-01-552. Those media-type values are envelope gates only; bundle-member validation, integrity verification, and archive-limit enforcement remain byte-based. Route-scoped normalized request comparison for idempotency MUST include SHA-256 of the exact uploaded file bytes. Multipart boundary text, part order, advisory filename, and non-semantic part headers or parameters MUST NOT affect normalized comparison. Import MUST run as a background job. The current profile defines no durable import resource; on success the terminal job result summary MUST use `result_summary.code='incident_bundle_imported'` and MUST emit exactly one `resource_refs[]` item `{ kind: 'incident', id: <incident_id>, route: '/api/v1/incidents/{incident_id}' }`. Import remains create-only into an empty incident namespace. The current profile MUST reject clone, merge, identifier-remap, remote-fetch, or equivalent alternative import modes.
 Profiles: incident_portability
 Verified by: AC-275
 
 **REQ-01-486**
-The incident-bundle route family MUST use only `invalid_incident_bundle_request`, `incident_bundle_not_found`, `incident_bundle_export_rejected`, and `incident_bundle_import_rejected`. `incident_bundle_export_rejected` MUST use only `missing_required_file` and `missing_required_blob`. `incident_bundle_import_rejected` MUST use only `invalid_member_path`, `unsupported_member_type`, `checksum_mismatch`, `signature_mismatch`, `blob_hash_mismatch`, `duplicate_incident_id`, `unsupported_required_capability`, `remote_fetch_required`, `archive_extracted_bytes_exceeded`, `archive_compression_ratio_exceeded`, and `archive_member_count_exceeded`.
+The incident-bundle route family MUST use only `invalid_incident_bundle_request`, `incident_bundle_not_found`, `incident_bundle_export_rejected`, and `incident_bundle_import_rejected`. `invalid_incident_bundle_request` MUST use only the shared upload-envelope reasons from REQ-01-553 plus `request_not_object`, `missing_required_field`, `field_not_nullable`, `unknown_field`, `invalid_reference_pack_mode`, `invalid_optional_sections`, `invalid_required_capabilities`, `history_mode_not_supported`, and `blob_mode_not_supported`. `incident_bundle_export_rejected` MUST use only `missing_required_file` and `missing_required_blob`. `incident_bundle_import_rejected` MUST use only `invalid_member_path`, `unsupported_member_type`, `checksum_mismatch`, `signature_mismatch`, `blob_hash_mismatch`, `duplicate_incident_id`, `unsupported_required_capability`, `remote_fetch_required`, `archive_extracted_bytes_exceeded`, `archive_compression_ratio_exceeded`, and `archive_member_count_exceeded`.
 Profiles: incident_portability
 Verified by: AC-276, AC-327, AC-328, AC-332
 
@@ -5118,9 +6139,12 @@ Unless a bound contract below explicitly says otherwise:
 - for string contracts whose binding is required, explicit JSON `null` and any supplied string value that normalizes to empty MUST be rejected,
 - for direct temporal scalar contracts whose binding allows clear-to-null semantics, authoritative clear MUST be explicit JSON `null`,
 - for direct temporal scalar contracts whose binding is non-clearable, explicit JSON `null` MUST be rejected,
-- the base profile MUST NOT preserve the empty string as a distinct authoritative value for any field bound to a clear-to-null string contract.
+- the base profile MUST NOT preserve the empty string as a distinct authoritative value for any field bound to a clear-to-null string contract,
+- the shared query-time text-comparison substrate used by text sorts and by case-insensitive filter semantics MUST first apply the bound field contract's authoritative normalization and MUST then apply locale-independent Unicode case folding,
+- diacritics remain significant under that substrate,
+- no compatibility folding, transliteration, punctuation stripping, tokenization, or extra whitespace collapse occurs beyond the bound field contract when that substrate is used.
 Profiles: base
-Verified by: AC-015, AC-068, AC-085, AC-086, AC-112, AC-118, AC-152, AC-175, AC-176, AC-181, AC-182, AC-186, AC-194, AC-196, AC-200, AC-202, AC-216, AC-221, AC-225, AC-231, AC-300, AC-301, AC-302, AC-303, AC-315, AC-316, AC-317, AC-318, AC-319
+Verified by: AC-015, AC-068, AC-085, AC-086, AC-112, AC-118, AC-152, AC-175, AC-176, AC-181, AC-182, AC-184, AC-185, AC-186, AC-194, AC-196, AC-200, AC-202, AC-216, AC-221, AC-225, AC-231, AC-300, AC-301, AC-302, AC-303, AC-315, AC-316, AC-317, AC-318, AC-319
 
 **REQ-01-489**
 `display_name_line_v1` is the required single-line display-name contract.
@@ -5258,6 +6282,21 @@ Verified by: AC-277, AC-231
 - when the binding is required, `null`, non-string, all-whitespace, control-bearing, shorter-than-minimum, or longer-than-maximum input is invalid.
 Profiles: base
 Verified by: AC-175, AC-176, AC-231, AC-244, AC-245
+
+**REQ-01-568**
+`mention_token_text_v1` is the required mention-token text contract for typed Timeline host and identity tokens carried by `add_token.raw_text` and `add_resolved_ref.raw_text`.
+
+- apply Unicode NFC normalization,
+- trim leading and trailing Unicode whitespace,
+- collapse each maximal run of Unicode whitespace to one ASCII space,
+- reject every C0 or C1 control code point,
+- preserve every other code point exactly,
+- enforce a maximum length of 256 Unicode scalar values after normalization,
+- `null` or normalized-empty input is invalid.
+
+This contract owns only writable-surface normalization and validation. Suppressor grammar, forbidden rewrites, and auto-resolution eligibility remain owned by Core 03 §12.
+Profiles: base
+Verified by: AC-118, AC-231, AC-388, AC-389, AC-390, AC-391
 
 ## 18A. Direct-scalar timestamp contract registry
 
@@ -5544,21 +6583,22 @@ Profiles: base
 Verified by: AC-116, AC-117, AC-118, AC-231, AC-284, AC-300, AC-302, AC-303
 
 **REQ-01-507**
-- surface: standardized optional workbook surface for `cartulary.view.findings.v1`; when an implementation exposes this surface it MAY do so as a contract-backed system view or as an implementation-owned `scope='system'` saved view bound to this exact `view_schema_id`
-- source record types: artifact-backed structured finding rows governed by Core 02 §10.4.6
-- base projection: `artifact_grid_projection` filtered to the implementation's declared structured findings subtype
-- `default_visible_fields`: `finding.statement`, `finding.state`, `finding.owner_user_id`, `finding.confidence_score`, `finding.closed_at`, `finding.updated_at`
+- surface: standardized optional workbook surface for `cartulary.view.findings.v1`; this is the only current-profile standardized workbook surface for both findings and hypotheses; the current profile defines no `cartulary.view.hypotheses.v1`; when an implementation exposes this surface it MAY do so as a contract-backed system view or as an implementation-owned `scope='system'` saved view bound to this exact `view_schema_id`
+- source record types: artifact-backed structured finding rows with exact `artifact_type='finding'` governed by Core 02 §10.4.5 and §10.4.6
+- base projection: `artifact_grid_projection` filtered to exact `artifact_type='finding'`
+- `default_visible_fields`: `finding.statement`, `finding.kind`, `finding.state`, `finding.owner_user_id`, `finding.confidence_score`, `finding.closed_at`, `finding.updated_at`
 - `default_hidden_fields`: `record_id`, `row_version`, `finding.supporting_refs`, `finding.contradictory_refs`, `finding.confidence_band`
 - `default_sort`: `finding.updated_at desc`, `record_id asc`
-- `sort_fields`: `finding.statement`, `finding.state`, `finding.owner_user_id`, `finding.confidence_score`, `finding.closed_at`, `finding.updated_at`, `finding.confidence_band`
-- `filter_fields`: `finding.state`, `finding.owner_user_id`, `finding.confidence_band`, `finding.closed_at`
-- `grouping_fields`: `finding.state`, `finding.owner_user_id`, `finding.confidence_band`
+- `sort_fields`: `finding.statement`, `finding.kind`, `finding.state`, `finding.owner_user_id`, `finding.confidence_score`, `finding.closed_at`, `finding.updated_at`, `finding.confidence_band`
+- `filter_fields`: `finding.kind`, `finding.state`, `finding.owner_user_id`, `finding.confidence_band`, `finding.closed_at`
+- `grouping_fields`: `finding.kind`, `finding.state`, `finding.owner_user_id`, `finding.confidence_band`
 - inline create: zero-field create is forbidden
 - minimum semantic create set: inline create from the sheet itself MUST commit only when `finding.statement` is non-empty after create-time normalization
-- when omitted on create, the server MUST default `finding.state` to `open`, default `finding.owner_user_id` to the authenticated actor, and default `finding.confidence_score` plus `finding.closed_at` to `null`
+- when omitted on create, the server MUST default `finding.kind` to `finding`, default `finding.state` to `open`, default `finding.owner_user_id` to the authenticated actor, and default `finding.confidence_score` plus `finding.closed_at` to `null`
 - these defaults MUST NOT satisfy the minimum create signal
 - writable fields:
   - `finding.statement`: read `statement`; write target the `statement` field on the underlying structured finding row; `string_contract_id=multiline_body_v1`; `conflict_resolution_class=text_compare_merge`
+  - `finding.kind`: read `kind`; write target the `kind` field on the underlying structured finding row; legal writes MUST use the exact closed vocabulary defined in Core 02 §18; `conflict_resolution_class=atomic_replace`
   - `finding.state`: read `state`; write target the `state` field on the underlying structured finding row; legal writes MUST apply the server-managed `finding.closed_at` rule from Core 02 §10.4.6 before commit; `conflict_resolution_class=atomic_replace`
   - `finding.owner_user_id`: read `owner_user_id`; write target the `owner_user_id` field on the underlying structured finding row; `conflict_resolution_class=atomic_replace`
   - `finding.confidence_score`: read `confidence_score`; write target the `confidence_score` field on the underlying structured finding row; `conflict_resolution_class=atomic_replace`
@@ -5626,6 +6666,50 @@ The Enterprise Authentication Extension Profile MUST expose exactly this minimum
 Profiles: enterprise_authentication
 Verified by: AC-235, AC-288, AC-290, AC-291
 
+Contract tables. The tables in §20 compact the enterprise-auth public contract into owner-local route, request, callback, and binding summaries. The surrounding prose remains authoritative for protocol-security details, callback validation, and provider-subject semantics that do not compress well into cells.
+
+**Table 20-A. Enterprise-auth protocol route inventory**
+
+| Route | Request contract summary | Omission and default summary | Idempotency | Success summary | Primary error codes |
+| --- | --- | --- | --- | --- | --- |
+| `GET /api/v1/auth/providers` | Singleton read; no body members | Rejects pagination members | Read route | Returns `data.providers[]` sorted by `display_name asc`, then `provider_key asc` | `invalid_pagination_request` |
+| `POST /api/v1/auth/providers/{provider_key}/begin` | JSON object with optional `return_to` | Omitted or explicit `null` `return_to` normalizes to `/`; unknown members, including `client_txn_id`, are invalid | Intentionally non-idempotent; no `client_txn_id` accepted | Returns `provider_key`, `provider_type`, `redirect_url`, and `expires_at`; creates no public durable auth-transaction resource | `invalid_enterprise_auth_request`, `auth_provider_not_found`, `auth_provider_disabled` |
+| `GET /api/v1/auth/oidc/{provider_key}/callback` | Browser protocol endpoint | Completes only against a valid single-use auth transaction | Intentionally non-idempotent | On success issues the ordinary server-managed session and completes with `303 See Other` to validated `return_to` | `enterprise_auth_transaction_rejected`, `provider_response_rejected`, `provider_identity_rejected` |
+| `POST /api/v1/auth/saml/{provider_key}/acs` | Browser protocol endpoint | Completes only against a valid single-use auth transaction | Intentionally non-idempotent | On success issues the ordinary server-managed session and completes with `303 See Other` to validated `return_to` | `enterprise_auth_transaction_rejected`, `provider_response_rejected`, `provider_identity_rejected` |
+
+**Table 20-B. Provider discovery and begin contract**
+
+| Member or rule | Requirement |
+| --- | --- |
+| `GET /api/v1/auth/providers` item shape | Exactly `provider_key`, `provider_type`, and `display_name`; only enabled interactive providers are listed |
+| `provider_type` vocabulary | Exactly `oidc` or `saml` on this route |
+| `begin` request members | Optional `return_to` only |
+| `return_to` rules | Same-origin relative-path reference only; omitted or explicit `null` normalize to `/` |
+| `/` landing semantics | If exactly one visible incident membership exists, open that incident workbook with the ordinary Core 03 startup fallback; otherwise remain on `/` and render the visible incident list |
+| Protocol transaction state | Server-side single-use auth transaction bound to provider, validated `return_to`, expiry, browser binding, and protocol correlation material |
+
+**Table 20-C. Callback and ACS transport summary**
+
+| Concern | Requirement |
+| --- | --- |
+| Success transport | Same server-managed session contract as §3.3.2.1 plus `303 See Other` to the validated `return_to` |
+| Callback exception to JSON API rule | OIDC callback and SAML ACS are the only Enterprise Authentication family exception to the otherwise JSON-shaped public API |
+| OIDC protocol requirements | Authorization-code flow only, with PKCE `S256` and `nonce` required |
+| SAML protocol requirements | SP-initiated flow only |
+| `client_txn_id` | Forbidden on begin, callback, and ACS |
+| Replay and expiry | Replay, expiry, provider mismatch, or browser-binding mismatch fail closed rather than minting a fresh transaction |
+
+**Table 20-D. Enterprise-auth protocol error summary**
+
+| Condition | Transport | `error.code` | Registry or detail note |
+| --- | --- | --- | --- |
+| Malformed begin request or invalid `return_to` | `400` | `invalid_enterprise_auth_request` | Uses `request_not_object`, `field_not_nullable`, `unknown_field`, and `return_to_not_allowed` |
+| Provider not found or disabled | Family-defined failure | `auth_provider_not_found` or `auth_provider_disabled` | Provider lookup and enablement state |
+| Transaction replay, expiry, mismatch, or browser-binding failure | Family-defined failure | `enterprise_auth_transaction_rejected` | Uses `not_found`, `expired`, `already_used`, `provider_mismatch`, and `browser_binding_mismatch` |
+| Provider response verification failure | Family-defined failure | `provider_response_rejected` | Uses the callback and ACS verification reasons in REQ-01-514 |
+| No linked user, ambiguous link, or inactive user | Family-defined failure | `provider_identity_rejected` | Uses `subject_missing`, `no_linked_user`, `ambiguous_link`, and `inactive_user` |
+
+
 **REQ-01-511**
 `GET /api/v1/auth/providers` MUST return the common success envelope with `data.providers[]`, sorted by `display_name asc`, then `provider_key asc`. Each item MUST contain exactly `provider_key`, `provider_type`, and `display_name`; `provider_type` on this route MUST be `oidc` or `saml`. The route MUST list only enabled interactive providers and MUST NOT expose provider secrets, raw metadata, claim maps, or provider-side policy. The route MUST reject `limit`, `cursor_token`, and pagination aliases with `400`, `error.code = invalid_pagination_request`, and `error.details.reason_code = pagination_not_supported`.
 
@@ -5672,6 +6756,39 @@ The Enterprise Authentication Extension Profile MUST additionally expose these d
 These routes manage enterprise bindings only. They MUST NOT create, rotate, or retire the derived local binding summary.
 Profiles: enterprise_authentication
 Verified by: AC-348, AC-352
+
+**Table 20-E. Binding-management route inventory**
+
+| Route | Request contract summary | Idempotency | Success summary | Primary errors |
+| --- | --- | --- | --- | --- |
+| `POST /api/v1/users/{user_id}/auth-bindings` | Required `base_user_version`, `client_txn_id`, `provider_key`, `provider_subject`; optional `reason` | `(actor_user_id, user_id, client_txn_id)` | First success `201 Created`; returns the resulting safe user resource | `invalid_mutation_payload`, `user_version_conflict`, `auth_provider_not_found`, `auth_binding_conflict`, `client_txn_conflict` |
+| `POST /api/v1/users/{user_id}/auth-bindings/{auth_binding_id}/rotate` | Required `base_user_version`, `client_txn_id`, `new_provider_subject`; optional `reason` | `(actor_user_id, auth_binding_id, client_txn_id)` | `200 OK`; structural no-op when the new subject exactly equals the current active subject | `invalid_mutation_payload`, `user_version_conflict`, `auth_binding_not_found`, `auth_binding_conflict`, `client_txn_conflict` |
+| `DELETE /api/v1/users/{user_id}/auth-bindings/{auth_binding_id}` | Required `base_user_version`, `client_txn_id`; optional `reason` | `(actor_user_id, auth_binding_id, client_txn_id)` | `200 OK`; returns the resulting safe user resource | `invalid_mutation_payload`, `user_version_conflict`, `auth_binding_not_found`, `auth_binding_conflict`, `client_txn_conflict` |
+
+**Table 20-F. Binding create, rotate, and retire request rules**
+
+| Member or rule | Create | Rotate | Retire |
+| --- | --- | --- | --- |
+| `base_user_version` | Required | Required | Required |
+| `client_txn_id` | Required | Required | Required |
+| Provider selector | Required `provider_key`; must resolve to configured `oidc` or `saml` provider | Bound by existing `auth_binding_id`; provider does not change | Bound by existing `auth_binding_id` |
+| Subject member | Required `provider_subject` | Required `new_provider_subject` | No subject member |
+| `reason` | Optional; omission, explicit `null`, and normalized empty compare equal | Optional; same normalization rule | Optional; same normalization rule |
+| Forbidden side effects | Must not create a local user, mutate incident membership, or mutate local credential state | Must not change provider, local email, local login identifier, local credential state, or incident memberships | Must not delete the local user, incident memberships, or local credential state |
+| `client_txn_id` on protocol routes | Not applicable; protocol routes do not accept it | Not applicable | Not applicable |
+
+**Table 20-G. Binding-management success and error summary**
+
+| Condition | Transport | `error.code` or result | Notes |
+| --- | --- | --- | --- |
+| First successful create | `201 Created` | Safe user resource returned | Adds one enterprise binding to an existing local user |
+| Successful rotate | `200 OK` | Safe user resource returned | Retires the old active binding and creates one replacement binding atomically |
+| Successful retire | `200 OK` | Safe user resource returned | Removes the binding from active callback resolution and active `auth_bindings[]` summaries |
+| Exact replay of committed success | `200 OK` | Original committed result | Evaluated before fresh version or binding-state checks |
+| Same key, different normalized request | `409` | `client_txn_conflict` | Route-scoped idempotency failure |
+| No current binding target for `{user_id, auth_binding_id}` | `404` | `auth_binding_not_found` | Current binding target only |
+| Subject already in use, provider already linked for user, or binding not active | `409` | `auth_binding_conflict` | Uses the §3.3.6.2 reason-code registry |
+
 
 **REQ-01-538**
 `POST /api/v1/users/{user_id}/auth-bindings` binds one enterprise-auth provider subject to the existing local user addressed by `user_id`. The route MUST accept only a JSON object with required `base_user_version`, required `client_txn_id`, required `provider_key`, required `provider_subject`, and optional `reason`. `reason`, when present, MUST be a JSON string or JSON `null` and MUST normalize under `string_contract_id=reason_note_v1`. Unknown top-level members, a non-object body, a missing required member, or `null` for a non-nullable member MUST fail with `400` and `error.code = invalid_mutation_payload`. `provider_key` MUST identify a configured enterprise-auth provider of `provider_type='oidc'` or `provider_type='saml'`; a configured provider remains eligible for this route even when it is currently disabled for interactive sign-in. `provider_subject` MUST be a non-null JSON string. A first-time successful create MUST return `201 Created` with `data` equal to the resulting safe user resource. Route-scoped idempotency MUST be keyed by `(actor_user_id, user_id, client_txn_id)` and MUST compare exact `base_user_version`, exact `provider_key`, exact `provider_subject`, and normalized `reason`, with omitted `reason`, explicit JSON `null`, and any `reason` value that normalizes to empty under `reason_note_v1` comparing equal. Exact replay of a previously committed success MUST return `200 OK` with the original committed result before fresh `user_version_conflict` or binding-state evaluation. Reuse of the same key with a different normalized request MUST fail with `409` and `error.code = client_txn_conflict`. If no prior committed idempotency hit exists and the current `user_version` differs from `base_user_version`, the route MUST fail with `409` and `error.code = user_version_conflict`. If no configured enterprise provider matches `provider_key`, or the matched provider is not of type `oidc` or `saml`, the route MUST fail with `404` and `error.code = auth_provider_not_found`. If another active binding already uses the same `(provider_id, provider_subject)`, the route MUST fail with `409`, `error.code = auth_binding_conflict`, and `error.details.reason_code = provider_subject_in_use`. If the addressed user already has one active binding for that same provider, the route MUST fail with `409`, `error.code = auth_binding_conflict`, and `error.details.reason_code = provider_already_linked_for_user`. This route MUST NOT create a local user, mutate incident membership, or mutate local credential state.

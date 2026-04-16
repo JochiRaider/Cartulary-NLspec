@@ -8,7 +8,9 @@ It preserves the architecture-oriented explanatory material, diagrams, tables, a
 
 ### Primary recommendation
 
-Use a **single web application container** (UI + API + WebSocket hub + background jobs) with **Postgres** and **S3-compatible object storage** as separate services. This is a modular monolith, not a distributed platform.
+The controlling current-profile topology contract is Core 01 §1. This subsection preserves explanatory rationale and diagrams only.
+
+The exploratory source recommended a **single web application container** (UI + API + WebSocket hub + background jobs) with **Postgres** and **S3-compatible object storage** as separate services. That recommendation corresponds to the current normative modular-monolith topology rather than creating a second authority.
 
 ### System context diagram
 
@@ -43,7 +45,7 @@ flowchart TB
     subgraph Browser[Browser client]
         Grid[Workbook grid]
         Inspector[Detail / relationship inspector]
-        Sync[Local pending patch queue]
+        Sync[Local pending queue]
     end
 
     subgraph App[Modular monolith]
@@ -99,9 +101,13 @@ flowchart TB
 | Reporting & snapshot module | Immutable incident snapshots, canonical export-model generation, self-contained report/render pipeline |
 | Collaboration hub           | WebSocket presence and live row updates                                                                |
 
+#### Illustrative local pending queue realization note
+
+One conformant realization is an in-memory queue keyed by `(incident_id, client_instance_id, enqueue_seq)`. A not-yet-authoritative local row may carry a provisional local row token until the first authoritative create succeeds. Same-record coalescing can replace queued units in place only within one contiguous same-record run and only without changing queue order. The base profile does not require reload durability, cross-tab sharing, IndexedDB, Service Workers, or any other named client mechanism.
+
 ### Preferred architecture pattern
 
-A **modular monolith** is the right fit. This problem’s complexity is in mutation semantics, projections, and UX; microservices would add operational and debugging cost without helping the hardest problem. A single codebase with clear module boundaries is easier to deploy in a flyaway kit, easier to reason about during incident work, and easier to ship with deterministic versions.
+This appendix preserves the rationale for the Core 01 §1 modular-monolith choice. The exploratory source argued that a **modular monolith** is the right fit. This problem’s complexity is in mutation semantics, projections, and UX; microservices would add operational and debugging cost without helping the hardest problem. A single codebase with clear module boundaries is easier to deploy in a flyaway kit, easier to reason about during incident work, and easier to ship with deterministic versions.
 
 ### Module boundaries
 
@@ -122,9 +128,17 @@ I would define internal module boundaries as:
 
 These are internal packages/modules with explicit service interfaces, not separate deployables.
 
-The split worth making explicit is that clipboard interaction stays on the core workbook hot path, while file-based import sits behind a dedicated `imports` module. Clipboard, CSV, and XLSX adapters can still normalize into the same canonical `TabularSource` and shared mapping engine, but only the imports module should absorb parser drift, workbook-shape heuristics, preview/header mapping, and other spreadsheet-compatibility maintenance.
+The exploratory source drew one boundary especially sharply: clipboard interaction stays on the core workbook hot path, while file-based import sits behind a dedicated `imports` module. Clipboard, CSV, and XLSX adapters can still normalize into the same canonical `TabularSource` and shared mapping engine, but parser drift, workbook-shape heuristics, preview/header mapping, and other spreadsheet-compatibility maintenance sit with the imports module in that realization.
 
-A bounded import contract is more realistic than “Excel support” in the abstract. The first file-based onboarding path should focus on CSV and selected-sheet or selected-region XLSX import, preserve provenance and unknown columns, treat formulas as inert input, and warn, downgrade, or reject unsupported workbook features instead of leaking those semantics into the core workbook modules.
+The exploratory source treated a bounded import contract as more realistic than “Excel support” in the abstract. Its initial file-based onboarding path focused on CSV and selected-sheet or selected-region XLSX import, preserved provenance and unknown columns, treated formulas as inert input, and warned, downgraded, or rejected unsupported workbook features instead of leaking those semantics into the core workbook modules.
+
+#### Upload-envelope implementation note
+
+For the three upload-style extension routes `POST /api/v1/import-sessions`, `POST /api/v1/reference-packs/import`, and `POST /api/v1/incident-bundles/import`, the exploratory source concentrated envelope parsing in one shared ingress utility rather than three family-specific parsers. In that realization, request handling terminated at the wire boundary: the utility required `multipart/form-data`, exactly one `metadata` part plus one `file` part, early rejection of duplicate or unexpected parts, and handoff to the owning module as a parsed metadata object plus raw file bytes or a staged byte stream.
+
+A streaming parser is compatible with that contract, but it still needs fail-closed behavior before durable state or job admission. In practice that means rejecting a second `metadata` or `file` part, rejecting nested multipart bodies, rejecting non-UTF-8 or BOM-bearing metadata, and rejecting malformed JSON or duplicate metadata keys before durable resource creation, idempotency commit, or background-job creation.
+
+In that realization, a language or JSON library that accepts duplicate object keys by last-write-wins still required an additional duplicate-key check on the raw metadata bytes, or a parser mode that rejected them. Filenames and multipart headers remained advisory metadata only, and file-type trust came from byte-level verification in the owning import, reference-pack, or incident-bundle module after envelope acceptance.
 
 ### Storage choices
 
@@ -151,6 +165,10 @@ path = "/var/lib/cartulary/postgres"
 [roots.object_storage]
 binding_kind = "filesystem_root"
 path = "/var/lib/cartulary/object-store"
+
+[roots.backup_storage]
+binding_kind = "filesystem_root"
+path = "/var/lib/cartulary/backups"
 
 [roots.reference_pack_storage]
 binding_kind = "filesystem_root"
@@ -180,6 +198,10 @@ service_ref = "postgres.primary"
 binding_kind = "managed_service"
 service_ref = "object.primary"
 
+[roots.backup_storage]
+binding_kind = "managed_service"
+service_ref = "backup.primary"
+
 [roots.reference_pack_storage]
 binding_kind = "filesystem_root"
 path = "/var/lib/cartulary/reference-packs"
@@ -201,6 +223,7 @@ services:
     volumes:
       - /etc/cartulary/config.toml:/etc/cartulary/config.toml:ro
       - /var/lib/cartulary/bootstrap/cartulary-bootstrap-admin.json:/run/secrets/cartulary-bootstrap-admin.json:ro
+      - /var/lib/cartulary/backups:/var/lib/cartulary/backups
       - /var/lib/cartulary/reference-packs:/var/lib/cartulary/reference-packs
       - /var/lib/cartulary/tmp:/var/lib/cartulary/tmp
       - /var/lib/cartulary/exports:/var/lib/cartulary/exports
@@ -270,7 +293,7 @@ max_text_inline_bytes = 1048576
 
 ### Illustrative benchmark topology and benchmark-manifest example
 
-The examples below are illustrative only. Core 04 §9 remains the normative owner of the claim-bearing benchmark profile, benchmark-manifest contract, and measurement-predicate registry. These examples do not create alternate thresholds or alternate profile identifiers.
+The examples below are illustrative only. Core 05 remains the normative owner of the claim-bearing benchmark profile, benchmark-manifest contract, and measurement-predicate registry. These examples do not create alternate thresholds or alternate profile identifiers.
 
 #### Example 5: claim-bearing benchmark topology
 
@@ -351,24 +374,65 @@ tc qdisc add dev eth0 parent 1:1 handle 10: netem delay 1ms 0.5ms loss 0%
 - Framework mappings, type/icon registries, evidence vocabularies, and optional enrichment datasets are **reference packs** that version independently of incidents.
 - Each built-in sheet or system view is declared by a **`view_schema`** contract that names the source record types, computed columns, required reference packs, default sort key, filter semantics, and write-back rules.
 - For required base coordination surfaces `cartulary.view.comm_log.v1`, `cartulary.view.handoff.v1`, `cartulary.view.status_review.v1`, and `cartulary.view.lesson.v1`, the `view_schema_id` is the canonical public workbook-surface identity. Helper or preset saved views over the same schema are separate, non-canonical objects.
-- The current profile does not standardize pack-dependent ATT&CK, D3FEND, or VERIS workbook `view_schema` surfaces. Any future framework workbook surface should be standardized per framework or tightly bounded family, including canonical `view_schema_id`, required pack keys, field registry, discoverability, writeability, degradation, and export behavior.
-- The core workbook must remain usable when optional reference packs are absent. Missing packs may disable overlays or show degraded labels, but they must not block capture or editing.
-- Pack activation and updates must verify checksum and, when available, signature or trusted-source metadata before use.
+- The current core does not standardize pack-dependent ATT&CK, D3FEND, or VERIS workbook `view_schema` surfaces.
+- The exploratory source treated any future framework workbook surface as a separate standardized contract problem, with its own canonical `view_schema_id`, required pack keys, field registry, discoverability, writeability, degradation, and export behavior.
+- The same source assumed the core workbook remained usable when optional reference packs were absent: missing packs could degrade overlays or labels, but they did not block capture or editing.
+- Verification and activation were treated as integrity-checked steps rather than ad hoc file loading.
 
 ### Backup, restore, portability, failure modes
 
-- **Backups**: Postgres base backup + WAL archiving; object-store bucket snapshot/versioning.
-- **Restore**: restore Postgres, restore blob store, then rebuild projection tables. Projection tables are disposable caches.
-- **Portability**: export/import of a whole incident should be possible as a manifest + NDJSON/CSV + referenced blobs archive.
+Operational backup and restore are current-profile deployment-local recovery contracts. Incident portability is separate and transfers one incident's authoritative state between trusted deployments; it is not a substitute for retained deployment backups.
+
+One useful operational model is:
+
+- **`backup_set`**: one retained operational backup unit that binds one Postgres restore anchor and one object-store restore anchor to one declared `consistency_point_at`.
+- **`backup_attestation`**: one durable structured metadata record for a successful `backup_set`, carrying the selected restore anchors, retention floor, and restore-verification state.
+- **Projection tables**: disposable caches. They may be rebuilt and are not authoritative backup inputs.
+- **Deployment-local runtime state**: sessions, presigned URLs, temporary work files, export outputs, client-local drafts, and similar caches remain outside the authoritative backup set.
+
+Illustrative `backup_attestation` object:
+
+```json
+{
+  "backup_set_id": "bset_2026_04_06_0001",
+  "consistency_point_at": "2026-04-06T11:45:00Z",
+  "postgres_restore_anchor": "pg:base-2026-04-06T11:45:00Z",
+  "object_store_restore_anchor": "obj:versioned-bucket-2026-04-06T11:45:00Z",
+  "created_at": "2026-04-06T11:46:12Z",
+  "retained_until": "2026-05-06T11:46:12Z",
+  "verification_state": "verified",
+  "last_verified_restore_at": "2026-04-06T18:30:00Z"
+}
+```
+
+Equivalent-mechanism examples:
+
+- Postgres base backup plus WAL archiving paired with object-store bucket versioning or snapshotting.
+- A crash-consistent snapshot group that captures the Postgres volume, the object-store volume or namespace restore anchor, and the matching `backup_attestation` for one declared consistency point.
+- Managed Postgres snapshots paired with object-store versioned restore anchors, provided the deployment can prove one named `backup_set`, one retained consistency point, and the same restore-verification contract.
+
+Illustrative restore-drill checklist:
+
+1. Select one retained `backup_set` and verify its attestation plus integrity material.
+2. Restore Postgres from that `backup_set`.
+3. Restore object-store bytes from that same `backup_set`.
+4. Rebuild projections.
+5. Open at least one incident and run at least one built-in workbook query.
+6. Confirm no evidence/blob invariant violations before treating the restore as ready.
+
+Arbitrary cross-store point-in-time restore to an operator-supplied timestamp is future scope rather than a base requirement. The current profile standardizes coherent restore of retained `backup_set` objects. That keeps the contract portable across filesystem, snapshot, and managed-service realizations without forcing one vendor-specific PITR mechanism.
+
+- **Portability**: the exploratory source treated whole-incident export/import as a manifest plus NDJSON/CSV plus referenced blobs archive. Portability bundles remained distinct from retained `backup_set` recovery artifacts.
 - **Failure modes**:
   - App container down: sessions drop, no data loss.
   - Postgres down: system unavailable.
   - Object store down: rows remain editable, but evidence upload/download fails.
+  - Missing or mismatched `backup_set` artifacts or integrity material: restore fails before the environment is ready.
   - Projection corruption: rebuild from source tables; source of truth remains intact.
 
 ### Projections for grid-like views
 
-Do **not** use Postgres materialized views for hot workbook screens. Their refresh semantics are too coarse for row-by-row collaborative editing. Use **projection tables** such as:
+The exploratory source argued against using Postgres materialized views for hot workbook screens because their refresh semantics were too coarse for row-by-row collaborative editing. It instead used **projection tables** such as:
 
 - `timeline_grid_projection`
 - `host_grid_projection`
@@ -377,16 +441,16 @@ Do **not** use Postgres materialized views for hot workbook screens. Their refre
 - `evidence_grid_projection`
 - `indicator_grid_projection` over canonical indicator records, with observation-derived counts and lifecycle summaries
 
-Each projection table is **one row per primary record**, denormalized for sheet use. For the Indicators system view, the primary record is the canonical indicator, not the source artifact or observation row. The app updates affected projection rows in the same transaction as the source write. Every projection row exposed to the client must carry the stable `record_id` and `row_version` used for optimistic writes; the client must not infer identity from row position or displayed values. If needed, a rebuild command can regenerate the projections.
+In that realization, each projection table is **one row per primary record**, denormalized for sheet use. For the Indicators system view, the primary record is the canonical indicator, not the source artifact or observation row. The app updated affected projection rows in the same transaction as the source write. Every projection row exposed to the client carried the stable `record_id` and `row_version` used for optimistic writes, and the client did not infer identity from row position or displayed values. If needed, a rebuild command regenerated the projections.
 
 ### Report and presentation export direction
 
-Reports and presentation artifacts should be treated as a **subsystem**, not as direct ad hoc reads from live workbook tables. The system should capture a `snapshot_at`, materialize a canonical export model such as `incident_report_model.json`, and render derivative outputs like Markdown reports, Mermaid diagram sources, Slidev decks, and HTML reports from that immutable view.
+The exploratory source treated reports and presentation artifacts as a **subsystem**, not as direct ad hoc reads from live workbook tables. In that model, the system captured a `snapshot_at`, materialized a canonical export model such as `incident_report_model.json`, and rendered derivative outputs like Markdown reports, Mermaid diagram sources, Slidev decks, and HTML reports from that immutable view.
 
-UI visualizations, report sections, framework rollups, and future exports should consume the same canonical derivation/query layer or an explicitly versioned snapshot of it. That keeps filtering, counts, and inclusion semantics consistent across interactive and exported surfaces, provides stable exported identifiers and ordering, and creates a clean place to apply redaction rules. It also leaves room for operator-facing reenactment surfaces, such as Asciinema-style terminal walkthroughs generated from selected command-line evidence, while maintaining a clear distinction between source evidence and generated presentation material.
+In that model, UI visualizations, report sections, framework rollups, and future exports all consumed the same canonical derivation/query layer, or an explicitly versioned snapshot of it. That kept filtering, counts, and inclusion semantics consistent across interactive and exported surfaces, provided stable exported identifiers and ordering, and created a clean place to apply redaction rules. It also left room for operator-facing reenactment surfaces, such as Asciinema-style terminal walkthroughs generated from selected command-line evidence, while maintaining a clear distinction between source evidence and generated presentation material.
 
-Generated report artifacts must be **self-contained**: they cannot depend on remote JS, CSS, or font assets at render time. Report builds, snapshot generation, and heavy presentation rendering should run as background jobs so live grid editing remains responsive.
+In that model, generated report artifacts were **self-contained**: they did not depend on remote JS, CSS, or font assets at render time. Report builds, snapshot generation, and heavy presentation rendering ran as background jobs so live grid editing remained responsive.
 
 ### Long-running operations and background jobs
 
-Lookups, imports, reference-pack refreshes, snapshot generation, report builds, and evidence processing should run as background jobs with progress, cancellation, retry-safe status, and non-blocking UI behavior. Grid editing and row creation must remain responsive while those jobs run.
+The exploratory source treated lookups, imports, reference-pack refreshes, snapshot generation, report builds, and evidence processing as background jobs with progress, cancellation, retry-safe status, and non-blocking UI behavior. Grid editing and row creation remained responsive while those jobs ran.
