@@ -30,12 +30,22 @@ flowchart LR
     Resolve --> Canonical[Canonical hosts, identities, indicators, evidence, and links]
     Canonical --> Views[Workbook projections and saved/system views]
     Canonical --> Snapshot[Immutable incident snapshot]
-    Snapshot --> Outputs[Markdown, Mermaid, Slidev, and HTML outputs]
+    Snapshot --> Outputs[Markdown, Mermaid, Slidev, HTML, and reenactment outputs]
 ```
 
 ## Workbook interaction model
 
-Cartulary centers rough, high-speed incident data capture through a live grid-oriented web interface. The base workbook exposes a small set of built-in sheets: **Timeline**, **Hosts**, **Identities**, **Evidence**, and **Notes**. Additional surfaces such as indicators, compromise assessments, task requests, decisions, and coordination artifacts are workbook-native system views over the same underlying record model rather than separate storage silos.
+Cartulary centers rough, high-speed incident data capture through a live grid-oriented web interface. The base workbook exposes a small set of built-in sheets and a broader set of contract-backed system views and coordination surfaces, all identified by stable `view_schema_id` rather than by visible tab names or column labels.
+
+The base profile defines **fourteen** pack-independent standardized workbook surfaces:
+
+**Built-in sheets** provide the primary grid surfaces for core incident data: **Timeline**, **Hosts**, **Identities**, **Evidence**, and **Notes**.
+
+**Contract-backed system views** expose additional structured record types through the same workbook interaction model without adding built-in tabs: **Indicators**, **Compromise Assessments**, **Task Requests**, **Decisions**, and **Parties**. Parties is an incident-scoped coordination-identity surface for requester, collector, source, audience, and similar party-like references; it is not deployment-local user administration.
+
+**Artifact-backed coordination surfaces** provide workbook-native views for structured coordination artifacts: **Communications Log**, **Handoff**, **Status Review**, and **Lesson**.
+
+Beyond the fourteen required surfaces, three **standardized optional** artifact-backed surfaces are defined for implementations that choose to expose them: **Findings**, **Investigative Queries**, and **Forensic Keywords**. These remain artifact-backed and do not require additional built-in sheets.
 
 Each visible sheet is a denormalized projection over relational source state. Write-back is intent-aware and contract-driven. Edits are routed by stable `view_schema_id` and `field_key`, not by visible tab names, column labels, or cell position.
 
@@ -77,6 +87,7 @@ flowchart LR
     Reviewer[Reviewer browser] <-->|HTTPS / WebSocket| App
     App <-->|SQL| PG[(PostgreSQL)]
     App <-->|Upload / validated preview / download| OBJ[(S3-compatible object store)]
+    App <-->|Backup artifacts| BKP[(Backup storage)]
     IdP[Optional OIDC / SAML IdP] -. enterprise-auth extension .-> App
 ```
 
@@ -88,15 +99,17 @@ Traditional spreadsheet-based workflows are good at rough capture and weak at ob
 
 The project draws selectively on **crew resource management** and **threat and error management** concepts from aviation. The transfer is not about importing cockpit ritual into DFIR. It is about making coordination state more explicit under pressure: who owns what, what is blocked, what changed, what needs review, and what must be handed off or briefed next.
 
-That design direction leads to workbook-native artifacts and views for:
+That design direction produces workbook-native artifacts and views for:
 
-- task requests and decisions;
-- communication logs;
-- handoffs and status reviews;
-- lessons learned;
-- queue-oriented saved views for blocked work, no-owner work, overdue items, pending evidence, and shift-change focus.
+- **Task requests and decisions.** Both are first-class record types with lifecycle machines defining state sets, legal transitions, and post-commit guards. Task requests support queue-oriented filtering by status, owner, priority, workstream, and due date. Decisions track type, rationale, review state, and supersession.
+- **Communications logs.** Structured records for audience, channel or meeting context, summary, referenced decisions, and action follow-up.
+- **Handoffs and status reviews.** Handoff records carry current state, open work, open risks, and next checks. Status reviews surface blocked work, pending evidence, open decisions, risk summary, and next report timing.
+- **Lessons learned.** Structured follow-up tasks, evidence references, and closure state.
+- **Queue-oriented saved views** for blocked work, no-owner work, overdue items, pending evidence, and shift-change focus.
 
-The boundary is strict: these coordination surfaces must stay adjacent to the grid and must not add measurable ceremony to routine capture.
+The specification also defines a **hypothesis boundary**: current-profile hypotheses are artifact-backed through `finding.kind='hypothesis'` rather than being a separate first-class record type. That preserves the "capture first, structure later" principle for analytic reasoning while keeping the door open for promotion if later usage demonstrates the need.
+
+The boundary is strict: coordination surfaces must stay adjacent to the grid and must not add measurable ceremony to routine capture. Non-normative operating-model guidance for tracker hygiene, companion findings-document discipline, handoff quality, status-review cadence, and related practices is provided separately in Appendix H.
 
 ## Visibility, release, and redaction
 
@@ -104,7 +117,7 @@ Within a live incident workspace, data is meant to remain broadly visible to aut
 
 External release is handled separately from live workspace visibility. Cartulary treats reporting as a snapshot-and-render problem, not as a direct read from live workbook tables. The system captures an immutable incident snapshot, materializes a canonical export model, and applies versioned redaction profiles before any release artifact is rendered.
 
-For multi-party incidents, the same snapshot can produce different recipient-specific artifacts. The specification expresses that through disclosure partitions and a closed redaction vocabulary of `allow`, `drop`, `mask`, `truncate`, `hash`, and `stub`. In practice, that means the system can exclude, mask, or pseudonymize other parties’ material, including their PII, at release time without hiding the live internal workspace from the incident team.
+For multi-party incidents, the same snapshot can produce different recipient-specific artifacts. The specification expresses that through disclosure partitions and a closed redaction vocabulary of `allow`, `drop`, `mask`, `truncate`, `hash`, and `stub`. In practice, that means the system can exclude, mask, or pseudonymize other parties' material, including their PII, at release time without hiding the live internal workspace from the incident team.
 
 ```mermaid
 flowchart LR
@@ -127,28 +140,39 @@ The broader deployment posture is intentionally flexible:
 - cloud deployments may run behind the same logical contracts;
 - enterprise authentication is an extension, not a base dependency.
 
-Base authentication uses local user accounts stored in PostgreSQL, Argon2id password hashing, and offline-capable TOTP MFA. Optional WebAuthn is allowed where the environment supports it. OIDC is the preferred enterprise authentication extension, with SAML as the secondary path when required.
+Base authentication uses local user accounts stored in PostgreSQL, Argon2id password hashing, and offline-capable TOTP MFA. OIDC is the preferred enterprise authentication extension, with SAML as the secondary path when required.
 
 Administrative scope is deliberately separated from incident scope. The current specification defines a narrow deployment-local `deployment_admin` capability for local account administration. It does not, by itself, grant incident data access. Incident membership and incident roles remain the boundary for viewing or mutating incident data.
 
-The security posture is equally explicit:
+### Backup and restore
+
+Operational backup and restore are base-profile requirements, not optional operational extras. Each successful backup produces a retained `backup_set` bound to a single `consistency_point_at` across PostgreSQL and the object store. A durable `backup_attestation` record carries restore anchors, a retention floor, and restore-verification state. The specification requires at least one successful `backup_set` within the past 24 hours, a minimum 30-day retention period for each successful set, and full restore verification in an isolated environment at least every 7 days. Backup and restore are distinct from whole-incident portability.
+
+### Security posture
+
+The security posture is explicit:
 
 - incident-authored content is rendered as untrusted content;
 - active content is blocked from executing in the application origin;
 - spreadsheet and CSV export neutralize formula-injection characters by default;
 - upload, preview, import, and archive-extraction paths fail closed on path-traversal or invalid-root behavior;
 - reference-pack activation fails closed on checksum or signature mismatch;
-- invalid deployment configuration fails before the application starts.
+- invalid deployment configuration fails before the application starts;
+- flyaway and disconnected deployments must keep all storage roots on encrypted storage.
+
+The deployment-configuration contract declares explicit runtime roots for database storage, object storage, backup storage, reference-pack storage, temporary work files, and export outputs. Missing or invalid configuration fails startup rather than falling back to hidden defaults.
 
 ## Reporting direction
 
-Reporting is a subsystem, not an afterthought. Cartulary’s intended reporting path is:
+Reporting is a subsystem, not an afterthought. Cartulary's intended reporting path is:
 
 1. capture immutable snapshot;
 2. materialize canonical export model;
 3. render deterministic outputs from that frozen state.
 
-The supported output direction includes Markdown reports, Mermaid diagram sources, Slidev presentation decks, and HTML reports. Generated presentations may reorganize snapshot facts and render deterministic summaries from approved fields, but they must not invent facts, infer unobserved activity, or present generated material as operator-observed evidence.
+The supported output directions include Markdown reports, Mermaid diagram sources, Slidev presentation decks, HTML reports, and operator-facing reenactment outputs such as Asciinema-style terminal walkthroughs generated from selected command-line evidence. Reenactment outputs are visibly marked as generated presentation material and are not eligible for external release.
+
+Generated presentations may reorganize snapshot facts and render deterministic summaries from approved fields, but they must not invent facts, infer unobserved activity, or present generated material as operator-observed evidence. Generated report artifacts must be self-contained: they cannot depend on remote JavaScript, CSS, or font assets at render time.
 
 Post-MVP reporting direction includes internal incident-start briefings, phase-change briefings, and deterministic local generation of daily briefing artifacts from timeline and status-review updates.
 
@@ -162,15 +186,30 @@ Cartulary is currently a specification repository. The normative core is organiz
 - `03_workbook_interaction_collaboration_and_workflows.md`
 - `04_security_deployment_and_conformance.md`
 
-Supporting appendices preserve rationale, diagrams, schema reference material, workflow illustrations, the roadmap, and the source traceability matrix.
+A normative companion document governs claim-bearing publication for timed or fixture-sensitive criteria:
+
+- `05_claim_publication_and_benchmark_reproducibility.md`
+
+Core 05 is not part of base-profile or extension-profile implementation conformance. It governs only the conditions under which public performance claims may be made, including benchmark fixtures, benchmark-profile identifiers, measurement-predicate registries, and audit-bundle retention.
+
+Supporting appendices preserve rationale, diagrams, schema reference material, workflow illustrations, the roadmap, the source traceability matrix, the original exploratory design artifact, and operating-model guidance:
+
+- `A_problem_framing_rationale_tradeoffs_and_sanity_check.md`
+- `B_architecture_diagrams_and_explanatory_source_extract.md`
+- `C_schema_reference_and_ddl_source_extract.md`
+- `D_workflow_and_ui_illustrations_source_extract.md`
+- `E_roadmap_open_questions_and_decision_backlog.md`
+- `F_source_traceability_matrix.md`
+- `G_source_archive_exploratory_design_artifact.md`
+- `H_operating_model_supporting_guidance.md`
 
 The current core also defines bounded extension profiles for:
 
-- Import,
-- Snapshot and Reporting,
-- Incident Portability,
-- Reference Pack,
-- Enterprise Authentication.
+- **Import** — file-based structured import from spreadsheet and CSV sources through a session-based contract.
+- **Snapshot and Reporting** — immutable snapshot capture, canonical export-model materialization, redaction, template rendering, and release-gate approval.
+- **Incident Portability** — full-fidelity administrative whole-incident export and import between trusted Cartulary deployments.
+- **Reference Pack** — reference-pack activation, refresh, verification lifecycle, and overlay behavior.
+- **Enterprise Authentication** — OIDC and SAML provider integration.
 
 ## Project status
 
@@ -180,7 +219,7 @@ At this stage, the repository should be read as a buildable specification corpus
 
 ## License
 
-The current specification corpus does not yet declare a project license.
+Apache-2.0. All runtime dependencies use permissive-only licenses.
 
 ## Acknowledgements
 
