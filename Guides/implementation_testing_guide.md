@@ -1,17 +1,17 @@
 # Cartulary Progressive Implementation and Testing Guide
 
 **Status**: Derived implementation-planning artifact  
-**Authoritative sources**: Core 00–04  
+**Authoritative sources**: Core 00–04 for implementation conformance; Core 05 for claim-bearing publication only  
 **Traceability source**: Appendix F  
-**Scope**: Base profile, with extension-profile testing hooks in Phase 10
+**Scope**: Base profile, with extension-profile testing hooks in Phase 11
 
 ---
 
 ## 1. How to read this guide
 
-This guide is a **derived implementation-planning artifact**, not an independent source of contract truth. Core 00 through Core 04 are authoritative. Appendix F is the traceability aid. When this guide and an owner section diverge, the owner section governs and this guide must be repaired.[^precedence]
+This guide is a **derived implementation-planning artifact**, not an independent source of contract truth. Core 00 through Core 04 are authoritative for implementation conformance. Core 05 is authoritative for claim-bearing publication of timed or fixture-sensitive criteria only. Appendix F is the traceability aid. When this guide and an owner section diverge, the owner section governs and this guide must be repaired.[^precedence][^claim-publication]
 
-This guide preserves the ten-phase implementation shape because it is useful for delivery planning, but the phase order is an **implementation aid**, not a parallel specification. A phase may group work for sequencing convenience. It does not change requirement ownership, route semantics, data-model rules, or conformance scope.[^precedence][^traceability]
+This guide preserves the phased implementation shape because it is useful for delivery planning, but the phase order is an **implementation aid**, not a parallel specification. A phase may group work for sequencing convenience. It does not change requirement ownership, route semantics, data-model rules, or conformance scope.[^precedence][^traceability]
 
 Phase headers therefore name **primary owner sections**, not broad REQ blocks. The phase tables carry the exact REQ and AC identifiers for each planned test. Use the phase header to find the owner section. Use the row-level mappings to build the test and to prove traceability.[^precedence][^traceability]
 
@@ -25,7 +25,7 @@ This guide also resolves one dependency error from the prior version: reviewer-f
 
 ### 1.2 Conformance posture
 
-Phases 0 through 9 are the base-profile implementation sequence. A base-profile claim must satisfy the current Base claim manifest in Core 04, including `AC-299`. Phase 10 is intentionally not a base-profile phase. It is an extension-profile hook section that keeps extension work aligned to current route families and profile claim boundaries.[^base-manifest][^traceability]
+Phases 0 through 10 are the base-profile implementation sequence. A base-profile claim MUST satisfy the current Base claim manifest in Core 04 rather than any historical endpoint shorthand such as `AC-299` alone. Phase 11 is intentionally not a base-profile phase. It is an extension-profile hook section that keeps extension work aligned to the current extension route families and claim manifests. Core 05 remains a separate normative companion for claim-bearing publication of timed or fixture-sensitive criteria and does not broaden Base Profile or extension-profile implementation conformance.[^base-manifest][^traceability][^claim-publication]
 
 ---
 
@@ -41,16 +41,21 @@ This phase establishes the deployable shell and startup control plane:
 - canonical disconnected-layout defaults,
 - fail-closed startup,
 - schema bootstrap idempotency,
+- first-deployment-admin bootstrap preflight,
+- bootstrap-manifest validation and skip semantics,
+- fail-closed lost-admin recovery when bootstrap-completion state exists but no active deployment admin remains,
+- resource-limit registry validation,
 - object-store reachability.
 
-No domain routes beyond health or startup diagnostics should be treated as complete at the end of this phase.
+No domain routes beyond health or startup diagnostics should be treated as complete at the end of this phase. Bootstrap-created administrators enter the ordinary credential lifecycle later in Phase 1 rather than through a special startup-only auth path.[^base-manifest][^core01-routes]
 
 ### 2.0.2 Primary owner sections
 
 - Core 01 §1 Architecture pattern
+- Core 01 §3.3.5.1 deployment-local user administration and bootstrap-admin manifest contract
 - Core 04 §5–§8 deployment topology, runtime roots, container boundary, and required services
 - Core 04 §12 deployment-configuration contract
-- Core 04 §9.0.1 base-claim manifest for `AC-294..AC-298`
+- Core 04 §9.0.1 base-claim manifest for `AC-294..AC-298`, `AC-320`, and `AC-343..AC-346`
 
 ### 2.0.3 Unit tests
 
@@ -62,6 +67,9 @@ No domain routes beyond health or startup diagnostics should be treated as compl
 | U-0-04 | Disconnected-layout defaults are applied only where the owner section allows them. Missing required roots are not silently defaulted away. | REQ-04-067, REQ-04-069, REQ-04-071..REQ-04-076 | AC-297 |
 | U-0-05 | Invalid deployment configuration blocks HTTP startup, WebSocket startup, and background-job startup. | REQ-04-077..REQ-04-078 | AC-298 |
 | U-0-06 | Schema bootstrap is idempotent. Running the bootstrap sequence twice does not create duplicate schema objects or fail the second run. | REQ-01-001..REQ-01-003, REQ-04-061 | AC-231 |
+| U-0-07 | Bootstrap manifest validation accepts only `cartulary.bootstrap_admin.v1`, defaults omitted `mfa_required` to `true`, rejects explicit `false` or unknown top-level members, and never permits incident membership, provider binding, or client-chosen deployment-admin state. | REQ-01-530..REQ-01-532 | AC-343, AC-344 |
+| U-0-08 | Startup preflight queries active deployment-admin state and bootstrap-completion state before listener start, skips manifest consumption when an active deployment admin already exists, and fails closed when completion state exists but no active deployment admin remains. | REQ-01-533..REQ-01-535, REQ-04-087..REQ-04-092 | AC-345, AC-346 |
+| U-0-09 | The resource-limit registry resolves omitted defaults deterministically, enforces its closed numeric domains, rejects unknown limit keys, and never widens the fixed public ceilings for `sort[]`, `filters[]`, `changes[]`, or `collection_actions_v1.actions[]`. | REQ-04-066, REQ-04-077, REQ-04-079..REQ-04-081 | AC-320 |
 
 ### 2.0.4 Integration tests
 
@@ -70,6 +78,9 @@ No domain routes beyond health or startup diagnostics should be treated as compl
 | I-0-01 | Against a real PostgreSQL instance, bootstrap creates the required extensions and base schema objects and can be rerun without drift. | REQ-01-001..REQ-01-003, REQ-04-061 | AC-231 |
 | I-0-02 | Against a real S3-compatible object store, the application can initialize the configured storage binding and perform a minimal round-trip object write and read. | REQ-04-058..REQ-04-061 | AC-231 |
 | I-0-03 | A configuration with a path-validation failure or missing required root never reaches ready state, even when PostgreSQL and object storage are otherwise healthy. | REQ-04-074..REQ-04-078 | AC-296, AC-298 |
+| I-0-04 | A fresh deployment with a valid bootstrap manifest creates exactly one active local deployment admin, one bootstrap-completion marker, and one deployment-local administrative audit event in one commit before ready state. | REQ-01-534, REQ-02-007..REQ-02-008, REQ-04-028, REQ-04-038 | AC-343 |
+| I-0-05 | When bootstrap is required, a missing, unreadable, non-regular, malformed, schema-invalid, or conflicting bootstrap manifest fails before ready state and leaves no partial user, no partial bootstrap-completion marker, and no incident membership behind. | REQ-01-530..REQ-01-535, REQ-04-087..REQ-04-092 | AC-344 |
+| I-0-06 | Existing active deployment-admin state skips bootstrap consumption even when the configured manifest path is stale or invalid; completion-state with zero active deployment admins fails closed and creates no implicit replacement admin. | REQ-01-533..REQ-01-535, REQ-04-090..REQ-04-092 | AC-345, AC-346 |
 
 ### 2.0.5 E2E tests
 
@@ -77,6 +88,9 @@ No domain routes beyond health or startup diagnostics should be treated as compl
 |---|---|---|---|
 | E-0-01 | A fresh minimum deployment starts, passes health checks, and exposes a ready state only after PostgreSQL, object storage, and configuration validation all succeed. | REQ-04-054..REQ-04-061, REQ-04-066..REQ-04-078 | AC-294..AC-298 |
 | E-0-02 | A deployment with an invalid config artifact never exposes a healthy application surface and exits with structured startup diagnostics. | REQ-04-077..REQ-04-078 | AC-298 |
+| E-0-03 | A fresh deployment requiring bootstrap becomes ready only after successful bootstrap preflight and exposes exactly one active deployment admin with no incident membership or provider binding. | REQ-01-533..REQ-01-534, REQ-04-028, REQ-04-090 | AC-343 |
+| E-0-04 | When bootstrap preconditions require a manifest, a missing or invalid manifest blocks startup before HTTP, WebSocket, or background-job listeners start and surfaces the bootstrap-specific `invalid_deployment_config` reason code. | REQ-01-530..REQ-01-535, REQ-04-087..REQ-04-092 | AC-344 |
+| E-0-05 | When an active deployment admin already exists, startup ignores a stale or invalid bootstrap manifest and proceeds; when no active deployment admin exists but bootstrap-completion state already exists, startup fails closed with `reason_code='bootstrap_recovery_not_supported'`. | REQ-01-533..REQ-01-535, REQ-04-090..REQ-04-092 | AC-345, AC-346 |
 
 ---
 
@@ -92,14 +106,20 @@ This phase establishes the authenticated shell:
 - CSRF protection,
 - session lifecycle and concurrency cap,
 - session inspection and logout,
+- credential-state inspection,
+- self-service password change,
+- TOTP begin and complete for first enrollment and replacement enrollment,
+- bootstrap-token boundaries,
 - deployment-local user creation and patch,
+- deployment-admin password reset, TOTP reset, and explicit revoke-all,
 - immediate socket revocation behavior for revoked sessions.
 
-Incident-specific work does not begin until the session and deployment-local account boundary is trustworthy.
+Incident-specific work does not begin until the bounded credential lifecycle and deployment-local account boundary are trustworthy.[^base-manifest][^core01-routes]
 
 ### 3.1.2 Primary owner sections
 
 - Core 01 §3.3.2 session and authentication routes
+- Core 01 §3.3.2.2 credential lifecycle and TOTP bootstrap routes
 - Core 01 §3.3.5.1 deployment-local user administration
 - Core 01 §3.3.10 WebSocket session lifecycle consequences
 - Core 04 §1 authentication model and session lifecycle boundaries
@@ -118,6 +138,10 @@ Incident-specific work does not begin until the session and deployment-local acc
 | U-1-07 | `POST /api/v1/users` applies the required defaults: omitted `mfa_required=true`, omitted `is_deployment_admin=false`, server-managed `is_active=true`, and no `initial_password` echo. | REQ-01-117..REQ-01-123 | AC-175..AC-177 |
 | U-1-08 | `PATCH /api/v1/users/{user_id}` enforces `base_user_version` and rejects demotion or deactivation of the last active deployment admin. | REQ-01-124..REQ-01-126 | AC-178..AC-180 |
 | U-1-09 | Cookie-authenticated state-changing routes fail closed on missing or invalid CSRF proof. | REQ-04-003 | AC-123, AC-130 |
+| U-1-10 | `GET /api/v1/auth/credential-state` returns only the safe credential-state shape, uses the closed `totp.state` vocabulary, and rejects bootstrap-token use on ordinary auth inspection routes with the route-owned rejection code. | REQ-01-523, REQ-04-083..REQ-04-084 | AC-335, AC-339 |
+| U-1-11 | `POST /api/v1/auth/password/change` verifies `current_password` exactly as supplied after JSON decoding, requires a current TOTP assertion when an active factor exists, revokes all active sessions on success, and records only secret-safe deployment-local audit or idempotency state. | REQ-01-524, REQ-04-016, REQ-04-086 | AC-338 |
+| U-1-12 | `POST /api/v1/auth/mfa/totp/begin` and `POST /api/v1/auth/mfa/totp/complete` accept exactly one auth mode, issue seed material only on begin, preserve begin idempotency within one auth scope plus `client_txn_id`, consume bootstrap tokens on successful complete, and distinguish first enrollment from replacement-enrollment session consequences. | REQ-01-522, REQ-01-525..REQ-01-526, REQ-04-084 | AC-336, AC-337, AC-339 |
+| U-1-13 | `POST /api/v1/users/{user_id}/password/reset`, `POST /api/v1/users/{user_id}/mfa/totp/reset`, and `POST /api/v1/users/{user_id}/sessions/revoke-all` are callable only by `deployment_admin`, preserve their route-owned state consequences, and do not widen incident-scoped authorization. | REQ-01-527..REQ-01-529, REQ-04-085..REQ-04-086 | AC-340..AC-342 |
 
 ### 3.1.4 Integration tests
 
@@ -126,6 +150,9 @@ Incident-specific work does not begin until the session and deployment-local acc
 | I-1-01 | Login, session inspection, idle sliding, and logout all persist against a real PostgreSQL session store. | REQ-01-023..REQ-01-031, REQ-04-005..REQ-04-017 | AC-123, AC-131, AC-156..AC-163 |
 | I-1-02 | Session revocation pushes `session_revoked` to an attached socket owned by that session and then closes the connection. | REQ-01-029, REQ-01-250..REQ-01-277, REQ-04-015..REQ-04-016 | AC-131, AC-136, AC-156..AC-163 |
 | I-1-03 | Deployment-admin user creation and patch persist the expected defaults, version changes, and administrative audit records. | REQ-01-117..REQ-01-126, REQ-04-038 | AC-175..AC-180, AC-231 |
+| I-1-04 | Credential-state inspection, TOTP begin and complete, and password change persist the expected deployment-local credential-state transitions and revoke sessions according to the route-owned rules. | REQ-01-523..REQ-01-526, REQ-04-016, REQ-04-083..REQ-04-084 | AC-335..AC-339 |
+| I-1-05 | Deployment-admin password reset, TOTP reset, and revoke-all persist safe administrative audit records, update or preserve credential state exactly as required, and revoke attached sockets immediately. | REQ-01-527..REQ-01-529, REQ-01-250..REQ-01-277, REQ-04-016, REQ-04-085..REQ-04-086 | AC-340..AC-342 |
+| I-1-06 | A bootstrap token is accepted only by `POST /api/v1/auth/mfa/totp/begin` and `POST /api/v1/auth/mfa/totp/complete`; the same token fails closed on session, credential-state, ordinary incident routes, and `/ws/v1/*` with the route-owned rejection code. | REQ-01-522..REQ-01-523, REQ-04-084 | AC-334, AC-339 |
 
 ### 3.1.5 E2E tests
 
@@ -136,6 +163,9 @@ Incident-specific work does not begin until the session and deployment-local acc
 | E-1-03 | Invalid credentials return `invalid_credentials` without creating a session cookie. | REQ-01-025, REQ-01-234 | AC-245 |
 | E-1-04 | Session idle expiry causes subsequent authenticated requests to fail closed until the user logs in again. | REQ-04-008..REQ-04-012 | AC-131, AC-136 |
 | E-1-05 | A deployment admin creates a user, patches it, and sees optimistic-concurrency enforcement and the last-admin guard. | REQ-01-117..REQ-01-126 | AC-175..AC-180 |
+| E-1-06 | A bootstrap-created or TOTP-reset local user follows the ordinary `mfa_setup_required -> bootstrap_token -> totp/begin -> totp/complete -> ordinary login` sequence, and first-time TOTP completion alone issues no session. | REQ-01-522, REQ-01-525..REQ-01-526, REQ-01-536 | AC-334, AC-336, AC-337, AC-347 |
+| E-1-07 | A current user changes their password, must satisfy current-password and current-TOTP requirements when applicable, loses the current session immediately, and must log in again with the new password. | REQ-01-524, REQ-04-016, REQ-04-083 | AC-338 |
+| E-1-08 | Only a deployment admin can reset another user's password, reset another user's TOTP factor, or revoke all of that user's sessions; a non-deployment-admin incident admin cannot perform those route actions. | REQ-01-527..REQ-01-529, REQ-04-085 | AC-340..AC-342 |
 
 ---
 
@@ -150,15 +180,17 @@ This phase establishes incident-scoped administration and the first stable incid
 - incident membership create, patch, and delete,
 - role-gated incident authorization,
 - common response-envelope expectations on first incident routes,
+- deployment-scoped extension discovery,
+- reserved-but-unclaimed extension-family dispatch,
 - incident create and patch idempotency or optimistic versioning,
 - automatic creation of workbook preference objects at incident create.
 
-This phase does **not** yet complete record-row history for workbook records. It does establish the expectation that every new mutating route from this point forward must already satisfy its route-owned validation, idempotency, versioning, authorization, and audit contracts.
+This phase does **not** yet complete record-row history for workbook records. It does establish the expectation that every new mutating route from this point forward must already satisfy its route-owned validation, idempotency, versioning, authorization, audit, and route-family discovery contracts.[^base-manifest][^core01-routes]
 
 ### 4.2.2 Primary owner sections
 
 - Core 01 §3.3.1 versioning and compatibility
-- Core 01 §3.3.3 route families
+- Core 01 §3.3.3 route families and runtime extension discovery
 - Core 01 §3.3.5.1 incident membership routes
 - Core 01 §3.3.5.2 saved-view and workbook-preference routes
 - Core 01 §3.3.5.3 incident create, list, get, and patch
@@ -178,6 +210,8 @@ This phase does **not** yet complete record-row history for workbook records. It
 | U-2-06 | Membership create requires exactly one of `user_id` or `email`, uses the closed role vocabulary, and never auto-creates a user or invitation. | REQ-01-127..REQ-01-132 | AC-175..AC-180 |
 | U-2-07 | Membership patch and delete enforce `base_membership_version` and the `last_incident_admin` guard. | REQ-01-133..REQ-01-137 | AC-178..AC-180 |
 | U-2-08 | `deployment_admin` alone does not grant incident read, incident write, incident job, preview, download, or WebSocket access. | REQ-04-028..REQ-04-030 | AC-178..AC-180, AC-261 |
+| U-2-09 | `GET /api/v1/extensions` is a singleton deployment-scoped discovery route that returns the exact current-profile `profile_id` set, exact `claimed` plus `route_families[]` item shapes, canonical ordering, and `invalid_pagination_request` on pagination members. | REQ-01-542..REQ-01-545, REQ-04-105 | AC-370 |
+| U-2-10 | Reserved-extension dispatch uses the required precedence: base routes first, claimed extension families second, reserved-but-unclaimed families return `extension_profile_not_claimed` before family-specific authorization or policy evaluation, and ordinary unknown-route handling applies only outside reserved families. | REQ-01-546..REQ-01-548 | AC-371 |
 
 ### 4.2.4 Integration tests
 
@@ -187,6 +221,8 @@ This phase does **not** yet complete record-row history for workbook records. It
 | I-2-02 | Duplicate `incident_key` on a distinct create request fails with `incident_key_conflict` after normalization. | REQ-01-165, REQ-02-016 | AC-170..AC-174, AC-211..AC-214 |
 | I-2-03 | Membership changes re-derive incident authorization immediately for subsequent reads and mutating routes. | REQ-01-127..REQ-01-137, REQ-04-021..REQ-04-030 | AC-175..AC-180 |
 | I-2-04 | Incident patch persists only the allowed promoted fields and advances `incident_version` only on material change. | REQ-01-168..REQ-01-180, REQ-02-015 | AC-170..AC-174, AC-211..AC-214 |
+| I-2-05 | `GET /api/v1/extensions` succeeds for an authenticated session with zero incident memberships, returns only extension-claim state, and never exposes provider secrets, provider claim maps, or live extension-family payload. | REQ-01-542..REQ-01-546, REQ-04-105 | AC-370 |
+| I-2-06 | When a profile is unclaimed, both the reserved family root and a descendant route under that family return `404 error.code='extension_profile_not_claimed'` with canonical `profile_id` and `route_family`; paths outside reserved families do not use that error. | REQ-01-544..REQ-01-548 | AC-371 |
 
 ### 4.2.5 E2E tests
 
@@ -196,6 +232,8 @@ This phase does **not** yet complete record-row history for workbook records. It
 | E-2-02 | The same incident appears in incident discovery, can be retrieved directly, and can be patched only through the allowed promoted fields. | REQ-01-168..REQ-01-180, REQ-02-015 | AC-170..AC-174, AC-211..AC-214 |
 | E-2-03 | An incident admin adds, changes, and removes memberships. A non-admin incident member cannot perform the same actions in place. | REQ-01-127..REQ-01-137, REQ-04-021..REQ-04-030 | AC-175..AC-180 |
 | E-2-04 | Unknown or forbidden top-level members on incident create or patch are rejected with the route-owned error contract. | REQ-01-021, REQ-01-154..REQ-01-180 | AC-219, AC-220 |
+| E-2-05 | An authenticated user with zero incident memberships can read `GET /api/v1/extensions`, receives the ordered current-profile extension set and canonical reserved family roots, and cannot induce pagination semantics on that singleton route. | REQ-01-542..REQ-01-545, REQ-04-105 | AC-370 |
+| E-2-06 | Probing an unclaimed extension family returns `404 error.code='extension_profile_not_claimed'` before family-specific authorization or policy evaluation, while base routes and claimed extension families use their ordinary dispatch paths. | REQ-01-546..REQ-01-548 | AC-371 |
 
 ---
 
@@ -241,6 +279,7 @@ This is the first phase where record-row history exists at all. Phase 7 will lat
 | U-3-07 | Patch-route idempotent replay returns the original committed result and creates no second mutation, no second revision, and no second collaboration event. | REQ-01-058, REQ-01-069..REQ-01-070 | AC-126, AC-299 |
 | U-3-08 | Timeline projection rows carry the view-owned derived fields and maintain stable `record_id` / `row_version` binding for the grid. | REQ-01-312..REQ-01-322, REQ-01-349..REQ-01-350, REQ-03-236..REQ-03-241 | AC-116, AC-119, AC-120, AC-191..AC-193 |
 | U-3-09 | Every successful Timeline create or patch writes an attributed mutation entry and a new row revision for that record. | REQ-02-205..REQ-02-207, REQ-04-036..REQ-04-037 | AC-215, AC-231 |
+| U-3-10 | Supersede-with-replacement rejects illegal replacement targets, replays idempotently by `(record_id, client_txn_id)`, and writes one coupled history entry so rollback removes both the lifecycle transition and the replacement link. | REQ-01-086..REQ-01-087, REQ-01-311..REQ-01-312, REQ-02-168, REQ-02-181, REQ-03-106..REQ-03-107 | AC-329..AC-331 |
 
 ### 5.3.4 Integration tests
 
@@ -298,6 +337,8 @@ This phase introduces progressive normalization and exact-match entity behavior:
 | U-4-05 | Exact-match reuse follows the stable precedence rules for hosts and identities. Alias and fuzzy matches remain suggestions only and never auto-resolve or auto-merge. | REQ-02-059..REQ-02-063 | AC-021, AC-022 |
 | U-4-06 | Entity merge is explicit only. The survivor `record_id` remains unchanged, the loser remains historical with merge lineage, and raw source mentions are not rewritten. | REQ-02-064..REQ-02-066 | AC-023, AC-186, AC-209 |
 | U-4-07 | Indicator observations remain source-bound rows. Canonical indicators use incident-scoped dedupe identity and lifecycle state that is separate from observations. | REQ-02-027, REQ-02-056..REQ-02-057, REQ-02-072..REQ-02-082 | AC-017, AC-077..AC-079 |
+| U-4-08 | Interactive auto-resolution uses only the explicit exact-match eligibility contract, creates `provenance='auto_match'` links with `confidence=100` only for eligible committed Timeline tokens, never strips hedge or punctuation forms into matches, and never runs in background jobs or async cleanup. | REQ-01-057..REQ-01-088, REQ-01-228..REQ-01-239, REQ-01-315..REQ-01-316, REQ-01-568, REQ-02-163..REQ-02-185, REQ-03-205..REQ-03-216, REQ-03-276..REQ-03-279 | AC-205, AC-388..AC-392 |
+| U-4-09 | Manual Timeline relationship mutations on `timeline.host_refs` or `timeline.identity_refs` commit with `provenance='manual'`, `confidence=null`, reject any client-supplied `confidence`, and preserve authoritative `null` through current-state reads. | REQ-01-311, REQ-01-314..REQ-01-320, REQ-02-248, REQ-03-280 | AC-394, AC-396, AC-397 |
 
 ### 6.4.4 Integration tests
 
@@ -314,6 +355,7 @@ This phase introduces progressive normalization and exact-match entity behavior:
 | E-4-01 | An analyst types raw host and identity text on a Timeline row, resolves one token to an existing entity, and creates a stub from another token in the inspector without leaving the workbook surface. | REQ-02-030..REQ-02-034, REQ-03-129..REQ-03-134, REQ-03-247..REQ-03-249 | AC-006, AC-019, AC-020 |
 | E-4-02 | An analyst dismisses and later ordinarily restores a mention. The restored mention returns to the unresolved queue and does not silently recover an old resolved target. | REQ-02-039..REQ-02-041, REQ-03-129..REQ-03-134 | AC-188..AC-190, AC-224, AC-225 |
 | E-4-03 | A reviewer merges two duplicate entities from the inspector. The surviving row identity remains stable and dependent links or resolutions follow the survivor. | REQ-01-181..REQ-01-195, REQ-02-064..REQ-02-066, REQ-03-247..REQ-03-249 | AC-023, AC-186, AC-209 |
+| E-4-04 | An eligible exact-match Timeline token auto-resolves on commit, while hedge, punctuation, parenthetical, or approximate forms remain unresolved and require explicit analyst action. | REQ-01-315..REQ-01-316, REQ-01-568, REQ-03-205..REQ-03-216, REQ-03-276..REQ-03-279 | AC-205, AC-388..AC-391 |
 
 ---
 
@@ -356,6 +398,7 @@ This phase completes the binary-evidence path:
 | U-5-06 | Handle redemption re-derives current session validity, current incident membership, and current evidence/blob state. Preview blocks explicitly on unsupported or unsafe preview conditions rather than silently falling back. | REQ-01-463..REQ-01-465, REQ-04-023, REQ-04-053 | AC-252..AC-255 |
 | U-5-07 | Download responses use authoritative metadata for filename disposition and apply deterministic fallback naming when authoritative names are absent. | REQ-01-459..REQ-01-465 | AC-251, AC-253 |
 | U-5-08 | Evidence attachment updates workbook-visible evidence counts and `has_evidence`-style derived flags without forcing navigation away from the current surface. | REQ-03-116..REQ-03-126, REQ-03-242..REQ-03-246 | AC-004, AC-015, AC-016 |
+| U-5-09 | Blob-create size ceilings reject oversize `byte_size` before slot creation, and preview-handle issuance fails with the route-owned oversized-preview reason while leaving download behavior available when the payload is otherwise legal. | REQ-01-238, REQ-01-243..REQ-01-245, REQ-01-461, REQ-01-465, REQ-04-079..REQ-04-080 | AC-321, AC-322 |
 
 ### 7.5.4 Integration tests
 
@@ -415,6 +458,7 @@ This phase completes the live multi-user path:
 | U-6-06 | `keep_saved` clears the local conflict without creating a new revision. `use_unsaved` and `merged_value` create a new attributed change set. | REQ-03-077..REQ-03-082 | AC-041, AC-163 |
 | U-6-07 | The first application message on the incident socket is exactly one of `hello` or `resume`. Resume outside the replay window yields reset behavior rather than partial replay. | REQ-01-250..REQ-01-277 | AC-129, AC-131, AC-135 |
 | U-6-08 | Presence payloads are incident-scoped and ephemeral. Heartbeats do not extend idle expiry. `session_revoked` closes the socket with the route-owned reason code set. | REQ-01-250..REQ-01-277, REQ-03-090..REQ-03-100, REQ-04-010 | AC-008, AC-131, AC-132..AC-136, AC-156..AC-163 |
+| U-6-09 | Save-state labels use only `Syncing`, `Saved`, and `Conflict`; the local pending queue is FIFO, bounded to 64 non-coalescible units, same-record coalescing stays contiguous, and non-retryable failure or same-field conflict halts replay without silent eviction or reload restore. | REQ-03-072, REQ-03-089, REQ-03-095, REQ-03-099..REQ-03-100 | AC-376..AC-382 |
 
 ### 8.6.4 Integration tests
 
@@ -433,6 +477,7 @@ This phase completes the live multi-user path:
 | E-6-02 | Concurrent edits to different fields on the same row auto-merge. Concurrent edits to the same field open the same-surface resolver and require explicit analyst resolution. | REQ-03-033..REQ-03-082 | AC-009, AC-037..AC-042, AC-226..AC-230 |
 | E-6-03 | Logout, expiry, or concurrency-limit revocation emits `session_revoked`, closes the socket, and preserves unsaved local work for later explicit recovery after re-authentication. | REQ-01-029, REQ-01-250..REQ-01-277, REQ-03-099..REQ-03-100, REQ-04-013..REQ-04-016 | AC-131, AC-136, AC-156..AC-163 |
 | E-6-04 | Live updates never retarget a pending local edit away from the bound `record_id` during sort, filter, or grouping changes. | REQ-01-015..REQ-01-017, REQ-03-086, REQ-03-223..REQ-03-235 | AC-047 |
+| E-6-05 | Within one browser runtime, queued unsent writes survive transient disconnect or session revocation, replay in FIFO order after re-authentication, halt on the first blocking non-retryable failure, and are never silently restored after a full reload. | REQ-01-250..REQ-01-277, REQ-03-099..REQ-03-100 | AC-377..AC-382 |
 
 ---
 
@@ -471,7 +516,8 @@ This phase completes the reviewer and destructive-operation surface:
 | U-7-03 | Delete requires the current `row_version`, respects role gates, and returns route-owned failures such as `record_deleted_use_restore`, `record_not_deleted`, and `record_locked` where applicable. | REQ-01-071..REQ-01-076, REQ-04-021..REQ-04-024 | AC-215, AC-218 |
 | U-7-04 | Restore requires the tombstone `row_version`, respects role gates, and returns the record to active state without mutating prior history rows in place. | REQ-01-077..REQ-01-082 | AC-215, AC-216 |
 | U-7-05 | Rollback accepts only the documented selector kinds `history_entry`, `change_set`, and `row_restore`, and creates a new `change_set` with source `rollback` rather than mutating prior history. | REQ-01-089..REQ-01-111 | AC-216, AC-217 |
-| U-7-06 | Record locks are enforced for destructive or reviewer-only operations such as merge, rollback, and restore when the owner section requires them. | REQ-01-071..REQ-01-111, REQ-03-101 | AC-182, AC-187, AC-218 |
+| U-7-06 | Record locks are enforced for destructive or reviewer-only operations such as merge, rollback, and restore when the owner section requires them, fail fast before stale-precondition evaluation, and later replays fall through to ordinary downstream route errors after lock release. | REQ-01-071..REQ-01-111, REQ-03-101 | AC-182, AC-187, AC-218, AC-353 |
+| U-7-07 | Retained history for extant records remains fully paginatable and preserves stable `history_entry_ref` values across incident closure, delete or restore cycles, rollback, and restart; the current profile defines no history-purge route or retention-horizon setting for extant incidents. | REQ-01-054..REQ-01-056, REQ-01-561..REQ-01-563 | AC-383..AC-385 |
 
 ### 9.7.4 Integration tests
 
@@ -480,6 +526,7 @@ This phase completes the reviewer and destructive-operation surface:
 | I-7-01 | Delete, restore, and rollback update source rows, projections, history rows, and emitted collaboration events atomically. | REQ-01-071..REQ-01-111, REQ-01-351..REQ-01-353, REQ-02-205..REQ-02-220 | AC-210, AC-215..AC-218 |
 | I-7-02 | History pagination remains bound to `record_id` and preserves deterministic item ordering across pages. | REQ-01-056 | AC-215 |
 | I-7-03 | A stale restore or rollback precondition fails closed and never mutates current row state. | REQ-01-077..REQ-01-082, REQ-01-089..REQ-01-111 | AC-215, AC-218 |
+| I-7-04 | History for an extant record remains fully paginatable and stable across service restart, incident closure, delete or restore, and rollback, with previously issued `history_entry_ref` values preserved for older single-entry-addressable items. | REQ-01-054..REQ-01-056, REQ-01-561..REQ-01-563 | AC-383..AC-385 |
 
 ### 9.7.5 E2E tests
 
@@ -530,6 +577,9 @@ This phase completes workbook configuration and projection-backed navigation:
 | U-8-05 | `home_sheet_ref` and `default_sheet_ref` remain separate objects. Workbook-open fallback order is explicit launch pointer, home pointer, default pointer, then Timeline. Invalid or hidden pointers are cleared before fallback continues. | REQ-03-027..REQ-03-032 | AC-150, AC-153 |
 | U-8-06 | `filters[]`, `sort[]`, and `group_by` use stable `field_key` values only. Invalid operators, invalid arg shapes, duplicate filter keys after normalization, and invalid grouping keys are rejected by the route-owned query contract. | REQ-01-035..REQ-01-047, REQ-03-223..REQ-03-233 | AC-124, AC-184, AC-243, AC-024..AC-026 |
 | U-8-07 | Timeline grouping permits only the declared whitelist keys and never serializes group headers as writable rows. | REQ-03-225..REQ-03-235 | AC-024..AC-026 |
+| U-8-08 | View-query sort and filter ceilings, canonical normalization, and `meta.query` applied-sort tail expansion follow the exact route and saved-view contracts. Omitted sort means `no user sort override`, and `Group: None` is represented only by omission. | REQ-01-035..REQ-01-046, REQ-02-010, REQ-03-224, REQ-03-227 | AC-359..AC-361 |
+| U-8-09 | View-schema discovery exposes exact `sort_fields`, `header_sort_field_key`, grouping-field whitelists, null-last ordering, and no client-sortable `record_id`. Header sort on non-sortable collection fields synthesizes no client sort. | REQ-01-286, REQ-01-310, REQ-01-312, REQ-01-323, REQ-01-326, REQ-01-328, REQ-01-329, REQ-01-331, REQ-01-332, REQ-01-336, REQ-01-339, REQ-01-499, REQ-01-503..REQ-01-506, REQ-03-223..REQ-03-235 | AC-362..AC-365 |
+| U-8-10 | Full-row and sparse-patch wire families include hidden writable fields, preserve authoritative nulls, and canonicalize `changed_field_keys[]` plus `affected_views[]` ordering without guessing partial patches. | REQ-00-027, REQ-01-034, REQ-01-036, REQ-01-267, REQ-01-310, REQ-03-097, REQ-03-247 | AC-366..AC-368 |
 
 ### 10.8.4 Integration tests
 
@@ -538,6 +588,7 @@ This phase completes workbook configuration and projection-backed navigation:
 | I-8-01 | Saved-view create, update, duplicate, and delete persist normalized `query_json` / `layout_json`, scope rules, and authorization consequences against a real database. | REQ-01-138..REQ-01-151, REQ-03-012..REQ-03-026 | AC-146..AC-152 |
 | I-8-02 | Workbook startup selection follows the documented fallback order across valid, missing, hidden, and invalid saved-view references. | REQ-01-145..REQ-01-151, REQ-03-027..REQ-03-032 | AC-150, AC-153 |
 | I-8-03 | Link and tag mutations update projections, history, and view-query results atomically. | REQ-02-163..REQ-02-176, REQ-01-351..REQ-01-353 | AC-205..AC-210 |
+| I-8-04 | Snapshot-stable cursor pagination preserves snapshot membership and order across intervening inserts, deletes, restores, and sort- or filter-relevant edits, while a fresh query re-evaluates against live state and stale cursor chains fail with `cursor_snapshot_unavailable`. | REQ-01-035..REQ-01-036, REQ-01-554..REQ-01-560 | AC-372..AC-375 |
 
 ### 10.8.5 E2E tests
 
@@ -546,6 +597,7 @@ This phase completes workbook configuration and projection-backed navigation:
 | E-8-01 | A user creates a private saved view, converts it to shared when allowed, duplicates a visible system view, and cannot edit the system view in place through ordinary routes. | REQ-03-017..REQ-03-026 | AC-146..AC-152 |
 | E-8-02 | Workbook open honors explicit `sheet_ref`, then home pointer, then incident default, then Timeline, clearing invalid pointers along the way. | REQ-03-027..REQ-03-032 | AC-150, AC-153 |
 | E-8-03 | Sorting, filtering, and grouping on Timeline produce a stable first useful viewport and deterministic final grouping order without turning group headers into rows. | REQ-01-034..REQ-01-047, REQ-03-223..REQ-03-235 | AC-014, AC-024..AC-026, AC-044, AC-184, AC-185 |
+| E-8-04 | Exact-token `full_text` and strict `prefix` behavior do not degrade into fuzzy, phrase, wildcard, stemming, transliteration, or relevance-ranked search. | REQ-01-042, REQ-01-565..REQ-01-567 | AC-387 |
 
 ---
 
@@ -587,9 +639,13 @@ This phase completes the remaining workbook-native operator surfaces and high-va
 | U-9-04 | Indicator system-view rows remain canonical indicator rows with pivots to source-bound observations and lifecycle history. Observation and lifecycle state stay separate from the canonical row identity. | REQ-03-005..REQ-03-006, REQ-02-072..REQ-02-082 | AC-078, AC-079, AC-121, AC-122 |
 | U-9-05 | Party create or explicit create-from-text reuses a same-incident party only on unique exact match of normalized `primary_email` or `external_ref`. Raw requester or source text remains preserved alongside any linked `party_id`. | REQ-02-022, REQ-02-060..REQ-02-063, REQ-03-266..REQ-03-271 | AC-277..AC-280 |
 | U-9-06 | Compromise assessments remain append-only, use only the closed assessment-state vocabulary, and keep operational response actions out of `assessment_state`. Confidence-band derivation remains deterministic. | REQ-02-083..REQ-02-093, REQ-03-250..REQ-03-254 | AC-018, AC-080..AC-084 |
-| U-9-07 | Task Requests and Decisions are first-class workbook surfaces with bounded lifecycle transitions, queue fields, and owner semantics. No generalized workflow engine or mandatory timeline approval fields are introduced. | REQ-02-094..REQ-02-122, REQ-03-255..REQ-03-260 | AC-085, AC-086, AC-137..AC-145 |
+| U-9-07 | Task Requests and Decisions are first-class workbook surfaces with bounded lifecycle transitions, queue fields, owner semantics, and fail-closed contradiction handling for derived decision-state inconsistencies. No generalized workflow engine or mandatory timeline approval fields are introduced. | REQ-00-016, REQ-00-019, REQ-02-094..REQ-02-122, REQ-02-189..REQ-02-196, REQ-03-121..REQ-03-126, REQ-03-255..REQ-03-260 | AC-085, AC-086, AC-137..AC-145, AC-313, AC-314 |
 | U-9-08 | `comm_log`, `handoff`, `status_review`, and `lesson` are workbook-native surfaces with the declared minimum create signal and projection-backed filter or grouping fields. | REQ-01-503..REQ-01-506, REQ-02-123..REQ-02-133, REQ-03-010..REQ-03-011, REQ-03-259, REQ-03-265 | AC-281..AC-284 |
 | U-9-09 | If the implementation exposes standardized Findings, Investigative Queries, or Forensic Keywords surfaces, each exposed surface uses its declared `view_schema_id`, minimum create signal, writable fields, and workbook-native behavior. | REQ-01-507..REQ-01-509, REQ-02-135..REQ-02-138 | AC-285..AC-287 |
+| U-9-10 | Writable timestamp fields bound to `timestamp_instant_v1` accept only RFC 3339 strings with explicit timezones, clear only through explicit JSON `null` when the field is clearable, reject timezone-less or otherwise invalid timestamp payloads, and preserve invalid timestamp drafts as client-local unsaved state. | REQ-01-310, REQ-01-312, REQ-01-328, REQ-01-332, REQ-01-336, REQ-01-339, REQ-01-487..REQ-01-488, REQ-01-503..REQ-01-506, REQ-03-281 | AC-300..AC-304, AC-354 |
+| U-9-11 | Direct-reference fields for requester or source parties and decision refs accept exact stable identifiers only, distinguish omission from explicit clear, preserve text-plus-ref independence, and reject non-direct-write clear shapes. | REQ-01-059..REQ-01-061, REQ-01-328, REQ-01-336, REQ-01-502, REQ-01-516..REQ-01-520, REQ-02-017, REQ-02-021..REQ-02-022, REQ-02-233, REQ-03-272..REQ-03-274 | AC-315..AC-319 |
+| U-9-12 | Collection-style manual relationship fields on assessments, tasks, decisions, and coordination surfaces preserve `confidence=null`, reject client-supplied `confidence`, and keep authoritative `null` through projection and ordinary export. | REQ-01-311, REQ-01-333..REQ-01-340, REQ-01-503..REQ-01-506, REQ-02-248, REQ-03-280 | AC-395..AC-397 |
+| U-9-13 | The artifact-backed variant registry keeps Notes as the required built-in sheet and the coordination surfaces as standardized workbook-native `view_schema` identities. Optional standardized surfaces remain additive and do not replace the required base surface registry. | REQ-01-309, REQ-02-250..REQ-02-253, REQ-03-004, REQ-03-011 | AC-410 |
 
 ### 11.9.4 Integration tests
 
@@ -610,16 +666,71 @@ This phase completes the remaining workbook-native operator surfaces and high-va
 | E-9-05 | Recording a new assessment appends a new attributed row. The sequence `unknown -> suspected -> confirmed -> cleared` and the alternative path `unknown -> disproven` remain distinguishable in history and filters. | REQ-02-083..REQ-02-093, REQ-03-250..REQ-03-254 | AC-018, AC-080..AC-084 |
 | E-9-06 | Task Requests, Decisions, and coordination surfaces appear as workbook surfaces rather than separate application modules. Queue, due-date, blocked-work, handoff, and lesson views are functional. | REQ-03-005..REQ-03-011, REQ-03-255..REQ-03-260 | AC-085..AC-090, AC-281..AC-284 |
 | E-9-07 | If the build exposes standardized Findings, Investigative Queries, or Forensic Keywords surfaces, each exposed surface behaves as a workbook-native surface with the declared minimum create semantics. | REQ-01-507..REQ-01-509, REQ-02-135..REQ-02-138 | AC-285..AC-287 |
+| E-9-08 | The workbook surface registry exposes Notes plus the required coordination surfaces by their canonical `view_schema_id` identities; any optional standardized artifact-backed surface, when exposed, is additive and does not substitute for Notes or any other required base workbook surface. | REQ-01-307..REQ-01-310, REQ-02-250..REQ-02-253, REQ-03-004..REQ-03-011 | AC-410 |
 
 ---
 
-## 12. Phase 10 — Extension profile testing hooks
+## 12. Phase 10 — Operational backup, restore, and restore verification
+
+This phase is the final base-profile implementation phase. It is intentionally late because coherent restore verification depends on a populated deployment and on at least one successful built-in workbook query after restore.[^base-manifest][^core01-routes]
+
+### 12.10.1 Scope
+
+This phase completes deployment-local recovery behavior for the base profile:
+
+- retained `backup_set` metadata and retention floors,
+- coherent restore of Postgres and object storage from the same retained `backup_set`,
+- projection rebuild as part of restore readiness,
+- isolated restore verification cadence and state transitions,
+- fail-closed restore on missing required artifacts or integrity proofs,
+- absence of public backup, restore, and restore-verification route families,
+- deployment-local operator-facing control surfaces only,
+- `roots.backup_storage` contract coverage.
+
+### 12.10.2 Primary owner sections
+
+- Core 01 §12.1 backup
+- Core 01 §12.2 restore
+- Core 04 §2 deployment-admin authorization boundary
+- Core 04 §6 runtime roots and Core 04 §12.3.3 backup storage binding
+- Core 04 §9.14 additional Base Profile criteria for backup and restore contract
+
+### 12.10.3 Unit tests
+
+| ID | Test | Exact REQs | Exact ACs |
+|---|---|---|---|
+| U-10-01 | Retained `backup_set` metadata uses the exact `verification_state` vocabulary, preserves one coherent `consistency_point_at`, and enforces the latest-success plus 30-day retention floors. | REQ-01-571..REQ-01-574 | AC-398 |
+| U-10-02 | Restore readiness requires selection of exactly one retained `backup_set`, restore of Postgres and object storage from the same declared point, and projection rebuild before the target environment is ready. | REQ-01-575, REQ-01-423..REQ-01-424, REQ-01-577 | AC-399 |
+| U-10-03 | Missing required Postgres or object-storage artifacts, or missing required checksum or integrity proof, fails restore before readiness; restore verification updates `verification_state` and `last_verified_restore_at` only according to the isolated verification result. | REQ-01-576, REQ-01-578 | AC-400, AC-401 |
+| U-10-04 | The public route inventory exposes no `/api/v1/backups*`, `/api/v1/restores*`, or `/api/v1/restore-verifications*` family, and any built-in backup or restore control surface is deployment-local and `deployment_admin`-gated. | REQ-01-570, REQ-04-106 | AC-402 |
+| U-10-05 | `roots.backup_storage` is a required persistent runtime root with only the allowed binding kinds, distinct from `roots.export_outputs` and `roots.temporary_work`, and bound to encrypted storage when it carries incident data. | REQ-04-058, REQ-04-071..REQ-04-073, REQ-04-107..REQ-04-108 | AC-403 |
+
+### 12.10.4 Integration tests
+
+| ID | Test | Exact REQs | Exact ACs |
+|---|---|---|---|
+| I-10-01 | The most recent successful retained `backup_set` exposes the required metadata, restore anchors, retention timestamps, and verification-state transitions against real backing storage. | REQ-01-571..REQ-01-574 | AC-398 |
+| I-10-02 | Restoring the latest successful retained `backup_set` into a fresh environment rebuilds projections, opens at least one incident, executes at least one built-in workbook query when incident data is present, and preserves authoritative row, change-set, and blob consistency. | REQ-01-571, REQ-01-575..REQ-01-578 | AC-399, AC-401 |
+| I-10-03 | Selecting a retained `backup_set` that is missing a required artifact or integrity proof fails before the target environment becomes ready. | REQ-01-576 | AC-400 |
+
+### 12.10.5 E2E tests
+
+| ID | Test | Exact REQs | Exact ACs |
+|---|---|---|---|
+| E-10-01 | A deployment-local operator can inspect the latest successful retained `backup_set` and see exact `verification_state`, retention, and verification timestamps. | REQ-01-572..REQ-01-573 | AC-398 |
+| E-10-02 | Restoring the latest successful retained `backup_set` into a fresh deployment recovers the workbook surface and executes at least one built-in workbook query successfully. | REQ-01-575..REQ-01-578 | AC-399, AC-401 |
+| E-10-03 | Public `/api/v1/*` and `/ws/v1/*` surfaces expose no backup, restore, or restore-verification families; any built-in operator control remains deployment-local and requires `deployment_admin`. | REQ-01-570, REQ-04-106 | AC-402 |
+| E-10-04 | Effective deployment configuration requires `roots.backup_storage` with allowed binding kinds and rejects attempts to satisfy backup storage with export or temporary-work roots. | REQ-04-058, REQ-04-071..REQ-04-073, REQ-04-107..REQ-04-108 | AC-403 |
+
+---
+
+## 13. Phase 11 — Extension profile testing hooks
 
 Extension profiles are not part of the base implementation sequence. This section exists so teams do not drift away from the current extension route families or profile claim boundaries while planning later work.
 
 Each extension claim still requires the **base profile first**. The AC groups listed below are the **extension deltas** that should be planned on top of the fully passing base guide.[^profile-dod]
 
-### 12.10.1 Import Extension Profile
+### 13.11.1 Import Extension Profile
 
 **Primary owner sections**
 
@@ -635,6 +746,8 @@ Each extension claim still requires the **base profile first**. The AC groups li
 - `AC-063..AC-067`
 - `AC-232`
 - `AC-262..AC-265`
+- `AC-323..AC-325`
+- `AC-393`
 
 **Key boundaries to test**
 
@@ -644,9 +757,9 @@ Each extension claim still requires the **base profile first**. The AC groups li
 - provenance capture for source bytes, parser version, and locator,
 - inert handling of formulas, macros, automation, and external links,
 - no auto-resolution during ingest,
-- stable imports-module boundary.
+- stable `imports`-module boundary.
 
-### 12.10.2 Snapshot and Reporting Extension Profile
+### 13.11.2 Snapshot and Reporting Extension Profile
 
 **Primary owner sections**
 
@@ -662,6 +775,8 @@ Each extension claim still requires the **base profile first**. The AC groups li
 - `AC-104..AC-106`
 - `AC-233`
 - `AC-266..AC-269`
+- `AC-305..AC-307`
+- `AC-333`
 
 **Key boundaries to test**
 
@@ -672,7 +787,7 @@ Each extension claim still requires the **base profile first**. The AC groups li
 - self-contained outputs,
 - recipient-specific redaction profiles without live-workspace withholding.
 
-### 12.10.3 Reference Pack Extension Profile
+### 13.11.3 Reference Pack Extension Profile
 
 **Primary owner sections**
 
@@ -686,6 +801,9 @@ Each extension claim still requires the **base profile first**. The AC groups li
 - `AC-092..AC-096`
 - `AC-234`
 - `AC-270..AC-272`
+- `AC-308..AC-310`
+- `AC-326`
+- `AC-369`
 
 **Key boundaries to test**
 
@@ -696,7 +814,7 @@ Each extension claim still requires the **base profile first**. The AC groups li
 - smallest disconnected bundle,
 - fail-closed activation on integrity failure.
 
-### 12.10.4 Incident Portability Extension Profile
+### 13.11.4 Incident Portability Extension Profile
 
 **Primary owner sections**
 
@@ -709,6 +827,10 @@ Each extension claim still requires the **base profile first**. The AC groups li
 - `AC-164..AC-169`
 - `AC-236`
 - `AC-273..AC-276`
+- `AC-327..AC-328`
+- `AC-332`
+- `AC-386`
+- `AC-409`
 
 **Key boundaries to test**
 
@@ -718,7 +840,7 @@ Each extension claim still requires the **base profile first**. The AC groups li
 - preservation of attribution without importing login-capable deployment-local admin state,
 - tolerance for unsupported optional embedded sections.
 
-### 12.10.5 Enterprise Authentication Extension Profile
+### 13.11.5 Enterprise Authentication Extension Profile
 
 **Primary owner sections**
 
@@ -730,39 +852,41 @@ Each extension claim still requires the **base profile first**. The AC groups li
 - `AC-036`
 - `AC-235`
 - `AC-288..AC-293`
+- `AC-348..AC-352`
 
 **Key boundaries to test**
 
 - providers list and provider begin routes,
 - OIDC callback and SAML ACS completion,
 - provider-backed sign-in terminating into the same opaque session contract as base auth,
+- deployment-admin binding create, rotate, and retire routes,
 - no auto-provisioning of local users or incident memberships.
 
 ---
 
-## 13. Shared cross-cutting harnesses
+## 14. Shared cross-cutting harnesses
 
 These harnesses apply across phases and should be implemented once, then reused. The harness list is intentionally small and tied to current owner sections.
 
-### 13.1 Envelope consistency harness
+### 14.1 Envelope consistency harness
 
 Every HTTP success and error response on a public route must use the owner-level common envelope shape. No public route returns a bare object, bare array, or bespoke error wrapper.
 
 **Owner sections**: Core 01 §3.3.6 and route-family owners in Core 01 §3.3.2, §3.3.4, §3.3.5, §3.3.8, §3.3.9, §17, and §20.
 
-### 13.2 Authorization re-derivation harness
+### 14.2 Authorization re-derivation harness
 
 Route handlers, handle issuance, handle redemption, job polling, job cancel, and incident WebSocket subscription must re-derive authorization from the caller’s current role and current incident membership at request time.
 
 **Owner sections**: Core 04 §2, plus route-specific owners in Core 01 §3.3.5, §3.3.8, §3.3.9, and §3.3.10.
 
-### 13.3 Mutation attribution and history-emission harness
+### 14.3 Mutation attribution and history-emission harness
 
 Every successful mutating route must emit the required actor, timestamp, source, and mutation detail for its owner substrate. Incident data goes through the incident history substrate. Deployment-local account and membership administration goes through the deployment-local administrative audit substrate.
 
 **Owner sections**: Core 02 §14–§15, Core 04 §3.
 
-### 13.4 Idempotent replay and divergent replay harness
+### 14.4 Idempotent replay and divergent replay harness
 
 Every route that owns idempotency must be covered for:
 
@@ -771,54 +895,70 @@ Every route that owns idempotency must be covered for:
 - divergent replay with the same idempotency key,
 - non-idempotent routes explicitly rejecting `client_txn_id` where the owner section says they are intentionally non-idempotent.
 
-This harness must include `PATCH /api/v1/records/{record_id}` and therefore must cover `AC-299`.
+This harness must include `PATCH /api/v1/records/{record_id}` and therefore must cover `AC-299`. It MUST also include the bounded credential-lifecycle and deployment-admin credential-action routes that own route-scoped idempotency in the current profile.[^core01-routes]
 
 **Owner sections**: Core 01 §3.3.5, Core 01 §3.3.8, Core 01 §3.3.9, Core 01 §17, Core 01 §20.
 
-### 13.5 Closed-vocabulary rejection harness
+### 14.5 Closed-vocabulary rejection harness
 
 All write paths must reject invalid tokens for the closed vocabularies they own.
 
 **Owner sections**: Core 02 §18 and any route-specific write contracts that bind those tokens.
 
-### 13.6 Writable-string normalization harness
+### 14.6 Writable-string normalization harness
 
 All writable string fields bound to an owner-level string contract must normalize, trim, reject controls, or preserve `null` exactly as the contract requires.
 
 **Owner sections**: Core 01 owner-level writable-string contract bindings and the field-level write contracts in Core 01 §7.4, §19, and Core 03 workbook write surfaces.
 
-### 13.7 View-schema field-key conformance harness
+### 14.7 View-schema field-key conformance harness
 
 Clients and tests must address writable and queryable fields only by stable `field_key`. Visible column labels, tab names, storage table names, or projection column names are never mutation keys.
 
 **Owner sections**: Core 01 §3.3.4, §3.3.5, §7.4; Core 03 §14–§16.
 
-### 13.8 Projection determinism and rebuild harness
+### 14.8 Projection determinism and rebuild harness
 
 Projection rebuilds must be deterministic from authoritative source state. Projection corruption or rebuild must never alter authoritative source rows.
 
 **Owner sections**: Core 01 §8.
 
-### 13.9 WebSocket lifecycle harness
+### 14.9 WebSocket lifecycle harness
 
-The socket boundary must enforce first-message rules, replay vs reset semantics, ephemeral presence handling, heartbeat timing, `session_revoked`, and delete/restore `record_changed` semantics.
+The socket boundary must enforce first-message rules, replay vs reset semantics, ephemeral presence handling, heartbeat timing, `session_revoked`, and delete or restore `record_changed` semantics.
 
 **Owner sections**: Core 01 §3.3.10 and Core 03 §4.
 
-### 13.10 Performance fixtures and p95 measurement harness
+### 14.10 Implementation timing-validation harness
 
-Performance-sensitive ACs must use Fixture A and Fixture B and the owner-level p95 measurement method. Measure end-user-visible completion time, not only backend timing.
+Implementation-facing timed ACs must use the Core 04 observable completion semantics and end-user-visible completion time rather than backend-only timing. Passing this harness proves implementation conformance only. It does not authorize a public benchmark claim.[^claim-publication]
 
-**Owner sections**: Core 04 §9 (`REQ-04-063..REQ-04-064`).
+**Owner sections**: Core 04 §9 for implementation-timed criteria.
+
+### 14.11 Claim-bearing benchmark-publication boundary
+
+Teams MUST NOT treat passing §14.10 as sufficient for a public timed or fixture-sensitive claim. Claim-bearing publication additionally requires Core 05 and remains outside Base Profile and extension-profile implementation conformance.[^precedence][^claim-publication]
+
+| Concern | Authoritative owner | Minimum evidence |
+|---|---|---|
+| Implementation-facing timed AC pass | Core 04 §9 | ordinary conformance evidence under this guide |
+| Benchmark environment identity | Core 05 §2–§3 | exact `benchmark_profile_id` plus conformant `benchmark_manifest` |
+| Public timed or fixture-sensitive claim | Core 05 §1–§4 | passing `PC-001..PC-006` with retained benchmark artifacts |
+
+### 14.12 Topology, preservation, and audit-source invariants harness
+
+Conformance evidence must prove that the application remains one deployable unit, binary evidence does not persist inline in the authoritative structured store, rough capture remains recoverable after later normalization, unauthenticated state-changing mutations fail closed, startup-owned non-user mutations use an explicit system-process actor, and UI, import, and rollback provenance remain distinguishable from one another.[^core01-routes][^core03-workbook]
+
+**Owner sections**: Core 01 §1; Core 02 §5; Core 04 §1, §3, and §5–§8.
 
 ---
 
-## 14. Phase completion checklist
+## 15. Phase completion checklist
 
 A phase is complete only when all of the following are true:
 
 1. Every row in that phase’s test tables passes in the intended test layer.
-2. The shared harnesses in §13 pass for every route, event class, and mutation path introduced or materially changed by the phase.
+2. The shared harnesses in §14 pass for every route, event class, and mutation path introduced or materially changed by the phase.
 3. All earlier phases still pass after the phase lands.
 4. Any new view surface introduced in the phase is covered for:
    - query shape,
@@ -831,79 +971,103 @@ A phase is complete only when all of the following are true:
 5. Any mutation-bearing phase includes explicit integration coverage against the real backing boundary it depends on. Use `N/A` only when the owner section truly defines no external boundary for that work.
 6. No phase claims completion by relying on behavior deferred to a later phase when the current phase already assumes that behavior.
 
-### 14.1 Base-profile completion rule
+### 15.1 Base-profile completion rule
 
-The base implementation sequence is complete only when Phases 0 through 9 pass and the current Base claim manifest in Core 04 is fully covered, including `AC-299`.[^base-manifest][^traceability]
+The base implementation sequence is complete only when Phases 0 through 10 pass, the shared harnesses in §14 pass for every applicable surface, and the current Base claim manifest in Core 04 is fully covered. Historical endpoint shorthand such as `AC-299` is not sufficient on its own.[^base-manifest][^traceability]
 
 The current Base claim manifest is:
 
 - `AC-001..AC-026`
 - `AC-037..AC-055`
+- `AC-068..AC-070`
+- `AC-072..AC-090`
 - `AC-097..AC-103`
 - `AC-107..AC-112`
 - `AC-116..AC-163`
 - `AC-170..AC-231`
-- `AC-237..AC-261`
+- `AC-238..AC-261`
 - `AC-277..AC-287`
-- `AC-294..AC-299`
+- `AC-294..AC-304`
+- `AC-311..AC-322`
+- `AC-329..AC-331`
+- `AC-334..AC-347`
+- `AC-353..AC-354`
+- `AC-359..AC-368`
+- `AC-370..AC-371`
+- `AC-372..AC-375`
+- `AC-376..AC-385`
+- `AC-387..AC-392`
+- `AC-394..AC-408`
+- `AC-410`
 
 ---
 
-## 15. Coverage ledger
+## 16. Coverage ledger
 
 The phase tables above are the authoritative **test-id to REQ / AC mapping**. This section adds the summary views needed to keep the guide from drifting again.
 
-### 15.1 Phase-to-owner-section map
+### 16.1 Phase-to-owner-section map
 
 | Phase | Primary owner sections |
 |---|---|
-| Phase 0 | Core 01 §1; Core 04 §5–§8; Core 04 §12 |
-| Phase 1 | Core 01 §3.3.2; Core 01 §3.3.5.1; Core 01 §3.3.10; Core 04 §1; Core 04 §3 |
+| Phase 0 | Core 01 §1; Core 01 §3.3.5.1 bootstrap-admin manifest contract; Core 04 §5–§8; Core 04 §12 |
+| Phase 1 | Core 01 §3.3.2; Core 01 §3.3.2.2; Core 01 §3.3.5.1; Core 01 §3.3.10; Core 04 §1; Core 04 §3 |
 | Phase 2 | Core 01 §3.3.1; Core 01 §3.3.3; Core 01 §3.3.5.1–§3.3.5.3; Core 02 §4.5; Core 04 §2–§3 |
-| Phase 3 | Core 01 §3.3.5; Core 01 §7.4; Core 01 §8; Core 02 §5 and §14; Core 03 §1, §4, §6, §7, §15 |
-| Phase 4 | Core 01 §3.3.5 mention / merge routes; Core 02 §6–§10; Core 03 §9 and §16 |
-| Phase 5 | Core 01 §3.3.8; Core 01 §16; Core 02 §13; Core 03 §8 and §16; Core 04 §4.3 and §4.5 |
+| Phase 3 | Core 01 §3.3.5; Core 01 §7.4; Core 01 §8; Core 02 §5 and §14; Core 03 §1, §4, §6, §7, and §15 |
+| Phase 4 | Core 01 §3.3.5 mention and merge routes; Core 02 §6–§10; Core 03 §9 and §16 |
+| Phase 5 | Core 01 §3.3.8; Core 01 §16; Core 02 §4.5 and §13; Core 03 §8 and §16; Core 04 §4.3 and §4.5 |
 | Phase 6 | Core 01 §3.3.10; Core 01 §3.3.5; Core 03 §3–§4; Core 04 §1–§2 and §4.5 |
 | Phase 7 | Core 01 §3.3.4.2 and §3.3.5; Core 02 §14–§15; Core 03 §10; Core 04 §2–§3 |
 | Phase 8 | Core 01 §3.3.4; Core 01 §3.3.5.2; Core 01 §7.4; Core 01 §8; Core 02 §11–§12; Core 03 §2 and §14; Core 04 §2 |
-| Phase 9 | Core 01 §7.4 and §19; Core 02 §10 and §19; Core 03 §2, §11, §13, §16–§20; Core 04 §2 |
-| Phase 10 | Core 01 §17 and §20; Core 02 extension-owned provenance / release / bundle sections; Core 04 extension profile sections |
+| Phase 9 | Core 01 §7.4 and §19; Core 02 §10 and §19; Core 03 §2, §11, §13, and §16–§20; Core 04 §2 |
+| Phase 10 | Core 01 §12.1–§12.2; Core 04 §2, §6, §9.14, and §12.3.3 |
+| Phase 11 | Core 01 §17 and §20; Core 02 extension-owned provenance, release, and bundle sections; Core 04 extension profile sections |
 
-### 15.2 Base-profile AC coverage index
+### 16.2 Base-profile AC coverage index
 
-| AC cluster | Planned owner phase or shared harness |
-|---|---|
-| `AC-294..AC-298` | Phase 0 |
-| `AC-123`, `AC-130..AC-163`, `AC-175..AC-180`, `AC-244..AC-250` | Phase 1 |
-| `AC-170..AC-174`, `AC-211..AC-214`, `AC-219..AC-220` | Phase 2 |
-| `AC-001..AC-002`, `AC-043`, `AC-107..AC-111`, `AC-125`, `AC-191..AC-199`, `AC-299` | Phase 3 |
-| `AC-006`, `AC-017`, `AC-019..AC-023`, `AC-077..AC-079`, `AC-186`, `AC-188..AC-190`, `AC-209`, `AC-221..AC-225` | Phase 4 |
-| `AC-004`, `AC-015..AC-016`, `AC-045`, `AC-053`, `AC-102..AC-103`, `AC-128`, `AC-154..AC-155`, `AC-251..AC-255` | Phase 5 |
-| `AC-008..AC-009`, `AC-037..AC-042`, `AC-047`, `AC-126`, `AC-129`, `AC-131..AC-163`, `AC-203..AC-204`, `AC-226..AC-230` | Phase 6 |
-| `AC-007`, `AC-010..AC-012`, `AC-215..AC-218` | Phase 7 |
-| `AC-013..AC-014`, `AC-024..AC-026`, `AC-146..AC-153`, `AC-184..AC-185`, `AC-205..AC-210` | Phase 8 |
-| `AC-003`, `AC-005`, `AC-018`, `AC-068..AC-070`, `AC-078..AC-090`, `AC-112`, `AC-116..AC-122`, `AC-137..AC-145`, `AC-277..AC-287` | Phase 9 |
-| `AC-048..AC-055`, `AC-097..AC-103`, `AC-237..AC-261` | Shared harnesses across the relevant mutation, evidence, query, authorization, and conformance phases |
+| Coverage state | AC cluster | Planned owner phase or shared harness | Notes |
+|---|---|---|---|
+| Phase-owned | `AC-294..AC-298`, `AC-320`, `AC-343..AC-346` | Phase 0 | Deployment configuration, runtime roots, bootstrap preflight, and resource-limit registry. |
+| Phase-owned | `AC-123`, `AC-130..AC-163`, `AC-175..AC-180`, `AC-244..AC-250`, `AC-311..AC-312`, `AC-334..AC-347` | Phase 1 | Session contract, credential lifecycle, deployment-local user administration, and bounded credential reset flows. |
+| Phase-owned | `AC-170..AC-174`, `AC-211..AC-214`, `AC-219..AC-220`, `AC-261`, `AC-370..AC-371` | Phase 2 | Incident create or patch, membership control, deployment-admin incident boundary, and extension discovery. |
+| Phase-owned | `AC-001..AC-002`, `AC-107..AC-111`, `AC-125`, `AC-191..AC-199`, `AC-299`, `AC-329..AC-331` | Phase 3 | Timeline create or patch hot path, lifecycle, patch idempotency, and supersede-with-replacement. |
+| Phase-owned | `AC-006`, `AC-017`, `AC-019..AC-023`, `AC-077..AC-079`, `AC-186`, `AC-188..AC-190`, `AC-201..AC-202`, `AC-205`, `AC-209`, `AC-221..AC-225`, `AC-388..AC-394` | Phase 4 | Mention lifecycle, exact-match reuse, alias handling, interactive auto-resolution, merge, and manual Timeline link semantics. |
+| Phase-owned | `AC-004`, `AC-015..AC-016`, `AC-053`, `AC-102..AC-103`, `AC-128`, `AC-154..AC-155`, `AC-251..AC-255`, `AC-321..AC-322`, `AC-405` | Phase 5 | Evidence lifecycle, blob contracts, safe preview or download behavior, and binary-evidence storage boundary. |
+| Phase-owned | `AC-008..AC-009`, `AC-037..AC-042`, `AC-126`, `AC-129`, `AC-131..AC-136`, `AC-156..AC-163`, `AC-203..AC-204`, `AC-226..AC-230`, `AC-376..AC-382` | Phase 6 | WebSocket lifecycle, presence, same-field conflict handling, local pending queue, and save-state semantics. |
+| Phase-owned | `AC-007`, `AC-010..AC-012`, `AC-181..AC-183`, `AC-187`, `AC-215..AC-218`, `AC-353`, `AC-383..AC-385` | Phase 7 | Reviewer history, delete or restore, rollback, destructive-operation lock precedence, and retained-history invariants. |
+| Phase-owned | `AC-013..AC-014`, `AC-024..AC-026`, `AC-124`, `AC-127`, `AC-146..AC-153`, `AC-184..AC-185`, `AC-200`, `AC-206..AC-208`, `AC-210`, `AC-359..AC-368`, `AC-372..AC-375`, `AC-387` | Phase 8 | Links, tags, saved views, query-shape contract, view discovery, sparse patches, and snapshot-stable pagination. |
+| Phase-owned | `AC-003`, `AC-005`, `AC-018`, `AC-068..AC-090`, `AC-112`, `AC-116..AC-122`, `AC-137..AC-145`, `AC-277..AC-287`, `AC-300..AC-304`, `AC-313..AC-319`, `AC-354`, `AC-395..AC-397`, `AC-410` | Phase 9 | Keyboard contract, built-in and system surfaces, timestamp and direct-reference contracts, coordination surfaces, and registry closure. |
+| Phase-owned | `AC-398..AC-403` | Phase 10 | Operational backup, restore, restore verification, and backup-storage binding. |
+| Shared harness-owned | `AC-043..AC-047`, `AC-048..AC-055`, `AC-097..AC-103`, `AC-231`, `AC-238..AC-260`, `AC-404..AC-408` | Shared harnesses in §14 | Timing, security, aggregate claim gate, hostile-content and authorization boundaries, topology, rough-capture preservation, and audit-source invariants. |
+| Conditional | `AC-285..AC-287` | Phase 9 when the surface is exposed; otherwise `N/A` under §16.4 | Optional standardized workbook surfaces remain additive only. |
 
-### 15.3 Extension-only AC index
+### 16.3 Extension-only AC index
 
 | Extension profile | Delta ACs beyond base | Planned hook phase |
 |---|---|---|
-| Import | `AC-027..AC-029`, `AC-063..AC-067`, `AC-232`, `AC-262..AC-265` | Phase 10 |
-| Snapshot and Reporting | `AC-030..AC-032`, `AC-056..AC-062`, `AC-091`, `AC-104..AC-106`, `AC-233`, `AC-266..AC-269` | Phase 10 |
-| Reference Pack | `AC-033..AC-035`, `AC-092..AC-096`, `AC-234`, `AC-270..AC-272` | Phase 10 |
-| Incident Portability | `AC-164..AC-169`, `AC-236`, `AC-273..AC-276` | Phase 10 |
-| Enterprise Authentication | `AC-036`, `AC-235`, `AC-288..AC-293` | Phase 10 |
+| Import | `AC-027..AC-029`, `AC-063..AC-067`, `AC-232`, `AC-262..AC-265`, `AC-323..AC-325`, `AC-393` | Phase 11 |
+| Snapshot and Reporting | `AC-030..AC-032`, `AC-056..AC-062`, `AC-091`, `AC-104..AC-106`, `AC-233`, `AC-266..AC-269`, `AC-305..AC-307`, `AC-333` | Phase 11 |
+| Reference Pack | `AC-033..AC-035`, `AC-092..AC-096`, `AC-234`, `AC-270..AC-272`, `AC-308..AC-310`, `AC-326`, `AC-369` | Phase 11 |
+| Incident Portability | `AC-164..AC-169`, `AC-236`, `AC-273..AC-276`, `AC-327..AC-328`, `AC-332`, `AC-386`, `AC-409` | Phase 11 |
+| Enterprise Authentication | `AC-036`, `AC-235`, `AC-288..AC-293`, `AC-348..AC-352` | Phase 11 |
 
-### 15.4 Conditional surface note
+### 16.4 Conditional surface note
 
-The standardized Findings, Investigative Queries, and Forensic Keywords surfaces are contract-defined as **optional standardized workbook surfaces when exposed**. If the implementation exposes them in the base build, cover them in Phase 9 and include `AC-285..AC-287` in the claimed surface set. If the implementation omits them, record that omission explicitly in the implementation plan and verify the conformance interpretation against the current owner sections before asserting those ACs.[^traceability]
+The standardized Findings, Investigative Queries, and Forensic Keywords surfaces are contract-defined as **optional standardized workbook surfaces when exposed**. If the implementation exposes them in the base build, cover them in Phase 9 and include `AC-285..AC-287` in the claimed surface set. If the implementation omits them, record that omission explicitly in the implementation plan, mark those ACs `N/A` in the implementation-owned coverage record, and verify the conformance interpretation against the current owner sections before asserting the remaining Base claim.[^traceability][^core03-workbook][^core02-registry]
+
+### 16.5 Maintenance rule for manifest drift
+
+This guide MUST NOT be used as a completion artifact unless §1.2, §15.1, §16.2, and §16.3 have been regenerated whenever Core 04 §9.0 claim manifests or Appendix F profile Definition-of-Done navigation change. Updating only one of those sections is insufficient because it can reintroduce false Base or extension completion claims.[^base-manifest][^traceability]
 
 ---
 
 ## Sources
 
-[^precedence]: `00_document_set_status_and_precedence.md`, especially §§1–5 on authority, precedence, and contract ownership.
+[^precedence]: `00_document_set_status_and_precedence.md`, especially §§1–5 on authority, precedence, contract ownership, and the separation between implementation conformance and claim publication.
 [^traceability]: `F_source_traceability_matrix.md`, especially §§F.2, F.4, and F.6 for requirement-to-AC mapping and profile definition-of-done navigation.
-[^base-manifest]: `04_security_deployment_and_conformance.md`, especially §9.0.1 Base claim manifest and §12 deployment-configuration contract.
+[^base-manifest]: `04_security_deployment_and_conformance.md`, especially §9.0 claim manifests, §9.14 backup and restore criteria, and §12 deployment-configuration contract.
 [^profile-dod]: `F_source_traceability_matrix.md`, §F.6 Profile Definition-of-Done navigation.
+[^claim-publication]: `05_claim_publication_and_benchmark_reproducibility.md`, especially §§1–4 on the separation of claim-bearing publication from implementation conformance, `benchmark_profile_id`, `benchmark_manifest`, `measurement_predicate_id`, and `PC-001..PC-006`.
+[^core01-routes]: `01_architecture_storage_and_view_contracts.md`, especially §§3.3.2, 3.3.3.1, 3.3.5.1, 7.4, 12.1–12.2, 16, 17, and 20.
+[^core02-registry]: `02_domain_model_schema_and_history.md`, especially §10.4.4A on the tagged-variant registry and §19 on party and coordination semantics.
+[^core03-workbook]: `03_workbook_interaction_collaboration_and_workflows.md`, especially §§2, 11, 13, and 16–20 on workbook surfaces, optional standardized surfaces, keyboard behavior, and party / coordination flows.
